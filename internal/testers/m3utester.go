@@ -6,15 +6,15 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"path"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"../model"
 	"github.com/ericxtang/m3u8"
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/internal/utils"
 )
 
 // m3utester tests one stream, reading all the media streams
@@ -27,7 +27,6 @@ type m3utester struct {
 }
 
 // newM3UTester ...
-// func newM3UTester() model.M3UTester {
 func newM3UTester() *m3utester {
 	t := &m3utester{
 		downloads: make(map[string]*mediaDownloader),
@@ -46,6 +45,19 @@ func (mt *m3utester) Start(u string) {
 	}
 	mt.initialURL = purl
 	go mt.downloadLoop()
+}
+
+// GetFIrstSegmentTime return timestamp of first frame of first segment.
+// Second returned value is true if already found.
+func (mt *m3utester) GetFIrstSegmentTime() (time.Duration, bool) {
+	mt.mu.RLock()
+	defer mt.mu.RUnlock()
+	for _, md := range mt.downloads {
+		if md.firstSegmentParsed {
+			return md.firstSegmentTime, true
+		}
+	}
+	return 0, false
 }
 
 func (mt *m3utester) stats() downloadStats {
@@ -84,7 +96,8 @@ func (mt *m3utester) downloadLoop() {
 	for {
 		resp, err := http.Get(surl)
 		if err != nil {
-			glog.Fatal(err)
+			glog.Error(err)
+			return
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
@@ -97,7 +110,8 @@ func (mt *m3utester) downloadLoop() {
 		err = mpl.Decode(*bytes.NewBuffer(b), true)
 		resp.Body.Close()
 		if err != nil {
-			glog.Fatal(err)
+			glog.Error(err)
+			return
 		}
 		// glog.Info("Got playlist:")
 		// glog.Info(mpl)
@@ -105,7 +119,8 @@ func (mt *m3utester) downloadLoop() {
 			// glog.Infof("Variant URI: %s", variant.URI)
 			pvrui, err := url.Parse(variant.URI)
 			if err != nil {
-				glog.Fatal(err)
+				glog.Error(err)
+				return
 			}
 			// glog.Infof("Parsed uri: %+v", pvrui, pvrui.IsAbs)
 			if !pvrui.IsAbs() {
@@ -124,7 +139,9 @@ func (mt *m3utester) downloadLoop() {
 		time.Sleep(2 * time.Second)
 		loops++
 		if loops%2 == 0 {
-			fmt.Println(mt.StatsFormatted())
+			if glog.V(model.DEBUG) {
+				fmt.Println(mt.StatsFormatted())
+			}
 		}
 	}
 }
@@ -136,21 +153,27 @@ type downloadStats struct {
 	errors  map[string]int
 }
 
+type downloadTask struct {
+	url   string
+	seqNo uint64
+}
+
 func (ds *downloadStats) formatForConsole() string {
 	r := fmt.Sprintf(`Success: %7d
 `, ds.success)
 	return r
 }
 
+// mediaDownloader downloads all the segments from one media stream
+// (it constanly reloads manifest, and downloads any segments found in manifest)
 type mediaDownloader struct {
-	u         *url.URL
-	stats     downloadStats
-	downTasks chan string
-	mu        sync.Mutex
-	// successfulDownloads int
-	// failedDownloads     int
-	// bytesDownloaded     int64
-	// errors              map[string]int
+	u                  *url.URL
+	stats              downloadStats
+	downTasks          chan downloadTask
+	mu                 sync.Mutex
+	firstSegmentParsed bool
+	firstSegmentTime   time.Duration
+	saveSegmentsToDisk bool
 }
 
 func newMediaDownloader(u string) *mediaDownloader {
@@ -160,7 +183,7 @@ func newMediaDownloader(u string) *mediaDownloader {
 	}
 	md := &mediaDownloader{
 		u:         pu,
-		downTasks: make(chan string, 16),
+		downTasks: make(chan downloadTask, 16),
 		stats: downloadStats{
 			errors: make(map[string]int),
 		},
@@ -188,16 +211,16 @@ type downloadResult struct {
 	bytes  int
 }
 
-func (md *mediaDownloader) downloadSegment(surl string, res chan downloadResult) {
-	purl, err := url.Parse(surl)
+func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan downloadResult) {
+	purl, err := url.Parse(task.url)
 	if err != nil {
 		glog.Fatal(err)
 	}
-	fsurl := surl
+	fsurl := task.url
 	if !purl.IsAbs() {
 		fsurl = md.u.ResolveReference(purl).String()
 	}
-	glog.V(model.VERBOSE).Infof("Downloading segment %s", fsurl)
+	glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s", task.seqNo, fsurl)
 	resp, err := http.Get(fsurl)
 	if err != nil {
 		glog.Errorf("Error downloading %s: %v", fsurl, err)
@@ -211,12 +234,24 @@ func (md *mediaDownloader) downloadSegment(surl string, res chan downloadResult)
 		return
 	}
 	resp.Body.Close()
-	glog.V(model.VERBOSE).Infof("Download %s result: %s len %d", fsurl, resp.Status, len(b))
-	upts := strings.Split(surl, "/")
-	fn := upts[len(upts)-2] + "-" + path.Base(surl)
-	err = ioutil.WriteFile(fn, b, 0644)
-	if err != nil {
-		glog.Fatal(err)
+	glog.V(model.DEBUG).Infof("Download %s result: %s len %d", fsurl, resp.Status, len(b))
+	if !md.firstSegmentParsed && task.seqNo == 0 {
+		fst, err := utils.GetVideoStartTime(b)
+		if err != nil {
+			glog.Fatal(err)
+		}
+		md.firstSegmentParsed = true
+		md.firstSegmentTime = fst
+	}
+
+	if md.saveSegmentsToDisk {
+		upts := strings.Split(task.url, "/")
+		// fn := upts[len(upts)-2] + "-" + path.Base(task.url)
+		fn := fmt.Sprintf("%s-%05d.ts", upts[len(upts)-2], task.seqNo)
+		err = ioutil.WriteFile(fn, b, 0644)
+		if err != nil {
+			glog.Fatal(err)
+		}
 	}
 	res <- downloadResult{status: resp.Status, bytes: len(b)}
 }
@@ -238,12 +273,12 @@ func (md *mediaDownloader) workerLoop() {
 			}
 			// md.mu.Unlock()
 		case task := <-md.downTasks:
-			if seen.Contains(task) {
+			if seen.Contains(task.url) {
 				continue
 			}
-			glog.V(model.VERBOSE).Infof("Got task to download: %s", task)
-			seen.Add(task)
-			go md.downloadSegment(task, resultsCahn)
+			glog.V(model.VERBOSE).Infof("Got task to download: seqNo=%d url=%s", task.seqNo, task.url)
+			seen.Add(task.url)
+			go md.downloadSegment(&task, resultsCahn)
 		}
 	}
 }
@@ -253,7 +288,8 @@ func (md *mediaDownloader) downloadLoop() {
 	for {
 		resp, err := http.Get(surl)
 		if err != nil {
-			glog.Fatal(err)
+			glog.Error(err)
+			return
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
@@ -261,6 +297,10 @@ func (md *mediaDownloader) downloadLoop() {
 			continue
 		}
 		// b, err := ioutil.ReadAll(resp.Body)
+		// fmt.Println("-----################")
+		// fmt.Println(string(b))
+		// glog.Infoln("-----################")
+		// glog.Infoln(string(b))
 		// err = mpl.DecodeFrom(resp.Body, true)
 		pl, err := m3u8.NewMediaPlaylist(100, 100)
 		if err != nil {
@@ -274,9 +314,12 @@ func (md *mediaDownloader) downloadLoop() {
 		}
 		// glog.Infof("Got medifa playlist of url %s:", surl)
 		// glog.Info(pl)
-		for _, segment := range pl.Segments {
+		for i, segment := range pl.Segments {
 			if segment != nil {
-				md.downTasks <- segment.URI
+				// glog.Infof("Segment: %+v", *segment)
+
+				md.downTasks <- downloadTask{url: segment.URI, seqNo: pl.SeqNo + uint64(i)}
+				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
 			}
 		}
 		time.Sleep(1 * time.Second)

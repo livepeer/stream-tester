@@ -9,46 +9,59 @@ import (
 	"github.com/nareix/joy4/format/rtmp"
 )
 
-// var segLen = 2 * time.Second
-var segLen = 1400 * time.Millisecond
+var segLen = 2 * time.Second
 
+// rtmpStreamer streams one video file to RTMP server
 type rtmpStreamer struct {
-	ingestURL string
-	counter   *segmentsCounter
+	ingestURL       string
+	counter         *segmentsCounter
+	skippedSegments int
+	connectionLost  bool
+	active          bool
 }
 
 // source is local file name for now
 func newRtmpStreamer(ingestURL, source string) *rtmpStreamer {
 	return &rtmpStreamer{
-		ingestURL: ingestURL,
-		counter:   &segmentsCounter{segLen: segLen},
+		ingestURL:       ingestURL,
+		counter:         newSegmentsCounter(segLen),
+		skippedSegments: 1, // Broadcaster always skips first segment, but can skip more - this will be corrected when first
+		// segment downloaded back
 	}
 }
 
 func (rs *rtmpStreamer) startUpload(fn, manifestID string) {
-	// file, err := avutil.Open("BigBuckBunny.mp4")
 	file, err := avutil.Open(fn)
-	// file, err := avutil.Open("output2.mp4")
-	// file, err := avutil.Open("output2-20.mp4")
-	// file, err := avutil.Open("output2-20-def.mp4")
-	// file, err := avutil.Open("output-def.mp4")
 	if err != nil {
 		glog.Fatal(err)
 	}
+	rs.active = true
+	defer func() {
+		rs.active = false
+	}()
+
+	// pio.RecommendBufioSize = 1024 * 8
+	// rtmp.Debug2 = true
 	conn, err := rtmp.Dial("rtmp://localhost:1935/" + manifestID)
-	// conn, _ := avutil.Create("rtmp://localhost:1936/app/publish")
 	if err != nil {
 		glog.Fatal(err)
 	}
-	// filters := pktque.Filters{&pktque.Walltime{}, &printKeyFrame{}, &segmentsCounter{segLen: 2 * time.Second}}
 	filters := pktque.Filters{&pktque.Walltime{}, &printKeyFrame{}, rs.counter}
 
-	// demuxer := &pktque.FilterDemuxer{Demuxer: file, Filter: &pktque.Walltime{}}
 	demuxer := &pktque.FilterDemuxer{Demuxer: file, Filter: filters}
-	avutil.CopyFile(conn, demuxer)
+	err = avutil.CopyFile(conn, demuxer)
+	if err != nil {
+		glog.Error(err)
+		rs.connectionLost = true
+		file.Close()
+		conn.Close()
+		return
+	}
 
 	file.Close()
 	// wait before closing connection, so we can recieve transcoded data
+	// if we do not wait, last segment will be thrown out by broadcaster
+	// with 'Session ended` error
 	time.Sleep(8 * time.Second)
 	conn.Close()
 }

@@ -1,0 +1,21 @@
+POST http://localhost:7934/start_streams HTTP/1.1
+content-type: application/json
+
+{
+    "host": "localhost",
+    "file_name": "official_test_source_2s_keys.mp4"
+} 
+
+
+###
+POST http://localhost:7934/start_streams HTTP/1.1
+content-type: application/json
+
+{
+    "host": "localhost"
+} 
+
+
+###
+
+GET http://localhost:7934/stats HTTP/1.1
