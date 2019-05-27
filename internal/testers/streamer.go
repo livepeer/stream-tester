@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/gosuri/uiprogress"
 
 	"github.com/livepeer/stream-tester/internal/model"
 )
@@ -37,6 +38,13 @@ func (sr *streamer) Cancel() {
 }
 
 func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, notFinal bool) error {
+	var segments int
+	if !notFinal {
+		glog.Infof("Counting segments in %s", sourceFileName)
+		segments = GetNumberOfSegments(sourceFileName)
+		glog.Infof("Counted %d source segments", segments)
+	}
+
 	nRtmpPort, err := strconv.Atoi(rtmpPort)
 	if err != nil {
 		return err
@@ -45,9 +53,31 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 	if err != nil {
 		return err
 	}
+
+	var overallBar *uiprogress.Bar
+	if !notFinal {
+		uiprogress.Start()
+		if repeat > 1 {
+			totalSegments := segments * int(simStreams) * int(repeat)
+			overallBar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependFunc(func(b *uiprogress.Bar) string {
+				return "total: "
+			})
+			go func() {
+				for {
+					time.Sleep(5 * time.Second)
+					st := sr.Stats()
+					overallBar.Set(st.SentSegments)
+				}
+			}()
+		}
+	}
+
 	go func() {
 		for i := 0; i < int(repeat); i++ {
-			err := sr.startStreams(sourceFileName, host, nRtmpPort, nMediaPort, simStreams)
+			if repeat > 1 {
+				glog.Infof("Starting %d streaming session", i)
+			}
+			err := sr.startStreams(sourceFileName, host, nRtmpPort, nMediaPort, simStreams, !notFinal, segments)
 			if err != nil {
 				glog.Fatal(err)
 				return
@@ -60,7 +90,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 	return nil
 }
 
-func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaPort int, simStreams uint) error {
+func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaPort int, simStreams uint, showProgress bool, totalSegments int) error {
 	fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
 
 	var wg sync.WaitGroup
@@ -73,7 +103,11 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 			mediaURL := fmt.Sprintf("http://%s:%d/stream/%s.m3u8", host, nMediaPort, manifesID)
 			glog.Infof("RTMP: %s", rtmpURL)
 			glog.Infof("MEDIA: %s", mediaURL)
-			up := newRtmpStreamer(rtmpURL, sourceFileName)
+			var bar *uiprogress.Bar
+			if showProgress {
+				bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
+			}
+			up := newRtmpStreamer(rtmpURL, sourceFileName, bar)
 			wg.Add(1)
 			go func() {
 				up.startUpload(sourceFileName, manifesID)

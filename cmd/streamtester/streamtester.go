@@ -50,6 +50,7 @@ func main() {
 		fn = flag.Arg(0)
 	}
 	glog.Infof("Starting stream tester, file %s number of streams is %d, repeat %d times", fn, *sim, *repeat)
+
 	defer glog.Infof("Exiting")
 	model.ProfilesNum = *profiles
 	sr := testers.NewStreamer()
@@ -59,7 +60,7 @@ func main() {
 	}
 	go func() {
 		for {
-			time.Sleep(5 * time.Second)
+			time.Sleep(25 * time.Second)
 			fmt.Println(sr.Stats().FormatForConsole())
 		}
 	}()

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/gosuri/uiprogress"
 	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/nareix/joy4/av"
 )
@@ -28,10 +29,12 @@ type segmentsCounter struct {
 	segments           int
 	segmentsStartTimes []time.Duration
 	lastKeyUsedKeyTime time.Duration
+	bar                *uiprogress.Bar
 }
 
-func newSegmentsCounter(segLen time.Duration) *segmentsCounter {
+func newSegmentsCounter(segLen time.Duration, bar *uiprogress.Bar) *segmentsCounter {
 	return &segmentsCounter{
+		bar:                bar,
 		segLen:             segLen,
 		segmentsStartTimes: make([]time.Duration, 10, 10), // Record segments start timestamps. Needed
 		// to detect how many segments broadcaster skipped st start
@@ -46,6 +49,9 @@ func (sc *segmentsCounter) ModifyPacket(pkt *av.Packet, streams []av.CodecData, 
 				sc.segmentsStartTimes[sc.segments] = pkt.Time
 			}
 			sc.segments++
+			if sc.bar != nil {
+				sc.bar.Incr()
+			}
 			glog.V(model.VERBOSE).Infof("====== Number of segments: %d time %s last time %s diff %s data size %d\n", sc.segments,
 				pkt.Time, sc.lastKeyUsedKeyTime, pkt.Time-sc.lastKeyUsedKeyTime, len(pkt.Data))
 			sc.lastKeyUsedKeyTime = pkt.Time

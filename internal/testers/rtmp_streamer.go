@@ -1,9 +1,12 @@
 package testers
 
 import (
+	"io"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/gosuri/uiprogress"
+	"github.com/nareix/joy4/av"
 	"github.com/nareix/joy4/av/avutil"
 	"github.com/nareix/joy4/av/pktque"
 	"github.com/nareix/joy4/format/rtmp"
@@ -21,13 +24,49 @@ type rtmpStreamer struct {
 }
 
 // source is local file name for now
-func newRtmpStreamer(ingestURL, source string) *rtmpStreamer {
+func newRtmpStreamer(ingestURL, source string, bar *uiprogress.Bar) *rtmpStreamer {
 	return &rtmpStreamer{
 		ingestURL:       ingestURL,
-		counter:         newSegmentsCounter(segLen),
+		counter:         newSegmentsCounter(segLen, bar),
 		skippedSegments: 1, // Broadcaster always skips first segment, but can skip more - this will be corrected when first
 		// segment downloaded back
 	}
+}
+
+// GetNumberOfSegments returns number of segments in video file
+func GetNumberOfSegments(fileName string) int {
+	file, err := avutil.Open(fileName)
+	if err != nil {
+		glog.Fatal(err)
+	}
+	sc := newSegmentsCounter(segLen, nil)
+	filters := pktque.Filters{sc}
+	src := &pktque.FilterDemuxer{Demuxer: file, Filter: filters}
+	var streams []av.CodecData
+	var videoidx, audioidx int
+	if streams, err = src.Streams(); err != nil {
+		glog.Fatal("Can't count segments in source file")
+	}
+	for i, st := range streams {
+		if st.Type().IsAudio() {
+			audioidx = i
+		}
+		if st.Type().IsVideo() {
+			videoidx = i
+		}
+	}
+	glog.Infof("Video index: %d, audio index: %d", videoidx, audioidx)
+	for {
+		var pkt av.Packet
+		if pkt, err = src.ReadPacket(); err != nil {
+			if err == io.EOF {
+				break
+			}
+			glog.Infof("Paket time %s", pkt.Time)
+			sc.ModifyPacket(&pkt, streams, videoidx, audioidx)
+		}
+	}
+	return sc.segments - 1
 }
 
 func (rs *rtmpStreamer) startUpload(fn, manifestID string) {

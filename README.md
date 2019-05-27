@@ -5,6 +5,16 @@ It sends RTMP streams into broadcaster nodes and download back transcoded data a
 It can be used as standalone command line tool or as part of [test harness](https://github.com/livepeer/test-harness).
 As part of test harness, it works in server mode, inside docker image, and is controlled through REST interface.
 
+
+## Installation
+
+Dependencies:
+`go get -u -v github.com/gosuri/uiprogress`
+`go get -u -v github.com/ericxtang/m3u8`
+`go get -u -v github.com/golang/glog`
+`go get -u -v github.com/nareix/joy4`
+
+
 ## Command line
 Usage:
 `./streamtester -host localhost -rtmp 1935 -media 8935 -profiles 2 -repeat 1 -sim 1 file_to_stream.mp4`
