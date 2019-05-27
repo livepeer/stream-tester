@@ -25,6 +25,7 @@ type Stats struct {
 	RTMPActiveStreams            int     `json:"rtmp_active_streams"` // number of active RTMP streams
 	RTMPstreams                  int     `json:"rtm_pstreams"`        // number of RTMP streams
 	MediaStreams                 int     `json:"media_streams"`       // number of media streams
+	TotalSegmentsToSend          int     `json:"total_segments_to_send"`
 	SentSegments                 int     `json:"sent_segments"`
 	DownloadedSegments           int     `json:"downloaded_segments"`
 	ShouldHaveDownloadedSegments int     `json:"should_have_downloaded_segments"`
@@ -54,12 +55,13 @@ func (st *Stats) FormatForConsole() string {
 	r := p.Sprintf(`
 Number of RTMP streams:                       %7d
 Number of media streams:                      %7d
+Total number of segments sent to be sent:     %7d
 Total number of segments sent to broadcaster: %7d
 Total number of segments read back:           %7d
 Total number of segments should read back:    %7d
 Success rate:                                     %9.5f%%
 Lost connection to broadcaster:               %7d
-Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams, st.SentSegments, st.DownloadedSegments,
+Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams, st.TotalSegmentsToSend, st.SentSegments, st.DownloadedSegments,
 		st.ShouldHaveDownloadedSegments, st.SucessRate, st.ConnectionLost, st.BytesDownloaded)
 	return r
 }

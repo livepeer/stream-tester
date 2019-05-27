@@ -19,9 +19,10 @@ import (
 // reads back source and transcoded segments and count them
 // and calculates success rate from these numbers
 type streamer struct {
-	uploaders   []*rtmpStreamer
-	downloaders []*m3utester
-	eof         chan struct{}
+	uploaders           []*rtmpStreamer
+	downloaders         []*m3utester
+	totalSegmentsToSend int
+	eof                 chan struct{}
 }
 
 // NewStreamer returns new streamer
@@ -55,11 +56,11 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 	}
 
 	var overallBar *uiprogress.Bar
+	sr.totalSegmentsToSend = segments * int(simStreams) * int(repeat)
 	if !notFinal {
 		uiprogress.Start()
 		if repeat > 1 {
-			totalSegments := segments * int(simStreams) * int(repeat)
-			overallBar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependFunc(func(b *uiprogress.Bar) string {
+			overallBar = uiprogress.AddBar(sr.totalSegmentsToSend).AppendCompleted().PrependFunc(func(b *uiprogress.Bar) string {
 				return "total: "
 			})
 			go func() {
@@ -158,9 +159,10 @@ func (sr *streamer) StatsFormatted() string {
 
 func (sr *streamer) Stats() *model.Stats {
 	stats := &model.Stats{
-		RTMPstreams:  len(sr.uploaders),
-		MediaStreams: len(sr.downloaders),
-		Finished:     true,
+		RTMPstreams:         len(sr.uploaders),
+		MediaStreams:        len(sr.downloaders),
+		TotalSegmentsToSend: sr.totalSegmentsToSend,
+		Finished:            true,
 	}
 	for _, rs := range sr.uploaders {
 		// Broadcaster always skips at lest first segment, and potentially more

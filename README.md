@@ -13,6 +13,7 @@ Dependencies:
 `go get -u -v github.com/ericxtang/m3u8`
 `go get -u -v github.com/golang/glog`
 `go get -u -v github.com/nareix/joy4`
+`go get -u -v golang.org/x/text/message`
 
 
 ## Command line
