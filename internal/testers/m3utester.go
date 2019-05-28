@@ -24,12 +24,14 @@ type m3utester struct {
 	mu         sync.RWMutex
 	started    bool
 	finished   bool
+	done       <-chan struct{} // signals to stop
 }
 
 // newM3UTester ...
-func newM3UTester() *m3utester {
+func newM3UTester(done <-chan struct{}) *m3utester {
 	t := &m3utester{
 		downloads: make(map[string]*mediaDownloader),
+		done:      done,
 	}
 	return t
 }
@@ -93,7 +95,13 @@ func (mt *m3utester) StatsFormatted() string {
 func (mt *m3utester) downloadLoop() {
 	surl := mt.initialURL.String()
 	loops := 0
+
 	for {
+		select {
+		case <-mt.done:
+			return
+		default:
+		}
 		resp, err := http.Get(surl)
 		if err != nil {
 			glog.Error(err)
@@ -130,7 +138,7 @@ func (mt *m3utester) downloadLoop() {
 			mediaURL := pvrui.String()
 			mt.mu.Lock()
 			if _, ok := mt.downloads[mediaURL]; !ok {
-				md := newMediaDownloader(mediaURL)
+				md := newMediaDownloader(mediaURL, mt.done)
 				mt.downloads[mediaURL] = md
 			}
 			mt.mu.Unlock()
@@ -174,9 +182,10 @@ type mediaDownloader struct {
 	firstSegmentParsed bool
 	firstSegmentTime   time.Duration
 	saveSegmentsToDisk bool
+	done               <-chan struct{} // signals to stop
 }
 
-func newMediaDownloader(u string) *mediaDownloader {
+func newMediaDownloader(u string, done <-chan struct{}) *mediaDownloader {
 	pu, err := url.Parse(u)
 	if err != nil {
 		glog.Fatal(err)
@@ -187,6 +196,7 @@ func newMediaDownloader(u string) *mediaDownloader {
 		stats: downloadStats{
 			errors: make(map[string]int),
 		},
+		done: done,
 	}
 	go md.downloadLoop()
 	go md.workerLoop()
@@ -261,6 +271,8 @@ func (md *mediaDownloader) workerLoop() {
 	resultsCahn := make(chan downloadResult, 32) // http status or excpetion
 	for {
 		select {
+		case <-md.done:
+			return
 		case res := <-resultsCahn:
 			// md.mu.Lock()
 			glog.V(model.VERBOSE).Infof("Got result %+v", res)
@@ -286,6 +298,11 @@ func (md *mediaDownloader) workerLoop() {
 func (md *mediaDownloader) downloadLoop() {
 	surl := md.u.String()
 	for {
+		select {
+		case <-md.done:
+			return
+		default:
+		}
 		resp, err := http.Get(surl)
 		if err != nil {
 			glog.Error(err)

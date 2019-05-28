@@ -31,7 +31,7 @@ type Stats struct {
 	ShouldHaveDownloadedSegments int     `json:"should_have_downloaded_segments"`
 	FailedToDownloadSegments     int     `json:"failed_to_download_segments"`
 	BytesDownloaded              int64   `json:"bytes_downloaded"`
-	SucessRate                   float64 `json:"sucess_rate"` // DownloadedSegments/profilesNum*SentSegments
+	SuccessRate                  float64 `json:"success_rate"` // DownloadedSegments/profilesNum*SentSegments
 	ConnectionLost               int     `json:"connection_lost"`
 	Finished                     bool    `json:"finished"`
 }
@@ -40,13 +40,14 @@ type Stats struct {
 
 // StartStreamsReq start streams request
 type StartStreamsReq struct {
-	FileName     string `json:"file_name,omitempty"`
-	Host         string `json:"host,omitempty"`
-	RTMP         int    `json:"rtmp,omitempty"`
-	Media        int    `json:"media,omitempty"`
-	Repeat       uint   `json:"repeat,omitempty"`
-	Simultaneous uint   `json:"simultaneous,omitempty"`
-	ProfilesNum  int    `json:"profiles_num,omitempty"`
+	FileName        string `json:"file_name,omitempty"`
+	Host            string `json:"host,omitempty"`
+	RTMP            int    `json:"rtmp,omitempty"`
+	Media           int    `json:"media,omitempty"`
+	Repeat          uint   `json:"repeat,omitempty"`
+	Simultaneous    uint   `json:"simultaneous,omitempty"`
+	ProfilesNum     int    `json:"profiles_num,omitempty"`
+	DoNotClearStats bool   `json:"do_not_clear_stats"`
 }
 
 // FormatForConsole formats stats to be shown in console
@@ -62,6 +63,6 @@ Total number of segments should read back:    %7d
 Success rate:                                     %9.5f%%
 Lost connection to broadcaster:               %7d
 Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams, st.TotalSegmentsToSend, st.SentSegments, st.DownloadedSegments,
-		st.ShouldHaveDownloadedSegments, st.SucessRate, st.ConnectionLost, st.BytesDownloaded)
+		st.ShouldHaveDownloadedSegments, st.SuccessRate, st.ConnectionLost, st.BytesDownloaded)
 	return r
 }

@@ -40,11 +40,11 @@ func (sr *streamer) Cancel() {
 
 func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, notFinal bool) error {
 	var segments int
-	if !notFinal {
-		glog.Infof("Counting segments in %s", sourceFileName)
-		segments = GetNumberOfSegments(sourceFileName)
-		glog.Infof("Counted %d source segments", segments)
-	}
+	// if !notFinal {
+	glog.Infof("Counting segments in %s", sourceFileName)
+	segments = GetNumberOfSegments(sourceFileName)
+	glog.Infof("Counted %d source segments", segments)
+	// }
 
 	nRtmpPort, err := strconv.Atoi(rtmpPort)
 	if err != nil {
@@ -108,14 +108,15 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 			if showProgress {
 				bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
 			}
-			up := newRtmpStreamer(rtmpURL, sourceFileName, bar)
+			done := make(chan struct{})
+			up := newRtmpStreamer(rtmpURL, sourceFileName, bar, done)
 			wg.Add(1)
 			go func() {
-				up.startUpload(sourceFileName, manifesID)
+				up.startUpload(sourceFileName, rtmpURL)
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)
-			down := newM3UTester()
+			down := newM3UTester(done)
 			go findSkippedSegmentsNumber(up, down)
 			sr.downloaders = append(sr.downloaders, down)
 			down.Start(mediaURL)
@@ -182,7 +183,7 @@ func (sr *streamer) Stats() *model.Stats {
 		stats.BytesDownloaded += ds.bytes
 	}
 	if stats.SentSegments > 0 {
-		stats.SucessRate = float64(stats.DownloadedSegments) / ((float64(model.ProfilesNum) + 1) * float64(stats.SentSegments)) * 100
+		stats.SuccessRate = float64(stats.DownloadedSegments) / ((float64(model.ProfilesNum) + 1) * float64(stats.SentSegments)) * 100
 	}
 	stats.ShouldHaveDownloadedSegments = (model.ProfilesNum + 1) * stats.SentSegments
 	return stats

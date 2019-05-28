@@ -113,6 +113,11 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		w.Write([]byte(`File ` + ssr.FileName + ` does not exists`))
 		return
 	}
+	glog.Infof("Get request: %+v", ssr)
+	if !ssr.DoNotClearStats {
+		ss.streamer = testers.NewStreamer()
+	}
+
 	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous, ssr.Repeat, true)
 
 	w.Header().Set("Content-Type", "application/json")

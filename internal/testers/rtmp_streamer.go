@@ -21,11 +21,13 @@ type rtmpStreamer struct {
 	skippedSegments int
 	connectionLost  bool
 	active          bool
+	done            chan struct{}
 }
 
 // source is local file name for now
-func newRtmpStreamer(ingestURL, source string, bar *uiprogress.Bar) *rtmpStreamer {
+func newRtmpStreamer(ingestURL, source string, bar *uiprogress.Bar, done chan struct{}) *rtmpStreamer {
 	return &rtmpStreamer{
+		done:            done,
 		ingestURL:       ingestURL,
 		counter:         newSegmentsCounter(segLen, bar),
 		skippedSegments: 1, // Broadcaster always skips first segment, but can skip more - this will be corrected when first
@@ -69,7 +71,7 @@ func GetNumberOfSegments(fileName string) int {
 	return sc.segments - 1
 }
 
-func (rs *rtmpStreamer) startUpload(fn, manifestID string) {
+func (rs *rtmpStreamer) startUpload(fn, rtmpURL string) {
 	file, err := avutil.Open(fn)
 	if err != nil {
 		glog.Fatal(err)
@@ -81,7 +83,8 @@ func (rs *rtmpStreamer) startUpload(fn, manifestID string) {
 
 	// pio.RecommendBufioSize = 1024 * 8
 	// rtmp.Debug2 = true
-	conn, err := rtmp.Dial("rtmp://localhost:1935/" + manifestID)
+	// conn, err := rtmp.Dial("rtmp://localhost:1935/" + manifestID)
+	conn, err := rtmp.Dial(rtmpURL)
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -103,4 +106,5 @@ func (rs *rtmpStreamer) startUpload(fn, manifestID string) {
 	// with 'Session ended` error
 	time.Sleep(8 * time.Second)
 	conn.Close()
+	close(rs.done)
 }

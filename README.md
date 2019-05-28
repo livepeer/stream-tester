@@ -53,7 +53,7 @@ returns object:
   "should_have_downloaded_segments": 9,
   "failed_to_download_segments": 0,
   "bytes_downloaded": 2721864,
-  "sucess_rate": 77.77777777777779,
+  "success_rate": 77.77777777777779,
   "connection_lost": 0,
   "finished": false
 }
@@ -69,7 +69,7 @@ Where
  - `should_have_downloaded_segments` - number of segments should be downloaded back for 100% success rate. It equals `sent_segments` * (`numberOfTranscodingProfiles` + 1)
  - `failed_to_download_segments` - number of segments failed to download with some error
  - `bytes_downloaded` - number of bytes downloaded
- - `sucess_rate` - success rate, percent
+ - `success_rate` - success rate, percent
  - `connection_lost` - number of times streamer lost connection to broadcaster. Streamer does not attempt to reconnect, so statistics will only have data till connection was lost
  - `finished` - indicates that all streaming tasks are finished
 
@@ -86,11 +86,13 @@ Accepts object:
     "repeat": 1,
     "simultaneous": 1,
     "profiles_num": 2,
+    "do_not_clear_stats": false
 } 
 
 ```
 
 `file_name` - should exists in local filesystem of streamer.
+`do_not_clear_stats` - if true, on new call to `/start_streams` do not clear old stats, but instead append to it
 
 
 Returns 
