@@ -50,11 +50,28 @@ func (ss *StreamerServer) webServerHandlers(bindAddr string) *http.ServeMux {
 	mux.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
 		ss.handleStats(w, r)
 	})
+	mux.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
+		ss.handleStop(w, r)
+	})
 	return mux
+}
+
+// Stop currently running streams
+func (ss *StreamerServer) handleStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	ss.streamer.Stop()
+	w.WriteHeader(http.StatusOK)
 }
 
 // Set the broadcast config for creating onchain jobs.
 func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
 	stats := ss.streamer.Stats()
 	b, err := json.Marshal(stats)
 	if err != nil {
@@ -68,7 +85,7 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 // Set the broadcast config for creating onchain jobs.
 func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 	b, err := ioutil.ReadAll(r.Body)

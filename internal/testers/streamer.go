@@ -38,13 +38,17 @@ func (sr *streamer) Cancel() {
 	close(sr.eof)
 }
 
+func (sr *streamer) Stop() {
+	for _, up := range sr.uploaders {
+		up.file.Close()
+	}
+}
+
 func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, notFinal bool) error {
 	var segments int
-	// if !notFinal {
 	glog.Infof("Counting segments in %s", sourceFileName)
 	segments = GetNumberOfSegments(sourceFileName)
 	glog.Infof("Counted %d source segments", segments)
-	// }
 
 	nRtmpPort, err := strconv.Atoi(rtmpPort)
 	if err != nil {

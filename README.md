@@ -103,3 +103,10 @@ Returns
 
 Can return 404 if request contains wrong parameters.
 
+
+---
+GET `/stop`
+
+Stop currently running streams. 
+
+Doesn't return any data, only status 200 

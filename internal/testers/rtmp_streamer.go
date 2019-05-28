@@ -22,6 +22,7 @@ type rtmpStreamer struct {
 	connectionLost  bool
 	active          bool
 	done            chan struct{}
+	file            av.DemuxCloser
 }
 
 // source is local file name for now
@@ -72,7 +73,8 @@ func GetNumberOfSegments(fileName string) int {
 }
 
 func (rs *rtmpStreamer) startUpload(fn, rtmpURL string) {
-	file, err := avutil.Open(fn)
+	var err error
+	rs.file, err = avutil.Open(fn)
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -90,17 +92,19 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string) {
 	}
 	filters := pktque.Filters{&pktque.Walltime{}, &printKeyFrame{}, rs.counter}
 
-	demuxer := &pktque.FilterDemuxer{Demuxer: file, Filter: filters}
+	demuxer := &pktque.FilterDemuxer{Demuxer: rs.file, Filter: filters}
 	err = avutil.CopyFile(conn, demuxer)
 	if err != nil {
 		glog.Error(err)
 		rs.connectionLost = true
-		file.Close()
+		rs.file.Close()
 		conn.Close()
+		time.Sleep(4 * time.Second)
+		close(rs.done)
 		return
 	}
 
-	file.Close()
+	rs.file.Close()
 	// wait before closing connection, so we can recieve transcoded data
 	// if we do not wait, last segment will be thrown out by broadcaster
 	// with 'Session ended` error

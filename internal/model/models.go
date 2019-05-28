@@ -17,6 +17,7 @@ type Streamer interface {
 	Stats() *Stats
 	StatsFormatted() string
 	Done() <-chan struct{}
+	Stop() // Stop active streams
 	Cancel()
 }
 
