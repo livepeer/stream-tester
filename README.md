@@ -80,7 +80,7 @@ Accepts object:
 ```json
 {
     "host": "localhost",
-    "file_name": "official_test_source_2s_keys.mp4",
+    "file_name": "official_test_source_2s_keys_24pfs.mp4",
     "rtmp": 1935,
     "media": 8935,
     "repeat": 1,

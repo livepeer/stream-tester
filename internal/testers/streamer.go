@@ -125,7 +125,7 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 			sr.downloaders = append(sr.downloaders, down)
 			down.Start(mediaURL)
 			// put random delay before start of next stream
-			time.Sleep(time.Duration(rand.Intn(2)+2) * time.Second)
+			// time.Sleep(time.Duration(rand.Intn(2)+2) * time.Second)
 		}
 		started <- nil
 	}()
