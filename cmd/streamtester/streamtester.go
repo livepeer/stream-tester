@@ -45,7 +45,7 @@ func main() {
 		return
 	}
 	// fmt.Printf("Args: %+v\n", flag.Args())
-	fn := "BigBuckBunny.mp4"
+	fn := "official_test_source_2s_keys_24pfs.mp4"
 	if len(flag.Args()) > 0 {
 		fn = flag.Arg(0)
 	}
