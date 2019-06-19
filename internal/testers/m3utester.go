@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ericxtang/m3u8"
 	"github.com/golang/glog"
+	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/livepeer/stream-tester/internal/utils"
 )
@@ -157,6 +157,7 @@ func (mt *m3utester) downloadLoop() {
 type downloadStats struct {
 	success int
 	fail    int
+	retries int
 	bytes   int64
 	errors  map[string]int
 }
@@ -204,7 +205,7 @@ func newMediaDownloader(u string, done <-chan struct{}) *mediaDownloader {
 }
 
 func (md *mediaDownloader) statsFormatted() string {
-	res := fmt.Sprintf("Downloaded: %5d\nFailed:     %5d\n", md.stats.success, md.stats.fail)
+	res := fmt.Sprintf("Downloaded: %5d\nFailed:     %5d\nRetries:   %5d", md.stats.success, md.stats.fail, md.stats.retries)
 	et := 0
 	for _, e := range md.stats.errors {
 		et += e
@@ -219,6 +220,7 @@ func (md *mediaDownloader) statsFormatted() string {
 type downloadResult struct {
 	status string
 	bytes  int
+	try    int
 }
 
 func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan downloadResult) {
@@ -230,40 +232,48 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 	if !purl.IsAbs() {
 		fsurl = md.u.ResolveReference(purl).String()
 	}
-	glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s", task.seqNo, fsurl)
-	resp, err := http.Get(fsurl)
-	if err != nil {
-		glog.Errorf("Error downloading %s: %v", fsurl, err)
-		res <- downloadResult{status: err.Error()}
-		return
-	}
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		glog.Errorf("Error downloading reading body %s: %v", fsurl, err)
-		res <- downloadResult{status: err.Error()}
-		return
-	}
-	resp.Body.Close()
-	glog.V(model.DEBUG).Infof("Download %s result: %s len %d", fsurl, resp.Status, len(b))
-	if !md.firstSegmentParsed && task.seqNo == 0 {
-		fst, err := utils.GetVideoStartTime(b)
+	try := 0
+	glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
+	for {
+		resp, err := http.Get(fsurl)
 		if err != nil {
-			glog.Fatal(err)
+			glog.Errorf("Error downloading %s: %v", fsurl, err)
+			res <- downloadResult{status: err.Error()}
+			return
 		}
-		md.firstSegmentParsed = true
-		md.firstSegmentTime = fst
-	}
+		b, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			glog.Errorf("Error downloading reading body %s: %v", fsurl, err)
+			if try < 3 {
+				try++
+				continue
+			}
+			res <- downloadResult{status: err.Error(), try: try}
+			return
+		}
+		resp.Body.Close()
+		glog.V(model.DEBUG).Infof("Download %s result: %s len %d", fsurl, resp.Status, len(b))
+		if !md.firstSegmentParsed && task.seqNo == 0 {
+			fst, err := utils.GetVideoStartTime(b)
+			if err != nil {
+				glog.Fatal(err)
+			}
+			md.firstSegmentParsed = true
+			md.firstSegmentTime = fst
+		}
 
-	if md.saveSegmentsToDisk {
-		upts := strings.Split(task.url, "/")
-		// fn := upts[len(upts)-2] + "-" + path.Base(task.url)
-		fn := fmt.Sprintf("%s-%05d.ts", upts[len(upts)-2], task.seqNo)
-		err = ioutil.WriteFile(fn, b, 0644)
-		if err != nil {
-			glog.Fatal(err)
+		if md.saveSegmentsToDisk {
+			upts := strings.Split(task.url, "/")
+			// fn := upts[len(upts)-2] + "-" + path.Base(task.url)
+			fn := fmt.Sprintf("%s-%05d.ts", upts[len(upts)-2], task.seqNo)
+			err = ioutil.WriteFile(fn, b, 0644)
+			if err != nil {
+				glog.Fatal(err)
+			}
 		}
+		res <- downloadResult{status: resp.Status, bytes: len(b), try: try}
+		return
 	}
-	res <- downloadResult{status: resp.Status, bytes: len(b)}
 }
 
 func (md *mediaDownloader) workerLoop() {
@@ -276,6 +286,7 @@ func (md *mediaDownloader) workerLoop() {
 		case res := <-resultsCahn:
 			// md.mu.Lock()
 			glog.V(model.VERBOSE).Infof("Got result %+v", res)
+			md.stats.retries += res.try
 			if res.status == "200 OK" {
 				md.stats.success++
 				md.stats.bytes += int64(res.bytes)

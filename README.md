@@ -10,7 +10,7 @@ As part of test harness, it works in server mode, inside docker image, and is co
 
 Dependencies:
 `go get -u -v github.com/gosuri/uiprogress`
-`go get -u -v github.com/ericxtang/m3u8`
+`go get -u -v github.com/livepeer/m3u8`
 `go get -u -v github.com/golang/glog`
 `go get -u -v github.com/nareix/joy4`
 `go get -u -v golang.org/x/text/message`

@@ -32,9 +32,11 @@ type Stats struct {
 	ShouldHaveDownloadedSegments int     `json:"should_have_downloaded_segments"`
 	FailedToDownloadSegments     int     `json:"failed_to_download_segments"`
 	BytesDownloaded              int64   `json:"bytes_downloaded"`
+	Retries                      int     `json:"retries"`
 	SuccessRate                  float64 `json:"success_rate"` // DownloadedSegments/profilesNum*SentSegments
 	ConnectionLost               int     `json:"connection_lost"`
 	Finished                     bool    `json:"finished"`
+	ProfilesNum                  int     `json:"profiles_num,omitempty"`
 }
 
 // REST requests
@@ -61,9 +63,10 @@ Total number of segments sent to be sent:     %7d
 Total number of segments sent to broadcaster: %7d
 Total number of segments read back:           %7d
 Total number of segments should read back:    %7d
+Number of retries:                            %7d
 Success rate:                                     %9.5f%%
 Lost connection to broadcaster:               %7d
 Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams, st.TotalSegmentsToSend, st.SentSegments, st.DownloadedSegments,
-		st.ShouldHaveDownloadedSegments, st.SuccessRate, st.ConnectionLost, st.BytesDownloaded)
+		st.ShouldHaveDownloadedSegments, st.Retries, st.SuccessRate, st.ConnectionLost, st.BytesDownloaded)
 	return r
 }

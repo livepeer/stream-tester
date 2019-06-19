@@ -185,11 +185,13 @@ func (sr *streamer) Stats() *model.Stats {
 		stats.DownloadedSegments += ds.success
 		stats.FailedToDownloadSegments += ds.fail
 		stats.BytesDownloaded += ds.bytes
+		stats.Retries += ds.retries
 	}
 	if stats.SentSegments > 0 {
 		stats.SuccessRate = float64(stats.DownloadedSegments) / ((float64(model.ProfilesNum) + 1) * float64(stats.SentSegments)) * 100
 	}
 	stats.ShouldHaveDownloadedSegments = (model.ProfilesNum + 1) * stats.SentSegments
+	stats.ProfilesNum = model.ProfilesNum
 	return stats
 }
 
