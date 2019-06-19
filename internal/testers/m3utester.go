@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ericxtang/m3u8"
 	"github.com/golang/glog"
+	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/livepeer/stream-tester/internal/utils"
 )
