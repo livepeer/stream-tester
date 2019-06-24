@@ -25,18 +25,21 @@ func (pkf *printKeyFrame) ModifyPacket(pkt *av.Packet, streams []av.CodecData, v
 // segmentsCounter counts segments by counting key frames
 // with same algorithm used by ffmeg to cut RTMP streams into HLS segments
 type segmentsCounter struct {
-	segLen             time.Duration
-	segments           int
-	segmentsStartTimes []time.Duration
-	lastKeyUsedKeyTime time.Duration
-	bar                *uiprogress.Bar
+	segLen                  time.Duration
+	segments                int
+	segmentsStartTimes      []time.Duration
+	lastKeyUsedKeyTime      time.Duration
+	bar                     *uiprogress.Bar
+	recordSegmentsDurations bool
+	segmentsDurations       []time.Duration
 }
 
-func newSegmentsCounter(segLen time.Duration, bar *uiprogress.Bar) *segmentsCounter {
+func newSegmentsCounter(segLen time.Duration, bar *uiprogress.Bar, recordSegmentsDurations bool) *segmentsCounter {
 	return &segmentsCounter{
-		bar:                bar,
-		segLen:             segLen,
-		segmentsStartTimes: make([]time.Duration, 10, 10), // Record segments start timestamps. Needed
+		bar:                     bar,
+		segLen:                  segLen,
+		recordSegmentsDurations: recordSegmentsDurations,
+		segmentsStartTimes:      make([]time.Duration, 10, 10), // Record segments start timestamps. Needed
 		// to detect how many segments broadcaster skipped st start
 	}
 }
@@ -52,10 +55,37 @@ func (sc *segmentsCounter) ModifyPacket(pkt *av.Packet, streams []av.CodecData, 
 			if sc.bar != nil {
 				sc.bar.Incr()
 			}
+			if sc.recordSegmentsDurations {
+				sc.segmentsDurations = append(sc.segmentsDurations, pkt.Time-sc.lastKeyUsedKeyTime)
+			}
 			glog.V(model.VERBOSE).Infof("====== Number of segments: %d time %s last time %s diff %s data size %d\n", sc.segments,
 				pkt.Time, sc.lastKeyUsedKeyTime, pkt.Time-sc.lastKeyUsedKeyTime, len(pkt.Data))
 			sc.lastKeyUsedKeyTime = pkt.Time
 		}
 	}
 	return
+}
+
+func (sc *segmentsCounter) SegmentsNeededForDuration(targetDuration time.Duration) int {
+	tot := sc.totalDuration()
+	repeats := int(targetDuration / tot)
+	targetLeft := targetDuration % tot
+	var left time.Duration
+	glog.Infof("total: %s repeats: %d targetLeft: %s", tot, repeats, targetLeft)
+	for i, d := range sc.segmentsDurations {
+		left += d
+		if left >= targetLeft {
+			return repeats*len(sc.segmentsDurations) + i
+		}
+	}
+	// shouldn't get here
+	return repeats * len(sc.segmentsDurations)
+}
+
+func (sc *segmentsCounter) totalDuration() time.Duration {
+	var tot time.Duration
+	for _, d := range sc.segmentsDurations {
+		tot += d
+	}
+	return tot
 }

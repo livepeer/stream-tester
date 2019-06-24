@@ -44,11 +44,11 @@ func (sr *streamer) Stop() {
 	}
 }
 
-func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, notFinal bool) error {
+func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration, notFinal bool) error {
 	var segments int
 	glog.Infof("Counting segments in %s", sourceFileName)
-	segments = GetNumberOfSegments(sourceFileName)
-	glog.Infof("Counted %d source segments", segments)
+	segments = GetNumberOfSegments(sourceFileName, streamDuration)
+	glog.Infof("Counted %d source segments (for %s duration)", segments, streamDuration)
 
 	nRtmpPort, err := strconv.Atoi(rtmpPort)
 	if err != nil {
@@ -116,7 +116,7 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 			up := newRtmpStreamer(rtmpURL, sourceFileName, bar, done)
 			wg.Add(1)
 			go func() {
-				up.startUpload(sourceFileName, rtmpURL)
+				up.startUpload(sourceFileName, rtmpURL, totalSegments)
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)

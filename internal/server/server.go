@@ -135,7 +135,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		ss.streamer = testers.NewStreamer()
 	}
 
-	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous, ssr.Repeat, true)
+	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous, ssr.Repeat, 0, true)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"success": true}`))

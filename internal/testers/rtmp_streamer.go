@@ -30,19 +30,20 @@ func newRtmpStreamer(ingestURL, source string, bar *uiprogress.Bar, done chan st
 	return &rtmpStreamer{
 		done:            done,
 		ingestURL:       ingestURL,
-		counter:         newSegmentsCounter(segLen, bar),
+		counter:         newSegmentsCounter(segLen, bar, false),
 		skippedSegments: 1, // Broadcaster always skips first segment, but can skip more - this will be corrected when first
 		// segment downloaded back
 	}
 }
 
 // GetNumberOfSegments returns number of segments in video file
-func GetNumberOfSegments(fileName string) int {
+func GetNumberOfSegments(fileName string, streamDuration time.Duration) int {
 	file, err := avutil.Open(fileName)
 	if err != nil {
 		glog.Fatal(err)
 	}
-	sc := newSegmentsCounter(segLen, nil)
+	recordSegmentsDurations := streamDuration > 0
+	sc := newSegmentsCounter(segLen, nil, recordSegmentsDurations)
 	filters := pktque.Filters{sc}
 	src := &pktque.FilterDemuxer{Demuxer: file, Filter: filters}
 	var streams []av.CodecData
@@ -69,10 +70,13 @@ func GetNumberOfSegments(fileName string) int {
 			sc.ModifyPacket(&pkt, streams, videoidx, audioidx)
 		}
 	}
-	return sc.segments - 1
+	if !recordSegmentsDurations {
+		return sc.segments - 1
+	}
+	return sc.SegmentsNeededForDuration(streamDuration)
 }
 
-func (rs *rtmpStreamer) startUpload(fn, rtmpURL string) {
+func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	var err error
 	rs.file, err = avutil.Open(fn)
 	if err != nil {
@@ -90,11 +94,8 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string) {
 	if err != nil {
 		glog.Fatal(err)
 	}
-	filters := pktque.Filters{&pktque.Walltime{}, &printKeyFrame{}, rs.counter}
 
-	demuxer := &pktque.FilterDemuxer{Demuxer: rs.file, Filter: filters}
-	err = avutil.CopyFile(conn, demuxer)
-	if err != nil {
+	var onError = func(err error) {
 		glog.Error(err)
 		rs.connectionLost = true
 		rs.file.Close()
@@ -103,6 +104,77 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string) {
 		close(rs.done)
 		return
 	}
+
+	filters := pktque.Filters{&pktque.Walltime{}, &printKeyFrame{}, rs.counter}
+
+	demuxer := &pktque.FilterDemuxer{Demuxer: rs.file, Filter: filters}
+
+	var streams []av.CodecData
+	if streams, err = demuxer.Streams(); err != nil {
+		onError(err)
+		return
+	}
+	if err = conn.WriteHeader(streams); err != nil {
+		onError(err)
+		return
+	}
+	var doneStreaming bool
+	for {
+		for {
+			var pkt av.Packet
+			if pkt, err = demuxer.ReadPacket(); err != nil {
+				if err == io.EOF {
+					onError(err)
+					return
+				}
+				break
+			}
+			if err = conn.WritePacket(pkt); err != nil {
+				onError(err)
+				return
+			}
+			if rs.counter.segments > segmentsToStream {
+				doneStreaming = true
+				break
+			}
+		}
+		if doneStreaming {
+			break
+		}
+		// re-open same file and stream it again
+		rs.file, err = avutil.Open(fn)
+		if err != nil {
+			glog.Fatal(err)
+		}
+		demuxer.Demuxer = rs.file
+		demuxer.Streams()
+	}
+
+	/*
+		if err = avutil.CopyPackets(conn, demuxer); err != nil {
+			if err != io.EOF {
+				onError(err)
+				return
+			}
+		}
+	*/
+	if err = conn.WriteTrailer(); err != nil {
+		onError(err)
+		return
+	}
+
+	/*
+		err = avutil.CopyFile(conn, demuxer)
+		if err != nil {
+			glog.Error(err)
+			rs.connectionLost = true
+			rs.file.Close()
+			conn.Close()
+			time.Sleep(4 * time.Second)
+			close(rs.done)
+			return
+		}
+	*/
 
 	rs.file.Close()
 	// wait before closing connection, so we can recieve transcoded data

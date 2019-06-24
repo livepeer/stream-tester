@@ -1,6 +1,10 @@
 package model
 
-import "golang.org/x/text/message"
+import (
+	"time"
+
+	"golang.org/x/text/message"
+)
 
 const (
 	SHORT   = 4
@@ -13,7 +17,7 @@ var ProfilesNum = 2
 
 // Streamer interface
 type Streamer interface {
-	StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, notFinal bool) error
+	StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration, notFinal bool) error
 	Stats() *Stats
 	StatsFormatted() string
 	Done() <-chan struct{}

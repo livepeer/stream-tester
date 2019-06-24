@@ -30,6 +30,7 @@ func main() {
 	host := flag.String("host", "localhost", "Broadcaster's host name")
 	rtmp := flag.String("rtmp", "1935", "RTMP port number")
 	media := flag.String("media", "8935", "Media port number")
+	stime := flag.String("time", "", "Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option.")
 	fServer := flag.Bool("server", false, "Server mode")
 	serverAddr := flag.String("serverAddr", "localhost:7934", "Server address to bind to")
 	flag.Parse()
@@ -44,6 +45,23 @@ func main() {
 		s.StartWebServer(*serverAddr)
 		return
 	}
+	var streamDuration time.Duration
+	var err error
+	if *stime != "" {
+		streamDuration, err = time.ParseDuration(*stime)
+		if err != nil {
+			glog.Fatalf("Error parsing time: %v.", err)
+		}
+		if streamDuration < 0 {
+			glog.Fatal("Time to stream should be positive.")
+		}
+		if streamDuration == 0 {
+			glog.Fatal("Time to stream should be greater than zero.")
+		}
+		if *repeat > 1 {
+			glog.Fatal("Can't set both -time and -repeat.")
+		}
+	}
 	// fmt.Printf("Args: %+v\n", flag.Args())
 	fn := "official_test_source_2s_keys_24pfs.mp4"
 	if len(flag.Args()) > 0 {
@@ -54,7 +72,7 @@ func main() {
 	defer glog.Infof("Exiting")
 	model.ProfilesNum = *profiles
 	sr := testers.NewStreamer()
-	err := sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, false)
+	err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, false)
 	if err != nil {
 		glog.Fatal(err)
 	}
