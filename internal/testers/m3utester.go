@@ -17,6 +17,13 @@ import (
 	"github.com/livepeer/stream-tester/internal/utils"
 )
 
+const HTTPTimeout = 2 * time.Second
+
+var httpClient = &http.Client{
+	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
+	Timeout: HTTPTimeout,
+}
+
 // m3utester tests one stream, reading all the media streams
 type m3utester struct {
 	initialURL *url.URL
@@ -102,7 +109,7 @@ func (mt *m3utester) downloadLoop() {
 			return
 		default:
 		}
-		resp, err := http.Get(surl)
+		resp, err := httpClient.Get(surl)
 		if err != nil {
 			glog.Error(err)
 			return
@@ -205,7 +212,7 @@ func newMediaDownloader(u string, done <-chan struct{}) *mediaDownloader {
 }
 
 func (md *mediaDownloader) statsFormatted() string {
-	res := fmt.Sprintf("Downloaded: %5d\nFailed:     %5d\nRetries:   %5d", md.stats.success, md.stats.fail, md.stats.retries)
+	res := fmt.Sprintf("Downloaded: %5d\nFailed:     %5d\nRetries:   %5d\n", md.stats.success, md.stats.fail, md.stats.retries)
 	et := 0
 	for _, e := range md.stats.errors {
 		et += e
@@ -233,18 +240,22 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 		fsurl = md.u.ResolveReference(purl).String()
 	}
 	try := 0
-	glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
 	for {
-		resp, err := http.Get(fsurl)
+		glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
+		resp, err := httpClient.Get(fsurl)
 		if err != nil {
 			glog.Errorf("Error downloading %s: %v", fsurl, err)
-			res <- downloadResult{status: err.Error()}
+			if try < 4 {
+				try++
+				continue
+			}
+			res <- downloadResult{status: err.Error(), try: try}
 			return
 		}
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			glog.Errorf("Error downloading reading body %s: %v", fsurl, err)
-			if try < 3 {
+			if try < 4 {
 				try++
 				continue
 			}
@@ -314,7 +325,7 @@ func (md *mediaDownloader) downloadLoop() {
 			return
 		default:
 		}
-		resp, err := http.Get(surl)
+		resp, err := httpClient.Get(surl)
 		if err != nil {
 			glog.Error(err)
 			return
