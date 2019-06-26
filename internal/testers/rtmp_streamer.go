@@ -88,6 +88,7 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	}()
 
 	// pio.RecommendBufioSize = 1024 * 8
+	// rtmp.Debug = true
 	// rtmp.Debug2 = true
 	// conn, err := rtmp.Dial("rtmp://localhost:1935/" + manifestID)
 	conn, err := rtmp.Dial(rtmpURL)
@@ -105,7 +106,8 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 		return
 	}
 
-	filters := pktque.Filters{&pktque.Walltime{}, &printKeyFrame{}, rs.counter}
+	// filters := pktque.Filters{&pktque.Walltime{}, &printKeyFrame{}, rs.counter}
+	filters := pktque.Filters{rs.counter, &printKeyFrame{}, &pktque.FixTime{MakeIncrement: true}, &pktque.Walltime{}}
 
 	demuxer := &pktque.FilterDemuxer{Demuxer: rs.file, Filter: filters}
 
@@ -120,12 +122,16 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	}
 	var doneStreaming bool
 	for {
+		lastSegments := 0
 		for {
 			var pkt av.Packet
 			if pkt, err = demuxer.ReadPacket(); err != nil {
-				if err == io.EOF {
+				if err != io.EOF {
 					onError(err)
 					return
+				}
+				if rs.counter.segments-rs.skippedSegments >= segmentsToStream {
+					doneStreaming = true
 				}
 				break
 			}
@@ -133,20 +139,31 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 				onError(err)
 				return
 			}
-			if rs.counter.segments > segmentsToStream {
+			if rs.counter.segments > lastSegments {
+				// glog.Infof("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
+				// fmt.Printf("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d\n\n", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
+				lastSegments = rs.counter.segments
+			}
+			if rs.counter.segments-rs.skippedSegments > segmentsToStream {
+				glog.Info("Done streaming\n")
+				// fmt.Println("=====!!! DONE streaming")
 				doneStreaming = true
+				rs.counter.segments--
 				break
 			}
 		}
 		if doneStreaming {
 			break
 		}
+		// glog.Infof("=== REOPENING file!")
 		// re-open same file and stream it again
+		rs.counter.timeShift = rs.counter.lastPacketTime
 		rs.file, err = avutil.Open(fn)
 		if err != nil {
 			glog.Fatal(err)
 		}
 		demuxer.Demuxer = rs.file
+		// rs.counter.currentSegments = 0
 		demuxer.Streams()
 	}
 
@@ -177,6 +194,8 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	*/
 
 	rs.file.Close()
+	glog.Infof("Waiting before closing RTMP stream\n")
+	// fmt.Println("==== waiting before closing RTMP stream\n")
 	// wait before closing connection, so we can recieve transcoded data
 	// if we do not wait, last segment will be thrown out by broadcaster
 	// with 'Session ended` error

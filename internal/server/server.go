@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/internal/model"
@@ -134,8 +135,16 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 	if !ssr.DoNotClearStats {
 		ss.streamer = testers.NewStreamer()
 	}
+	var streamDuration time.Duration
+	if ssr.Time != "" {
+		if streamDuration, err = ParseStreamDurationArgument(ssr.Time); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+	}
 
-	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous, ssr.Repeat, 0, true)
+	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous, ssr.Repeat, streamDuration, true)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"success": true}`))

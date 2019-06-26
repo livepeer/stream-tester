@@ -48,15 +48,8 @@ func main() {
 	var streamDuration time.Duration
 	var err error
 	if *stime != "" {
-		streamDuration, err = time.ParseDuration(*stime)
-		if err != nil {
-			glog.Fatalf("Error parsing time: %v.", err)
-		}
-		if streamDuration < 0 {
-			glog.Fatal("Time to stream should be positive.")
-		}
-		if streamDuration == 0 {
-			glog.Fatal("Time to stream should be greater than zero.")
+		if streamDuration, err = server.ParseStreamDurationArgument(*stime); err != nil {
+			panic(err)
 		}
 		if *repeat > 1 {
 			glog.Fatal("Can't set both -time and -repeat.")

@@ -53,6 +53,7 @@ type StartStreamsReq struct {
 	Media           int    `json:"media,omitempty"`
 	Repeat          uint   `json:"repeat,omitempty"`
 	Simultaneous    uint   `json:"simultaneous,omitempty"`
+	Time            string `json:"time,omitempty"`
 	ProfilesNum     int    `json:"profiles_num,omitempty"`
 	DoNotClearStats bool   `json:"do_not_clear_stats"`
 }
@@ -63,7 +64,7 @@ func (st *Stats) FormatForConsole() string {
 	r := p.Sprintf(`
 Number of RTMP streams:                       %7d
 Number of media streams:                      %7d
-Total number of segments sent to be sent:     %7d
+Total number of segments to be sent:          %7d
 Total number of segments sent to broadcaster: %7d
 Total number of segments read back:           %7d
 Total number of segments should read back:    %7d

@@ -26,12 +26,15 @@ func (pkf *printKeyFrame) ModifyPacket(pkt *av.Packet, streams []av.CodecData, v
 // with same algorithm used by ffmeg to cut RTMP streams into HLS segments
 type segmentsCounter struct {
 	segLen                  time.Duration
+	currentSegments         int
 	segments                int
 	segmentsStartTimes      []time.Duration
 	lastKeyUsedKeyTime      time.Duration
 	bar                     *uiprogress.Bar
 	recordSegmentsDurations bool
 	segmentsDurations       []time.Duration
+	timeShift               time.Duration
+	lastPacketTime          time.Duration
 }
 
 func newSegmentsCounter(segLen time.Duration, bar *uiprogress.Bar, recordSegmentsDurations bool) *segmentsCounter {
@@ -45,24 +48,27 @@ func newSegmentsCounter(segLen time.Duration, bar *uiprogress.Bar, recordSegment
 }
 
 func (sc *segmentsCounter) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoidx int, audioidx int) (drop bool, err error) {
+	pkt.Time += sc.timeShift
 	if pkt.Idx == int8(videoidx) && pkt.IsKeyFrame {
 		// This matches segmenter algorithm used in ffmpeg
-		if pkt.Time >= time.Duration(sc.segments+1)*sc.segLen {
+		if pkt.Time >= time.Duration(sc.currentSegments+1)*sc.segLen {
 			if sc.segments < len(sc.segmentsStartTimes) {
 				sc.segmentsStartTimes[sc.segments] = pkt.Time
 			}
 			sc.segments++
+			sc.currentSegments++
 			if sc.bar != nil {
 				sc.bar.Incr()
 			}
 			if sc.recordSegmentsDurations {
 				sc.segmentsDurations = append(sc.segmentsDurations, pkt.Time-sc.lastKeyUsedKeyTime)
 			}
-			glog.V(model.VERBOSE).Infof("====== Number of segments: %d time %s last time %s diff %s data size %d\n", sc.segments,
-				pkt.Time, sc.lastKeyUsedKeyTime, pkt.Time-sc.lastKeyUsedKeyTime, len(pkt.Data))
+			glog.V(model.VERBOSE).Infof("====== Number of segments: %d current segments: %d time %s last time %s diff %s data size %d time shift: %s\n",
+				sc.segments, sc.currentSegments, pkt.Time, sc.lastKeyUsedKeyTime, pkt.Time-sc.lastKeyUsedKeyTime, len(pkt.Data), sc.timeShift)
 			sc.lastKeyUsedKeyTime = pkt.Time
 		}
 	}
+	sc.lastPacketTime = pkt.Time
 	return
 }
 
