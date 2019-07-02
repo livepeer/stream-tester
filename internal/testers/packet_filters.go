@@ -6,7 +6,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/gosuri/uiprogress"
 	"github.com/livepeer/stream-tester/internal/model"
-	"github.com/nareix/joy4/av"
+	"github.com/livepeer/joy4/av"
 )
 
 type printKeyFrame struct {

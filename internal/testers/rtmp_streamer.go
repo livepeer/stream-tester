@@ -6,10 +6,10 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/gosuri/uiprogress"
-	"github.com/nareix/joy4/av"
-	"github.com/nareix/joy4/av/avutil"
-	"github.com/nareix/joy4/av/pktque"
-	"github.com/nareix/joy4/format/rtmp"
+	"github.com/livepeer/joy4/av"
+	"github.com/livepeer/joy4/av/avutil"
+	"github.com/livepeer/joy4/av/pktque"
+	"github.com/livepeer/joy4/format/rtmp"
 )
 
 var segLen = 2 * time.Second

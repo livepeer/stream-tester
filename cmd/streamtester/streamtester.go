@@ -14,7 +14,7 @@ import (
 	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"
-	"github.com/nareix/joy4/format"
+	"github.com/livepeer/joy4/format"
 )
 
 func init() {
