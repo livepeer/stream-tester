@@ -6,15 +6,6 @@ It can be used as standalone command line tool or as part of [test harness](http
 As part of test harness, it works in server mode, inside docker image, and is controlled through REST interface.
 
 
-## Installation
-
-Dependencies:
-`go get -u -v github.com/gosuri/uiprogress`
-`go get -u -v github.com/livepeer/m3u8`
-`go get -u -v github.com/golang/glog`
-`go get -u -v github.com/nareix/joy4`
-`go get -u -v golang.org/x/text/message`
-
 
 ## Command line
 Usage:
