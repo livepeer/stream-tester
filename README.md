@@ -20,6 +20,7 @@ Params:
  - `-profiles` How many transcoding profiles broadcaster configured with
  - `-sim` How many simultaneous streams stream into broadcaster
  - `-repeat` How many times to repeat streaming 
+ - `-time` Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option
 
 
 ## Server mode
