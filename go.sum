@@ -7,6 +7,8 @@ github.com/gosuri/uiprogress v0.0.1 h1:0kpv/XY/qTmFWl/SkaJykZXrBBzwwadmW8fRb7RJS
 github.com/gosuri/uiprogress v0.0.1/go.mod h1:C1RTYn4Sc7iEyf6j8ft5dyoZ4212h8G1ol9QQluh5+0=
 github.com/livepeer/joy4 v0.1.0 h1:5DTF39KUDyGJER5vjwsWiDVxvPzgbalVJ9MgH8c6aqk=
 github.com/livepeer/joy4 v0.1.0/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
+github.com/livepeer/joy4 v0.1.1 h1:Tz7gVcmvpG/nfUKHU+XJn6Qke/k32mTWMiH9qB0bhnM=
+github.com/livepeer/joy4 v0.1.1/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
 github.com/livepeer/m3u8 v0.11.0 h1:aI2hLXV5h5VqxjjmAOs55TpUR35KzNL2XWLkbETql5g=
 github.com/livepeer/m3u8 v0.11.0/go.mod h1:IUqAtwWPAG2CblfQa4SVzTQoDcEMPyfNOaBSxqHMS04=
 github.com/mattn/go-isatty v0.0.8/go.mod h1:Iq45c/XA43vh69/j3iqttzPXn0bhXyGjM0Hdxcsrc5s=
