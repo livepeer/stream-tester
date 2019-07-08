@@ -5,8 +5,9 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/gosuri/uiprogress"
-	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/livepeer/joy4/av"
+	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/internal/utils"
 )
 
 type printKeyFrame struct {
@@ -14,6 +15,9 @@ type printKeyFrame struct {
 }
 
 func (pkf *printKeyFrame) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoidx int, audioidx int) (drop bool, err error) {
+	// if pkt.Idx == int8(videoidx) || true {
+	// 	glog.Infof("====== videoidx %d isKey %v Got frame idx %d time %s comp time %s \n", videoidx, pkt.IsKeyFrame, pkt.Idx, pkt.Time, pkt.CompositionTime)
+	// }
 	if pkt.Idx == int8(videoidx) && pkt.IsKeyFrame {
 		diff := pkt.Time - pkf.lastTime
 		glog.V(model.VERBOSE).Infof("====== Got keyframe idx %d time %s diff %s\n", pkt.Idx, pkt.Time, diff)
@@ -35,13 +39,18 @@ type segmentsCounter struct {
 	segmentsDurations       []time.Duration
 	timeShift               time.Duration
 	lastPacketTime          time.Duration
+	saveSentTimes           bool
+	lastSentSegmentTime     time.Duration
+	sentTimes               []time.Time
+	sentTimesMap            *utils.SyncedTimesMap
 }
 
-func newSegmentsCounter(segLen time.Duration, bar *uiprogress.Bar, recordSegmentsDurations bool) *segmentsCounter {
+func newSegmentsCounter(segLen time.Duration, bar *uiprogress.Bar, recordSegmentsDurations bool, sentTimesMap *utils.SyncedTimesMap) *segmentsCounter {
 	return &segmentsCounter{
 		bar:                     bar,
 		segLen:                  segLen,
 		recordSegmentsDurations: recordSegmentsDurations,
+		sentTimesMap:            sentTimesMap,
 		segmentsStartTimes:      make([]time.Duration, 10, 10), // Record segments start timestamps. Needed
 		// to detect how many segments broadcaster skipped st start
 	}
@@ -50,10 +59,19 @@ func newSegmentsCounter(segLen time.Duration, bar *uiprogress.Bar, recordSegment
 func (sc *segmentsCounter) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoidx int, audioidx int) (drop bool, err error) {
 	pkt.Time += sc.timeShift
 	if pkt.Idx == int8(videoidx) && pkt.IsKeyFrame {
+		// pktHash := md5.Sum(pkt.Data)
+		// glog.Infof("=== hash of %s is %x", pkt.Time, pktHash)
 		// This matches segmenter algorithm used in ffmpeg
 		if pkt.Time >= time.Duration(sc.currentSegments+1)*sc.segLen {
 			if sc.segments < len(sc.segmentsStartTimes) {
 				sc.segmentsStartTimes[sc.segments] = pkt.Time
+			}
+			if sc.sentTimesMap != nil {
+				now := time.Now()
+				// sc.sentTimes = append(sc.sentTimes, now)
+				// glog.Infof("=== sent seqNo %d sent time %s pkt time %s", sc.segments, now, sc.lastSentSegmentTime)
+				sc.sentTimesMap.SetTime(sc.lastSentSegmentTime, now)
+				sc.lastSentSegmentTime = pkt.Time
 			}
 			sc.segments++
 			sc.currentSegments++

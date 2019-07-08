@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/livepeer/joy4/format/ts"
+	"github.com/livepeer/stream-tester/internal/model"
 )
 
 // GetVideoStartTime returns timestamp of first frame of `ts` segment
@@ -33,6 +33,8 @@ func GetVideoStartTime(segment []byte) (time.Duration, error) {
 		}
 		if pkt.Idx == videoIdx {
 			glog.V(model.VERBOSE).Infof("=====--- first video paket idx %d, video idx %d, time %s", pkt.Idx, videoIdx, pkt.Time)
+			// pktHash := md5.Sum(pkt.Data)
+			// glog.Infof("=== downloaded hash of %s is %x", pkt.Time, pktHash)
 			return pkt.Time, nil
 		}
 	}

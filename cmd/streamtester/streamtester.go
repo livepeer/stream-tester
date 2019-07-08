@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"
-	"github.com/livepeer/joy4/format"
 )
 
 func init() {
@@ -32,6 +32,7 @@ func main() {
 	media := flag.String("media", "8935", "Media port number")
 	stime := flag.String("time", "", "Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option.")
 	fServer := flag.Bool("server", false, "Server mode")
+	latency := flag.Bool("latency", false, "Measure latency")
 	serverAddr := flag.String("serverAddr", "localhost:7934", "Server address to bind to")
 	flag.Parse()
 
@@ -65,7 +66,7 @@ func main() {
 	defer glog.Infof("Exiting")
 	model.ProfilesNum = *profiles
 	sr := testers.NewStreamer()
-	err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, false)
+	err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, false, *latency)
 	if err != nil {
 		glog.Fatal(err)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/livepeer/joy4/av/avutil"
 	"github.com/livepeer/joy4/av/pktque"
 	"github.com/livepeer/joy4/format/rtmp"
+	"github.com/livepeer/stream-tester/internal/utils"
 )
 
 var segLen = 2 * time.Second
@@ -26,11 +27,11 @@ type rtmpStreamer struct {
 }
 
 // source is local file name for now
-func newRtmpStreamer(ingestURL, source string, bar *uiprogress.Bar, done chan struct{}) *rtmpStreamer {
+func newRtmpStreamer(ingestURL, source string, sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, done chan struct{}) *rtmpStreamer {
 	return &rtmpStreamer{
 		done:            done,
 		ingestURL:       ingestURL,
-		counter:         newSegmentsCounter(segLen, bar, false),
+		counter:         newSegmentsCounter(segLen, bar, false, sentTimesMap),
 		skippedSegments: 1, // Broadcaster always skips first segment, but can skip more - this will be corrected when first
 		// segment downloaded back
 	}
@@ -43,7 +44,7 @@ func GetNumberOfSegments(fileName string, streamDuration time.Duration) int {
 		glog.Fatal(err)
 	}
 	recordSegmentsDurations := streamDuration > 0
-	sc := newSegmentsCounter(segLen, nil, recordSegmentsDurations)
+	sc := newSegmentsCounter(segLen, nil, recordSegmentsDurations, nil)
 	filters := pktque.Filters{sc}
 	src := &pktque.FilterDemuxer{Demuxer: file, Filter: filters}
 	var streams []av.CodecData

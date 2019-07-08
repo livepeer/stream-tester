@@ -17,6 +17,7 @@ import (
 	"github.com/livepeer/stream-tester/internal/utils"
 )
 
+// HTTPTimeout http timeout downloading manifests/segments
 const HTTPTimeout = 2 * time.Second
 
 var httpClient = &http.Client{
@@ -26,19 +27,21 @@ var httpClient = &http.Client{
 
 // m3utester tests one stream, reading all the media streams
 type m3utester struct {
-	initialURL *url.URL
-	downloads  map[string]*mediaDownloader
-	mu         sync.RWMutex
-	started    bool
-	finished   bool
-	done       <-chan struct{} // signals to stop
+	initialURL   *url.URL
+	downloads    map[string]*mediaDownloader
+	mu           sync.RWMutex
+	started      bool
+	finished     bool
+	done         <-chan struct{} // signals to stop
+	sentTimesMap *utils.SyncedTimesMap
 }
 
 // newM3UTester ...
-func newM3UTester(done <-chan struct{}) *m3utester {
+func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap) *m3utester {
 	t := &m3utester{
-		downloads: make(map[string]*mediaDownloader),
-		done:      done,
+		downloads:    make(map[string]*mediaDownloader),
+		done:         done,
+		sentTimesMap: sentTimesMap,
 	}
 	return t
 }
@@ -145,8 +148,9 @@ func (mt *m3utester) downloadLoop() {
 			mediaURL := pvrui.String()
 			mt.mu.Lock()
 			if _, ok := mt.downloads[mediaURL]; !ok {
-				md := newMediaDownloader(mediaURL, mt.done)
+				md := newMediaDownloader(mediaURL, mt.done, mt.sentTimesMap)
 				mt.downloads[mediaURL] = md
+				md.source = strings.Contains(mediaURL, "source")
 			}
 			mt.mu.Unlock()
 		}
@@ -191,9 +195,12 @@ type mediaDownloader struct {
 	firstSegmentTime   time.Duration
 	saveSegmentsToDisk bool
 	done               <-chan struct{} // signals to stop
+	sentTimesMap       *utils.SyncedTimesMap
+	latencies          []time.Duration
+	source             bool
 }
 
-func newMediaDownloader(u string, done <-chan struct{}) *mediaDownloader {
+func newMediaDownloader(u string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap) *mediaDownloader {
 	pu, err := url.Parse(u)
 	if err != nil {
 		glog.Fatal(err)
@@ -204,7 +211,8 @@ func newMediaDownloader(u string, done <-chan struct{}) *mediaDownloader {
 		stats: downloadStats{
 			errors: make(map[string]int),
 		},
-		done: done,
+		done:         done,
+		sentTimesMap: sentTimesMap,
 	}
 	go md.downloadLoop()
 	go md.workerLoop()
@@ -253,6 +261,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			return
 		}
 		b, err := ioutil.ReadAll(resp.Body)
+		now := time.Now()
 		if err != nil {
 			glog.Errorf("Error downloading reading body %s: %v", fsurl, err)
 			if try < 4 {
@@ -271,6 +280,18 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			}
 			md.firstSegmentParsed = true
 			md.firstSegmentTime = fst
+		}
+		if md.sentTimesMap != nil {
+			fsttim, err := utils.GetVideoStartTime(b)
+			if err != nil {
+				glog.Fatal(err)
+			}
+			var latency time.Duration
+			if st, has := md.sentTimesMap.GetTime(fsttim, fsurl); has {
+				latency = now.Sub(st)
+				md.latencies = append(md.latencies, latency)
+			}
+			// glog.Infof("== downloaded segment seeeqNo %d segment start time %s latency %s current time %s", task.seqNo, fsttim, latency, now)
 		}
 
 		if md.saveSegmentsToDisk {
@@ -361,7 +382,11 @@ func (md *mediaDownloader) downloadLoop() {
 				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
 			}
 		}
-		time.Sleep(1 * time.Second)
+		delay := 1 * time.Second
+		if md.sentTimesMap != nil {
+			delay = 250 * time.Millisecond
+		}
+		time.Sleep(delay)
 	}
 }
 func getSortedKeys(data map[string]*mediaDownloader) []string {

@@ -144,7 +144,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous, ssr.Repeat, streamDuration, true)
+	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous, ssr.Repeat, streamDuration, true, ssr.MeasureLatency)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"success": true}`))

@@ -13,6 +13,7 @@ import (
 	"github.com/gosuri/uiprogress"
 
 	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/internal/utils"
 )
 
 // streamer streams multiple RTMP streams into broadcaster node,
@@ -44,7 +45,7 @@ func (sr *streamer) Stop() {
 	}
 }
 
-func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration, notFinal bool) error {
+func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration, notFinal, measureLatency bool) error {
 	var segments int
 	glog.Infof("Counting segments in %s", sourceFileName)
 	segments = GetNumberOfSegments(sourceFileName, streamDuration)
@@ -82,7 +83,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 			if repeat > 1 {
 				glog.Infof("Starting %d streaming session", i)
 			}
-			err := sr.startStreams(sourceFileName, host, nRtmpPort, nMediaPort, simStreams, !notFinal, segments)
+			err := sr.startStreams(sourceFileName, host, nRtmpPort, nMediaPort, simStreams, !notFinal, measureLatency, segments)
 			if err != nil {
 				glog.Fatal(err)
 				return
@@ -95,7 +96,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 	return nil
 }
 
-func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaPort int, simStreams uint, showProgress bool, totalSegments int) error {
+func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaPort int, simStreams uint, showProgress, measureLatency bool, totalSegments int) error {
 	fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
 
 	var wg sync.WaitGroup
@@ -113,14 +114,18 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 				bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
 			}
 			done := make(chan struct{})
-			up := newRtmpStreamer(rtmpURL, sourceFileName, bar, done)
+			var sentTimesMap *utils.SyncedTimesMap
+			if measureLatency {
+				sentTimesMap = utils.NewSyncedTimesMap()
+			}
+			up := newRtmpStreamer(rtmpURL, sourceFileName, sentTimesMap, bar, done)
 			wg.Add(1)
 			go func() {
 				up.startUpload(sourceFileName, rtmpURL, totalSegments)
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)
-			down := newM3UTester(done)
+			down := newM3UTester(done, sentTimesMap)
 			go findSkippedSegmentsNumber(up, down)
 			sr.downloaders = append(sr.downloaders, down)
 			down.Start(mediaURL)
@@ -180,13 +185,30 @@ func (sr *streamer) Stats() *model.Stats {
 			stats.Finished = false
 		}
 	}
+	sourceLatencies := utils.LatenciesCalculator{}
+	transcodedLatencies := utils.LatenciesCalculator{}
 	for _, mt := range sr.downloaders {
 		ds := mt.stats()
 		stats.DownloadedSegments += ds.success
 		stats.FailedToDownloadSegments += ds.fail
 		stats.BytesDownloaded += ds.bytes
 		stats.Retries += ds.retries
+		if mt.sentTimesMap != nil {
+			for _, md := range mt.downloads {
+				if md.source {
+					sourceLatencies.Add(md.latencies)
+				} else {
+					transcodedLatencies.Add(md.latencies)
+				}
+			}
+		}
 	}
+	sourceLatencies.Prepare()
+	transcodedLatencies.Prepare()
+	avg, p50, p95, p99 := sourceLatencies.Calc()
+	stats.SourceLatencies = model.Latencies{Avg: avg, P50: p50, P95: p95, P99: p99}
+	avg, p50, p95, p99 = transcodedLatencies.Calc()
+	stats.TranscodedLatencies = model.Latencies{Avg: avg, P50: p50, P95: p95, P99: p99}
 	if stats.SentSegments > 0 {
 		stats.SuccessRate = float64(stats.DownloadedSegments) / ((float64(model.ProfilesNum) + 1) * float64(stats.SentSegments)) * 100
 	}
