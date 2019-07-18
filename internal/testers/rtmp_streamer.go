@@ -4,6 +4,8 @@ import (
 	"io"
 	"time"
 
+	"net"
+
 	"github.com/golang/glog"
 	"github.com/gosuri/uiprogress"
 	"github.com/livepeer/joy4/av"
@@ -75,6 +77,19 @@ func GetNumberOfSegments(fileName string, streamDuration time.Duration) int {
 		return sc.segments - 1
 	}
 	return sc.SegmentsNeededForDuration(streamDuration)
+}
+
+func readAll(nc net.Conn) {
+	var n int
+	var err error
+	eb := make([]byte, 1024)
+	for {
+		nc.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
+		n, err = nc.Read(eb)
+		if err != nil || n < len(eb) {
+			break
+		}
+	}
 }
 
 func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
@@ -201,6 +216,13 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	// if we do not wait, last segment will be thrown out by broadcaster
 	// with 'Session ended` error
 	time.Sleep(8 * time.Second)
-	conn.Close()
+	// glog.Infof("---------- calling connection close rxbytes %d", conn.RxBytes())
+	// nc := conn.NetConn()
+	readAll(conn.NetConn())
+	// pckt, err := conn.ReadPacket()
+	// glog.Info("pck, err", pckt, err)
+	err = conn.Close()
+	// glog.Info("---------- calling connection close DONE", err)
+	// time.Sleep(8 * time.Second)
 	close(rs.done)
 }

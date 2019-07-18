@@ -63,6 +63,11 @@ func getPercentile(values []time.Duration, percentile int) time.Duration {
 	return per
 }
 
+// Raw returns joined latencies array
+func (lc *LatenciesCalculator) Raw() []time.Duration {
+	return lc.joined
+}
+
 // Calc return average, 50th, 95th 99th percentiles
 func (lc *LatenciesCalculator) Calc() (time.Duration, time.Duration, time.Duration, time.Duration) {
 	var avg, p5, p95, p99 time.Duration

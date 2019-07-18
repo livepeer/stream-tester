@@ -133,7 +133,7 @@ func (mt *m3utester) downloadLoop() {
 		}
 		// glog.Info("Got playlist:")
 		// glog.Info(mpl)
-		for _, variant := range mpl.Variants {
+		for i, variant := range mpl.Variants {
 			// glog.Infof("Variant URI: %s", variant.URI)
 			pvrui, err := url.Parse(variant.URI)
 			if err != nil {
@@ -150,7 +150,8 @@ func (mt *m3utester) downloadLoop() {
 			if _, ok := mt.downloads[mediaURL]; !ok {
 				md := newMediaDownloader(mediaURL, mt.done, mt.sentTimesMap)
 				mt.downloads[mediaURL] = md
-				md.source = strings.Contains(mediaURL, "source")
+				// md.source = strings.Contains(mediaURL, "source")
+				md.source = i == 0
 			}
 			mt.mu.Unlock()
 		}

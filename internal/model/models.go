@@ -28,30 +28,32 @@ type Streamer interface {
 
 // Latencies contains latencies
 type Latencies struct {
-	Avg time.Duration `json:"avg,omitempty"`
-	P50 time.Duration `json:"p_50,omitempty"`
-	P95 time.Duration `json:"p_95,omitempty"`
-	P99 time.Duration `json:"p_99,omitempty"`
+	Avg time.Duration `json:"avg"`
+	P50 time.Duration `json:"p_50"`
+	P95 time.Duration `json:"p_95"`
+	P99 time.Duration `json:"p_99"`
 }
 
 // Stats represents global test statistics
 type Stats struct {
-	RTMPActiveStreams            int       `json:"rtmp_active_streams"` // number of active RTMP streams
-	RTMPstreams                  int       `json:"rtm_pstreams"`        // number of RTMP streams
-	MediaStreams                 int       `json:"media_streams"`       // number of media streams
-	TotalSegmentsToSend          int       `json:"total_segments_to_send"`
-	SentSegments                 int       `json:"sent_segments"`
-	DownloadedSegments           int       `json:"downloaded_segments"`
-	ShouldHaveDownloadedSegments int       `json:"should_have_downloaded_segments"`
-	FailedToDownloadSegments     int       `json:"failed_to_download_segments"`
-	BytesDownloaded              int64     `json:"bytes_downloaded"`
-	Retries                      int       `json:"retries"`
-	SuccessRate                  float64   `json:"success_rate"` // DownloadedSegments/profilesNum*SentSegments
-	ConnectionLost               int       `json:"connection_lost"`
-	Finished                     bool      `json:"finished"`
-	ProfilesNum                  int       `json:"profiles_num,omitempty"`
-	SourceLatencies              Latencies `json:"source_latencies,omitempty"`
-	TranscodedLatencies          Latencies `json:"transcoded_latencies,omitempty"`
+	RTMPActiveStreams            int             `json:"rtmp_active_streams"` // number of active RTMP streams
+	RTMPstreams                  int             `json:"rtm_pstreams"`        // number of RTMP streams
+	MediaStreams                 int             `json:"media_streams"`       // number of media streams
+	TotalSegmentsToSend          int             `json:"total_segments_to_send"`
+	SentSegments                 int             `json:"sent_segments"`
+	DownloadedSegments           int             `json:"downloaded_segments"`
+	ShouldHaveDownloadedSegments int             `json:"should_have_downloaded_segments"`
+	FailedToDownloadSegments     int             `json:"failed_to_download_segments"`
+	BytesDownloaded              int64           `json:"bytes_downloaded"`
+	Retries                      int             `json:"retries"`
+	SuccessRate                  float64         `json:"success_rate"` // DownloadedSegments/profilesNum*SentSegments
+	ConnectionLost               int             `json:"connection_lost"`
+	Finished                     bool            `json:"finished"`
+	ProfilesNum                  int             `json:"profiles_num"`
+	SourceLatencies              Latencies       `json:"source_latencies"`
+	TranscodedLatencies          Latencies       `json:"transcoded_latencies"`
+	RawSourceLatencies           []time.Duration `json:"raw_source_latencies"`
+	RawTranscodedLatencies       []time.Duration `json:"raw_transcoded_latencies"`
 }
 
 // REST requests

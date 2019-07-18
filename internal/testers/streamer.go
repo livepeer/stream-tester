@@ -16,6 +16,10 @@ import (
 	"github.com/livepeer/stream-tester/internal/utils"
 )
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 // streamer streams multiple RTMP streams into broadcaster node,
 // reads back source and transcoded segments and count them
 // and calculates success rate from these numbers
@@ -203,6 +207,8 @@ func (sr *streamer) Stats() *model.Stats {
 			}
 		}
 	}
+	// glog.Infof("=== source latencies: %+v", sourceLatencies)
+	// glog.Infof("=== transcoded latencies: %+v", transcodedLatencies)
 	sourceLatencies.Prepare()
 	transcodedLatencies.Prepare()
 	avg, p50, p95, p99 := sourceLatencies.Calc()
@@ -214,11 +220,12 @@ func (sr *streamer) Stats() *model.Stats {
 	}
 	stats.ShouldHaveDownloadedSegments = (model.ProfilesNum + 1) * stats.SentSegments
 	stats.ProfilesNum = model.ProfilesNum
+	stats.RawSourceLatencies = sourceLatencies.Raw()
+	stats.RawTranscodedLatencies = transcodedLatencies.Raw()
 	return stats
 }
 
 func randName() string {
-	rand.Seed(time.Now().UnixNano())
 	x := make([]byte, 10, 10)
 	for i := 0; i < len(x); i++ {
 		x[i] = byte(rand.Uint32())
