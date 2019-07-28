@@ -27,6 +27,7 @@ type streamer struct {
 	uploaders           []*rtmpStreamer
 	downloaders         []*m3utester
 	totalSegmentsToSend int
+	stopSignal          bool
 	eof                 chan struct{}
 }
 
@@ -44,6 +45,7 @@ func (sr *streamer) Cancel() {
 }
 
 func (sr *streamer) Stop() {
+	sr.stopSignal = true
 	for _, up := range sr.uploaders {
 		up.file.Close()
 	}
@@ -82,6 +84,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 		}
 	}
 
+	sr.stopSignal = false
 	go func() {
 		for i := 0; i < int(repeat); i++ {
 			if repeat > 1 {
@@ -91,6 +94,9 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 			if err != nil {
 				glog.Fatal(err)
 				return
+			}
+			if sr.stopSignal {
+				break
 			}
 		}
 		if !notFinal {

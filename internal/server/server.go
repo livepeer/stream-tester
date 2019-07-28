@@ -63,6 +63,7 @@ func (ss *StreamerServer) handleStop(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	glog.Info("Got stop request.")
 	ss.streamer.Stop()
 	w.WriteHeader(http.StatusOK)
 }
@@ -82,8 +83,8 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		stats.RawSourceLatencies = nil
 		stats.RawTranscodedLatencies = nil
 	}
-	glog.Infof("Lat avg %d p50 %d p95 %d p99 %d  avg %s p50 %s p95 %s p99 %s", stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95,
-		stats.SourceLatencies.P99, stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95, stats.SourceLatencies.P99)
+	// glog.Infof("Lat avg %d p50 %d p95 %d p99 %d  avg %s p50 %s p95 %s p99 %s", stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95,
+	// 	stats.SourceLatencies.P99, stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95, stats.SourceLatencies.P99)
 	b, err := json.Marshal(stats)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)

@@ -115,7 +115,8 @@ func (mt *m3utester) downloadLoop() {
 		resp, err := httpClient.Get(surl)
 		if err != nil {
 			glog.Error(err)
-			return
+			time.Sleep(2 * time.Second)
+			continue
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
@@ -129,7 +130,8 @@ func (mt *m3utester) downloadLoop() {
 		resp.Body.Close()
 		if err != nil {
 			glog.Error(err)
-			return
+			time.Sleep(2 * time.Second)
+			continue
 		}
 		// glog.Info("Got playlist:")
 		// glog.Info(mpl)
@@ -138,7 +140,7 @@ func (mt *m3utester) downloadLoop() {
 			pvrui, err := url.Parse(variant.URI)
 			if err != nil {
 				glog.Error(err)
-				return
+				panic(err)
 			}
 			// glog.Infof("Parsed uri: %+v", pvrui, pvrui.IsAbs)
 			if !pvrui.IsAbs() {
@@ -350,14 +352,20 @@ func (md *mediaDownloader) downloadLoop() {
 		resp, err := httpClient.Get(surl)
 		if err != nil {
 			glog.Error(err)
-			return
+			time.Sleep(1 * time.Second)
+			continue
 		}
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		// b, err := ioutil.ReadAll(resp.Body)
+		b, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			time.Sleep(time.Second)
+			continue
+		}
 		// fmt.Println("-----################")
 		// fmt.Println(string(b))
 		// glog.Infoln("-----################")
@@ -367,9 +375,9 @@ func (md *mediaDownloader) downloadLoop() {
 		if err != nil {
 			glog.Fatal(err)
 		}
-		// err = pl.Decode(*bytes.NewBuffer(b), true)
-		err = pl.DecodeFrom(resp.Body, true)
-		resp.Body.Close()
+		err = pl.Decode(*bytes.NewBuffer(b), true)
+		// err = pl.DecodeFrom(resp.Body, true)
+		// resp.Body.Close()
 		if err != nil {
 			glog.Fatal(err)
 		}
@@ -390,6 +398,7 @@ func (md *mediaDownloader) downloadLoop() {
 		time.Sleep(delay)
 	}
 }
+
 func getSortedKeys(data map[string]*mediaDownloader) []string {
 	res := make(sort.StringSlice, 0, len(data))
 	for k := range data {

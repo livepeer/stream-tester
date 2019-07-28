@@ -113,7 +113,7 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	}
 
 	var onError = func(err error) {
-		glog.Error(err)
+		glog.Error("onError finishing upload ", err)
 		rs.connectionLost = true
 		rs.file.Close()
 		conn.Close()
