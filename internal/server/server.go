@@ -18,14 +18,16 @@ import (
 // provides REST endpoints to start streaming, stop and get statistics
 type StreamerServer struct {
 	// HTTPMux  *http.ServeMux
-	streamer model.Streamer
-	lock     sync.RWMutex
+	streamer  model.Streamer
+	lock      sync.RWMutex
+	wowzaMode bool
 }
 
 // NewStreamerServer creates new StreamerServer
-func NewStreamerServer() *StreamerServer {
+func NewStreamerServer(wowzaMode bool) *StreamerServer {
 	return &StreamerServer{
-		streamer: testers.NewStreamer(),
+		streamer:  testers.NewStreamer(wowzaMode),
+		wowzaMode: wowzaMode,
 	}
 }
 
@@ -145,7 +147,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 	}
 	glog.Infof("Get request: %+v", ssr)
 	if !ssr.DoNotClearStats {
-		ss.streamer = testers.NewStreamer()
+		ss.streamer = testers.NewStreamer(ss.wowzaMode)
 	}
 	var streamDuration time.Duration
 	if ssr.Time != "" {
@@ -156,7 +158,8 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous, ssr.Repeat, streamDuration, true, ssr.MeasureLatency)
+	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous,
+		ssr.Repeat, streamDuration, true, ssr.MeasureLatency, 3, 5*time.Second)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"success": true}`))

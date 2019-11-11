@@ -12,6 +12,7 @@ import (
 	"github.com/livepeer/joy4/av/avutil"
 	"github.com/livepeer/joy4/av/pktque"
 	"github.com/livepeer/joy4/format/rtmp"
+	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/livepeer/stream-tester/internal/utils"
 )
 
@@ -26,12 +27,14 @@ type rtmpStreamer struct {
 	active          bool
 	done            chan struct{}
 	file            av.DemuxCloser
+	wowzaMode       bool
 }
 
 // source is local file name for now
-func newRtmpStreamer(ingestURL, source string, sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, done chan struct{}) *rtmpStreamer {
+func newRtmpStreamer(ingestURL, source string, sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, done chan struct{}, wowzaMode bool) *rtmpStreamer {
 	return &rtmpStreamer{
 		done:            done,
+		wowzaMode:       wowzaMode,
 		ingestURL:       ingestURL,
 		counter:         newSegmentsCounter(segLen, bar, false, sentTimesMap),
 		skippedSegments: 1, // Broadcaster always skips first segment, but can skip more - this will be corrected when first
@@ -52,7 +55,7 @@ func GetNumberOfSegments(fileName string, streamDuration time.Duration) int {
 	var streams []av.CodecData
 	var videoidx, audioidx int
 	if streams, err = src.Streams(); err != nil {
-		glog.Fatal("Can't count segments in source file")
+		glog.Fatalf("Can't count segments in source file %+v", err)
 	}
 	for i, st := range streams {
 		if st.Type().IsAudio() {
@@ -62,7 +65,7 @@ func GetNumberOfSegments(fileName string, streamDuration time.Duration) int {
 			videoidx = i
 		}
 	}
-	glog.Infof("Video index: %d, audio index: %d", videoidx, audioidx)
+	glog.V(model.VERBOSE).Infof("Video index: %d, audio index: %d", videoidx, audioidx)
 	for {
 		var pkt av.Packet
 		if pkt, err = src.ReadPacket(); err != nil {
@@ -92,6 +95,36 @@ func readAll(nc net.Conn) {
 	}
 }
 
+func chooseNeededStreams(streams []av.CodecData) (int8, int8, []av.CodecData) {
+	audioidx := -1
+	videoidx := -1
+	needed := make([]av.CodecData, 0, 2)
+	for i, strm := range streams {
+		if strm == nil {
+			continue
+		}
+		if strm.Type().IsVideo() {
+			videoidx = i
+			needed = append(needed, strm)
+		}
+		if strm.Type().IsAudio() {
+			astrm := strm.(av.AudioCodecData)
+			glog.Infof("Audio stream %d type %v", i, astrm.Type())
+			if astrm.Type() == av.AAC {
+				audioidx = i
+				needed = append(needed, strm)
+			}
+		}
+	}
+	if videoidx == -1 {
+		panic("No video stream found.")
+	}
+	if audioidx == -1 {
+		panic("No supported (AAC) audio stream found.")
+	}
+	return int8(audioidx), int8(videoidx), needed
+}
+
 func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	var err error
 	rs.file, err = avutil.Open(fn)
@@ -107,7 +140,8 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	// rtmp.Debug = true
 	// rtmp.Debug2 = true
 	// conn, err := rtmp.Dial("rtmp://localhost:1935/" + manifestID)
-	conn, err := rtmp.Dial(rtmpURL)
+	// conn, err := rtmp.Dial(rtmpURL)
+	conn, err := rtmp.DialTimeout(rtmpURL, 4*time.Second)
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -127,11 +161,14 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 
 	demuxer := &pktque.FilterDemuxer{Demuxer: rs.file, Filter: filters}
 
-	var streams []av.CodecData
-	if streams, err = demuxer.Streams(); err != nil {
+	var rawStreams, streams []av.CodecData
+	var audioidx, videoidx int8
+	if rawStreams, err = demuxer.Streams(); err != nil {
 		onError(err)
 		return
 	}
+	glog.V(model.VERBOSE).Infof("=== Raw streams %d", len(rawStreams))
+	audioidx, videoidx, streams = chooseNeededStreams(rawStreams)
 	if err = conn.WriteHeader(streams); err != nil {
 		onError(err)
 		return
@@ -139,24 +176,43 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	var doneStreaming bool
 	for {
 		lastSegments := 0
+		packetIdx := 0
 		for {
 			var pkt av.Packet
+			// glog.Infof("Reading packet %d", packetIdx)
 			if pkt, err = demuxer.ReadPacket(); err != nil {
 				if err != io.EOF {
 					onError(err)
 					return
+				} else if rs.wowzaMode {
+					// in Wowza mode can't really loop, just stopping at EOF
+					glog.V(model.DEBUG).Info("==== RTMP streamer file ended.")
+					glog.Info("==== RTMP streamer file ended.")
+					doneStreaming = true
+					break
 				}
 				if rs.counter.segments-rs.skippedSegments >= segmentsToStream {
 					doneStreaming = true
 				}
 				break
 			}
+			if pkt.Idx != audioidx && pkt.Idx != videoidx {
+				continue
+			}
+			// glog.Infof("Writing packet %d pkt.Idx %d pkt.Time %s Composition Time %s", packetIdx, pkt.Idx, pkt.Time, pkt.CompositionTime)
+			start := time.Now()
 			if err = conn.WritePacket(pkt); err != nil {
 				onError(err)
 				return
 			}
+			took := time.Since(start)
+			if took > 100*time.Millisecond {
+				glog.Infof("packet %d writing took %s rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", packetIdx, took,
+					rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
+			}
 			if rs.counter.segments > lastSegments {
-				// glog.Infof("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
+				glog.V(model.VERBOSE).Infof("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
+				glog.Infof("packet %d rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", packetIdx, rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
 				// fmt.Printf("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d\n\n", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
 				lastSegments = rs.counter.segments
 			}
@@ -167,11 +223,12 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 				rs.counter.segments--
 				break
 			}
+			packetIdx++
 		}
 		if doneStreaming {
 			break
 		}
-		// glog.Infof("=== REOPENING file!")
+		glog.V(model.DEBUG).Infof("=== REOPENING file!")
 		// re-open same file and stream it again
 		rs.counter.timeShift = rs.counter.lastPacketTime
 		rs.file, err = avutil.Open(fn)
@@ -191,6 +248,7 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 			}
 		}
 	*/
+	glog.Info("Writing trailer")
 	if err = conn.WriteTrailer(); err != nil {
 		onError(err)
 		return
@@ -216,13 +274,15 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	// if we do not wait, last segment will be thrown out by broadcaster
 	// with 'Session ended` error
 	time.Sleep(8 * time.Second)
-	// glog.Infof("---------- calling connection close rxbytes %d", conn.RxBytes())
+	glog.V(model.DEBUG).Infof("---------- calling connection close rxbytes %d", conn.RxBytes())
 	// nc := conn.NetConn()
 	readAll(conn.NetConn())
 	// pckt, err := conn.ReadPacket()
 	// glog.Info("pck, err", pckt, err)
+	glog.V(model.DEBUG).Info("---------- calling connection close start", err)
 	err = conn.Close()
-	// glog.Info("---------- calling connection close DONE", err)
+	glog.V(model.DEBUG).Info("---------- calling connection close DONE", err)
 	// time.Sleep(8 * time.Second)
 	close(rs.done)
+	glog.V(model.DEBUG).Info("---------- done channel closed", err)
 }

@@ -16,11 +16,20 @@ const (
 // ProfilesNum number of transcoding profiles
 var ProfilesNum = 2
 
+// InfinitePuller interface
+type InfinitePuller interface {
+	// Start blocks
+	Start()
+}
+
 // Streamer interface
 type Streamer interface {
-	StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration, notFinal, measureLatency bool) error
+	StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
+		notFinal, measureLatency bool, groupStartBy int, startDelayBetweenGroups time.Duration) error
 	Stats() *Stats
 	StatsFormatted() string
+	DownStatsFormatted() string
+	AnalyzeFormatted(short bool) string
 	Done() <-chan struct{}
 	Stop() // Stop active streams
 	Cancel()
