@@ -35,21 +35,24 @@ var wowzaBandwidthRE *regexp.Regexp = regexp.MustCompile(`_b(\d+)\.`)
 
 // m3utester tests one stream, reading all the media streams
 type m3utester struct {
-	initialURL      *url.URL
-	downloads       map[string]*mediaDownloader
-	mu              sync.RWMutex
-	started         bool
-	finished        bool
-	wowzaMode       bool
-	infiniteMode    bool
-	save            bool
-	startTime       time.Time
-	done            <-chan struct{} // signals to stop
-	sentTimesMap    *utils.SyncedTimesMap
-	downloadResults fullDownloadResultsMap
-	fullResultsCh   chan fullDownloadResult
-	dm              sync.Mutex
-	savePlayList    *m3u8.MasterPlaylist
+	initialURL       *url.URL
+	downloads        map[string]*mediaDownloader
+	mu               sync.RWMutex
+	started          bool
+	finished         bool
+	wowzaMode        bool
+	infiniteMode     bool
+	save             bool
+	startTime        time.Time
+	done             <-chan struct{} // signals to stop
+	sentTimesMap     *utils.SyncedTimesMap
+	downloadResults  fullDownloadResultsMap
+	fullResultsCh    chan fullDownloadResult
+	dm               sync.Mutex
+	savePlayList     *m3u8.MasterPlaylist
+	savePlayListName string
+	saveDirName      string
+	gaps             int
 }
 
 type fullDownloadResultsMap map[string]*fullDownloadResults
@@ -73,20 +76,32 @@ type downloadResult struct {
 	videoParseError error
 	startTime       time.Duration
 	duration        time.Duration
+	appTime         time.Time
 	name            string
 	seqNo           uint64
+	mySeqNo         uint64
 }
 
 type downloadResultsBySeq []*downloadResult
 
 func (p downloadResultsBySeq) Len() int { return len(p) }
 func (p downloadResultsBySeq) Less(i, j int) bool {
-	return p[i].seqNo < p[j].seqNo
+	// return p[i].seqNo < p[j].seqNo
+	// return p[i].mySeqNo < p[j].mySeqNo
+	return p[i].appTime.Before(p[j].appTime)
 }
 func (p downloadResultsBySeq) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 func (p downloadResultsBySeq) findBySeqNo(seqNo uint64) *downloadResult {
 	for _, seg := range p {
 		if seg.seqNo == seqNo {
+			return seg
+		}
+	}
+	return nil
+}
+func (p downloadResultsBySeq) findByMySeqNo(seqNo uint64) *downloadResult {
+	for _, seg := range p {
+		if seg.mySeqNo == seqNo {
 			return seg
 		}
 	}
@@ -121,6 +136,25 @@ func (mt *m3utester) Start(u string) {
 		glog.Fatal(err)
 	}
 	mt.initialURL = purl
+	if mt.save {
+		up := strings.Split(u, "/")
+		upl := len(up)
+		mt.saveDirName = ""
+		mt.savePlayListName = up[upl-1]
+		if upl > 1 {
+			if up[upl-2] == "stream" {
+				mt.saveDirName = strings.Split(up[upl-1], ".")[0] + "/"
+			} else if mt.wowzaMode {
+				mt.saveDirName = up[upl-2]
+			}
+		}
+		if mt.saveDirName != "" {
+			mt.savePlayListName = path.Join(mt.saveDirName, mt.savePlayListName)
+			if _, err := os.Stat(mt.saveDirName); os.IsNotExist(err) {
+				os.Mkdir(mt.saveDirName, 0755)
+			}
+		}
+	}
 	go mt.downloadLoop()
 	go mt.workerLoop()
 	if mt.infiniteMode {
@@ -133,7 +167,7 @@ func (mt *m3utester) anaylysePrintingLoop() string {
 		time.Sleep(30 * time.Second)
 		if !mt.startTime.IsZero() {
 			mt.dm.Lock()
-			a := analyzeDownloads(mt.downloadResults, false, false)
+			a, _ := analyzeDownloads(mt.downloadResults, false, false)
 			mt.dm.Unlock()
 			glog.Infof("Analysis from start %s:\n%s", time.Since(mt.startTime), a)
 		}
@@ -184,13 +218,24 @@ func isTimeEqual(t1, t2 time.Duration) bool {
 	}
 	// 1000000
 	// return diff <= time.Millisecond
-	return diff <= 10*time.Second
+	return diff <= 1*time.Second
 }
 
-func analyzeDownloads(downloadResults fullDownloadResultsMap, short, streamEnded bool) string {
+func isTimeEqualM(t1, t2 time.Duration) bool {
+	diff := t1 - t2
+	if diff < 0 {
+		diff *= -1
+	}
+	// 1000000
+	return diff <= 100*time.Millisecond
+}
+
+func analyzeDownloads(downloadResults fullDownloadResultsMap, short, streamEnded bool) (string, int) {
 	res := ""
 	resolutions := downloadResults.getResolutions()
 	byRes := make(map[string]downloadResultsBySeq)
+	short = false
+	var gaps int
 	for _, resolution := range resolutions {
 		results := make(downloadResultsBySeq, 0)
 		fresults := downloadResults.byResolution(resolution)
@@ -210,40 +255,55 @@ func analyzeDownloads(downloadResults fullDownloadResultsMap, short, streamEnded
 		}
 		if !short {
 			res += fmt.Sprintf("==== Results sorted:\n")
-			for _, r := range results {
-				res += fmt.Sprintf("%10s %14s seq %3d: time %s\n", resolution, r.name, r.seqNo, r.startTime)
+			var tillNext time.Duration
+			var problem string
+			for i, r := range results {
+				problem = ""
+				tillNext = 0
+				if i < len(results)-1 {
+					ns := results[i+1]
+					tillNext = ns.startTime - r.startTime
+					if tillNext > 0 && !isTimeEqualM(r.duration, tillNext) {
+						problem = fmt.Sprintf(" ===> possible gap - to big time difference %s", r.duration-tillNext)
+					}
+				}
+				res += fmt.Sprintf("%10s %14s seq %3d: mySeq %3d time %s duration %s till next %s appearance time %s %s\n",
+					resolution, r.name, r.seqNo, r.mySeqNo, r.startTime, r.duration, tillNext, r.appTime, problem)
 			}
 		}
 		if results[0].seqNo > 1 {
 			res += fmt.Sprintf("Segments start from %d\n", results[0].seqNo)
 		}
-		var lastSeq uint64
+		var lastSeq, lastRSeq uint64
 		var lastStartTime time.Duration
 		var lastFileName string
 		for _, seg := range results {
-			if seg.seqNo != lastSeq+1 {
-				if seg.seqNo > lastSeq {
-					res += fmt.Sprintf("Gap in sequence - file %s with seqNo %d (start time %s), previous seqNo is %d (start time %s)\n", seg.name, seg.seqNo, seg.startTime, lastSeq, lastStartTime)
+			if seg.mySeqNo != lastSeq+1 {
+				if seg.mySeqNo > lastSeq {
+					res += fmt.Sprintf("Gap in sequence - file %s with seqNo %d mySeq %d (start time %s), previous seqNo is %d mySeq %d (start time %s)\n",
+						seg.name, seg.seqNo, seg.mySeqNo, seg.startTime, lastSeq, lastRSeq, lastStartTime)
 					allGood = ""
-				} else if seg.seqNo == lastSeq {
+					gaps++
+				} else if seg.mySeqNo == lastSeq {
 					if seg.startTime != lastStartTime {
 						res += fmt.Sprintf("Media stream switched, but corresponding segments have different time stamp: file %s with seqNo %d (start time %s), previous file %s seqNo is %d (start time %s)\n",
 							seg.name, seg.seqNo, seg.startTime, lastFileName, lastSeq, lastStartTime)
 						allGood = ""
 					}
-				} else if seg.seqNo < lastSeq {
+				} else if seg.mySeqNo < lastSeq {
 					res += fmt.Sprintf("Very strange problem - seq is less than previous: file %s with seqNo %d (start time %s), previous seqNo is %d (start time %s)\n", seg.name, seg.seqNo, seg.startTime, lastSeq, lastStartTime)
 					allGood = ""
 				}
 			}
-			lastSeq = seg.seqNo
+			lastSeq = seg.mySeqNo
+			lastRSeq = seg.seqNo
 			lastStartTime = seg.startTime
 			lastFileName = seg.name
 		}
 		res += allGood
 	}
 	// now check timestamps alignments in different renditions
-	// lastTimeDiffs := make(map[string]time.Duration)
+	lastTimeDiffs := make(map[string]map[string]time.Duration)
 	oneStep := make(map[string]map[string]bool)
 	for resolution, resRes := range byRes {
 		for i, seg := range resRes {
@@ -254,10 +314,14 @@ func analyzeDownloads(downloadResults fullDownloadResultsMap, short, streamEnded
 				if _, has := oneStep[resolution]; !has {
 					oneStep[resolution] = make(map[string]bool)
 				}
-				altSeg := resRes2.findBySeqNo(seg.seqNo)
+				if _, has := lastTimeDiffs[resolution]; !has {
+					lastTimeDiffs[resolution] = make(map[string]time.Duration)
+				}
+				// altSeg := resRes2.findBySeqNo(seg.seqNo)
+				altSeg := resRes2.findByMySeqNo(seg.mySeqNo)
 				if altSeg == nil {
 					if streamEnded || i < len(resRes)-4 {
-						res += fmt.Sprintf("Segment %10s seqNo %3d doesn't have corresponding segment in %10s\n", resolution, seg.seqNo, sresolution)
+						res += fmt.Sprintf("Segment %10s seqNo %3d mySeq %3d doesn't have corresponding segment in %10s\n", resolution, seg.seqNo, seg.mySeqNo, sresolution)
 					}
 				} else {
 					if !isTimeEqual(seg.startTime, altSeg.startTime) {
@@ -265,44 +329,50 @@ func analyzeDownloads(downloadResults fullDownloadResultsMap, short, streamEnded
 						altSegP := resRes2.findBySeqNo(seg.seqNo + 1)
 						altSegM2 := resRes2.findBySeqNo(seg.seqNo - 2)
 						altSegP2 := resRes2.findBySeqNo(seg.seqNo + 2)
-						// diff := seg.startTime - altSeg.startTime
-						// lastDiff := lastTimeDiffs[resolution]
-						// if diff != lastDiff {
-						res += fmt.Sprintf("Segment %10s seqNo %3d has time %s but segment %10s seqNo %3d has time %s\n", resolution, seg.seqNo, seg.startTime,
-							sresolution, altSeg.seqNo, altSeg.startTime)
-						if altSegM != nil && isTimeEqual(seg.startTime, altSegM.startTime) {
-							if !oneStep[resolution][sresolution] {
-								res += fmt.Sprintf("Stream %10s is one step behind stream %10s\n", resolution, sresolution)
-								oneStep[resolution][sresolution] = true
+						diff := seg.startTime - altSeg.startTime
+						lastDiff := lastTimeDiffs[resolution][sresolution]
+						if diff != lastDiff {
+							// if !oneStep[resolution][sresolution] {
+							res += fmt.Sprintf("Segment %10s seqNo %5d mySeq %3d has time %s but segment %10s seqNo %5d mySeq %3d has time %s diff %s\n",
+								resolution, seg.seqNo, seg.mySeqNo, seg.startTime, sresolution, altSeg.seqNo, altSeg.mySeqNo, altSeg.startTime, seg.startTime-altSeg.startTime)
+							// }
+							if altSegM != nil && isTimeEqual(seg.startTime, altSegM.startTime) {
+								if !oneStep[resolution][sresolution] {
+									res += fmt.Sprintf("Stream %10s is one step behind stream %10s\n", resolution, sresolution)
+									oneStep[resolution][sresolution] = true
+									// break
+								}
 							}
-						}
-						if altSegP != nil && isTimeEqual(seg.startTime, altSegP.startTime) {
-							if !oneStep[resolution][sresolution] {
-								res += fmt.Sprintf("Stream %10s is one step ahead stream %10s\n", resolution, sresolution)
-								oneStep[resolution][sresolution] = true
+							if altSegP != nil && isTimeEqual(seg.startTime, altSegP.startTime) {
+								if !oneStep[resolution][sresolution] {
+									res += fmt.Sprintf("Stream %10s is one step ahead stream %10s\n", resolution, sresolution)
+									oneStep[resolution][sresolution] = true
+									// break
+								}
 							}
-						}
-						if altSegM2 != nil && isTimeEqual(seg.startTime, altSegM2.startTime) {
-							if !oneStep[resolution][sresolution] {
-								res += fmt.Sprintf("Stream %10s is two steps behind stream %10s\n", resolution, sresolution)
-								oneStep[resolution][sresolution] = true
+							if altSegM2 != nil && isTimeEqual(seg.startTime, altSegM2.startTime) {
+								if !oneStep[resolution][sresolution] {
+									res += fmt.Sprintf("Stream %10s is two steps behind stream %10s\n", resolution, sresolution)
+									oneStep[resolution][sresolution] = true
+									// break
+								}
 							}
-						}
-						if altSegP2 != nil && isTimeEqual(seg.startTime, altSegP2.startTime) {
-							if !oneStep[resolution][sresolution] {
-								res += fmt.Sprintf("Stream %10s is two steps ahead stream %10s\n", resolution, sresolution)
-								oneStep[resolution][sresolution] = true
+							if altSegP2 != nil && isTimeEqual(seg.startTime, altSegP2.startTime) {
+								if !oneStep[resolution][sresolution] {
+									res += fmt.Sprintf("Stream %10s is two steps ahead stream %10s\n", resolution, sresolution)
+									oneStep[resolution][sresolution] = true
+									// break
+								}
 							}
+							// res += fmt.Sprintf("%d - %d\n", seg.startTime, altSeg.startTime)
+							lastTimeDiffs[resolution][sresolution] = diff
 						}
-						// res += fmt.Sprintf("%d - %d\n", seg.startTime, altSeg.startTime)
-						// 	lastTimeDiffs[resolution] = diff
-						// }
 					}
 				}
 			}
 		}
 	}
-	return res
+	return res, gaps
 }
 
 type fullDownloadResultsArray []*fullDownloadResults
@@ -338,7 +408,7 @@ func (mt *m3utester) DownloadStatsFormatted() string {
 	for _, cdr := range sortedResults {
 		res += fmt.Sprintf("Media playlist %s:\n", cdr.mediaPlaylistName)
 		for _, dr := range cdr.results {
-			res += fmt.Sprintf("%s %s seqNo=%3d start time %s duration %s\n", cdr.resolution, dr.name, dr.seqNo, dr.startTime, dr.duration)
+			res += fmt.Sprintf("%s %s seqNo=%3d start time %s duration %s appearance time %s\n", cdr.resolution, dr.name, dr.seqNo, dr.startTime, dr.duration, dr.appTime)
 			// startTime       time.Duration
 			// duration        time.Duration
 			// name            string
@@ -353,7 +423,8 @@ func (mt *m3utester) DownloadStatsFormatted() string {
 func (mt *m3utester) AnalyzeFormatted(short bool) string {
 	res := "\nAnalysis:\n"
 	mt.dm.Lock()
-	res += analyzeDownloads(mt.downloadResults, short, false)
+	res1, _ := analyzeDownloads(mt.downloadResults, short, false)
+	res += res1
 	mt.dm.Unlock()
 	return res
 }
@@ -385,6 +456,10 @@ func (mt *m3utester) stats() downloadStats {
 		}
 	}
 	mt.mu.RUnlock()
+	mt.dm.Lock()
+	_, gaps := analyzeDownloads(mt.downloadResults, true, false)
+	stats.gaps = gaps
+	mt.dm.Unlock()
 	return stats
 }
 
@@ -415,18 +490,7 @@ func (mt *m3utester) workerLoop() {
 			r.results = append(r.results, fr.downloadResult)
 			mt.dm.Unlock()
 			if mt.save {
-				surl := mt.initialURL.String()
-				upts := strings.Split(surl, "/")
-				fn := upts[len(upts)-1]
-				if mt.wowzaMode {
-					dn := upts[len(upts)-2]
-					if _, err := os.Stat(dn); os.IsNotExist(err) {
-						os.Mkdir(dn, 0755)
-					}
-					fn = path.Join(dn, upts[len(upts)-1])
-					// fn = path.Join(dn, fn)
-				}
-				err := ioutil.WriteFile(fn, mt.savePlayList.Encode().Bytes(), 0644)
+				err := ioutil.WriteFile(mt.savePlayListName, mt.savePlayList.Encode().Bytes(), 0644)
 				if err != nil {
 					glog.Fatal(err)
 				}
@@ -464,13 +528,14 @@ func (mt *m3utester) downloadLoop() {
 		*/
 		resp, err := httpClient.Get(surl)
 		if err != nil {
-			glog.Error(err)
+			glog.Infof("===== get error getting master playlist %s: %v", surl, err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
-			ioutil.ReadAll(resp.Body)
+			b, _ := ioutil.ReadAll(resp.Body)
 			resp.Body.Close()
+			glog.Infof("===== status error getting master playlist %s: %v (%s) body: %s", surl, resp.StatusCode, resp.Status, string(b))
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -480,11 +545,12 @@ func (mt *m3utester) downloadLoop() {
 		err = mpl.Decode(*bytes.NewBuffer(b), true)
 		resp.Body.Close()
 		if err != nil {
-			glog.Error(err)
+			glog.Info("===== error getting master playlist: ", err)
+			// glog.Error(err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		// glog.V(model.VERBOSE).Infof("Got playlist with %d variants:", len(mpl.Variants))
+		glog.V(model.VERBOSE).Infof("Got playlist with %d variants (%s):", len(mpl.Variants), surl)
 		glog.V(model.VERBOSE).Info(mpl)
 		if !mt.wowzaMode || len(mpl.Variants) > model.ProfilesNum {
 			if mt.infiniteMode {
@@ -518,7 +584,7 @@ func (mt *m3utester) downloadLoop() {
 				// variantID := strconv.Itoa(variant.Bandwidth) + variant.Resolution
 				mt.mu.Lock()
 				if _, ok := mt.downloads[mediaURL]; !ok {
-					md := newMediaDownloader(variant.URI, mediaURL, variant.Resolution, mt.done, mt.sentTimesMap, mt.wowzaMode, mt.save, mt.fullResultsCh)
+					md := newMediaDownloader(variant.URI, mediaURL, variant.Resolution, mt.done, mt.sentTimesMap, mt.wowzaMode, mt.save, mt.fullResultsCh, mt.saveDirName)
 					mt.downloads[mediaURL] = md
 					// md.source = strings.Contains(mediaURL, "source")
 					md.source = i == 0
@@ -547,6 +613,7 @@ type downloadStats struct {
 	success int
 	fail    int
 	retries int
+	gaps    int
 	bytes   int64
 	errors  map[string]int
 }
@@ -556,6 +623,8 @@ type downloadTask struct {
 	seqNo    uint64
 	title    string
 	duration float64
+	mySeqNo  uint64
+	appTime  time.Time
 }
 
 func (ds *downloadStats) formatForConsole() string {
@@ -582,10 +651,14 @@ type mediaDownloader struct {
 	wowzaMode          bool
 	saveSegmentsToDisk bool
 	savePlayList       *m3u8.MediaPlaylist
+	savePlayListName   string
+	saveDir            string
+	livepeerNameSchema bool
 	fullResultsCh      chan fullDownloadResult
 }
 
-func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan fullDownloadResult) *mediaDownloader {
+func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan fullDownloadResult,
+	baseSaveDir string) *mediaDownloader {
 	pu, err := url.Parse(u)
 	if err != nil {
 		glog.Fatal(err)
@@ -612,6 +685,26 @@ func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTi
 			panic(err)
 		}
 		md.savePlayList = mpl
+		// md.savePlayListName = up[upl-1]
+		md.saveDir = baseSaveDir
+		// md.savePlayListName = path.Join(baseSaveDir, up[upl-1])
+		if strings.Contains(name, baseSaveDir) {
+			md.savePlayListName = name
+		} else {
+			md.savePlayListName = path.Join(baseSaveDir, name)
+		}
+		up := strings.Split(u, "/")
+		upl := len(up)
+		if upl > 2 && up[upl-3] == "stream" {
+			md.livepeerNameSchema = true
+			// dirName = strings.Split(up[upl-1], ".")[0] + "/"
+		}
+		// if dirName != "" {
+		// 	if _, err := os.Stat(dirName); os.IsNotExist(err) {
+		// 		os.Mkdir(path.Join(baseSaveDir, dirName), 0755)
+		// 	}
+		// }
+		// md.savePlayListName = path.Join(baseSaveDir, dirName, md.savePlayListName)
 	}
 	// md.saveSegmentsToDisk = true
 	go md.downloadLoop()
@@ -718,35 +811,41 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			upts := strings.Split(fsurl, "/")
 			// fn := upts[len(upts)-2] + "-" + path.Base(task.url)
 			ind := len(upts) - 2
-			if ind < 0 {
-				ind = 0
+			fn := path.Base(task.url)
+			// if ind < 0 {
+			if !md.livepeerNameSchema {
+				// ind = 0
+				// fn = upts[0]
+			} else {
+				// fn := fmt.Sprintf("%s-%05d.ts", upts[ind], task.seqNo)
+				fn = fmt.Sprintf("%s-%s", upts[ind], fn)
 			}
-			fn := fmt.Sprintf("%s-%05d.ts", upts[ind], task.seqNo)
-			playListFileName := md.name
-			if md.wowzaMode {
-				dn := upts[len(upts)-2]
-				if _, err := os.Stat(dn); os.IsNotExist(err) {
-					os.Mkdir(dn, 0755)
-				}
-				fn = path.Join(dn, upts[len(upts)-1])
-				playListFileName = path.Join(dn, playListFileName)
-			}
-			err = ioutil.WriteFile(fn, b, 0644)
+			// playListFileName := md.name
+			// if md.wowzaMode {
+			// 	dn := upts[len(upts)-2]
+			// 	if _, err := os.Stat(dn); os.IsNotExist(err) {
+			// 		os.Mkdir(dn, 0755)
+			// 	}
+			// 	fn = path.Join(dn, upts[len(upts)-1])
+			// 	playListFileName = path.Join(dn, playListFileName)
+			// }
+			err = ioutil.WriteFile(path.Join(md.saveDir, fn), b, 0644)
 			if err != nil {
 				glog.Fatal(err)
 			}
-			err = ioutil.WriteFile(playListFileName, md.savePlayList.Encode().Bytes(), 0644)
+			err = ioutil.WriteFile(md.savePlayListName, md.savePlayList.Encode().Bytes(), 0644)
 			if err != nil {
 				glog.Fatal(err)
 			}
 		}
-		res <- downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url, seqNo: task.seqNo, videoParseError: verr, startTime: fsttim, duration: dur}
+		res <- downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url, seqNo: task.seqNo,
+			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime}
 		return
 	}
 }
 
 func (md *mediaDownloader) workerLoop() {
-	seen := newStringRing(128 * 1024)
+	// seen := newStringRing(128 * 1024)
 	resultsCahn := make(chan downloadResult, 32) // http status or excpetion
 	for {
 		select {
@@ -766,11 +865,11 @@ func (md *mediaDownloader) workerLoop() {
 			}
 			// md.mu.Unlock()
 		case task := <-md.downTasks:
-			if seen.Contains(task.url) {
-				continue
-			}
+			// if seen.Contains(task.url) {
+			// 	continue
+			// }
 			glog.V(model.VERBOSE).Infof("Got task to download: seqNo=%d url=%s", task.seqNo, task.url)
-			seen.Add(task.url)
+			// seen.Add(task.url)
 			go md.downloadSegment(&task, resultsCahn)
 		}
 	}
@@ -779,6 +878,8 @@ func (md *mediaDownloader) workerLoop() {
 func (md *mediaDownloader) downloadLoop() {
 	surl := md.u.String()
 	gotManifest := false
+	var mySeqNo uint64
+	seen := newStringRing(128 * 1024)
 	for {
 		select {
 		case <-md.done:
@@ -795,6 +896,8 @@ func (md *mediaDownloader) downloadLoop() {
 			ioutil.ReadAll(resp.Body)
 			resp.Body.Close()
 			if resp.StatusCode != http.StatusNotFound {
+				glog.Infof("Media playlist %s resolution %s status %v: %v", surl, md.resolution, resp.StatusCode, resp.Status)
+			} else {
 				glog.Infof("Media playlist %s resolution %s status %v: %v", surl, md.resolution, resp.StatusCode, resp.Status)
 			}
 			time.Sleep(1 * time.Second)
@@ -822,21 +925,30 @@ func (md *mediaDownloader) downloadLoop() {
 		if err != nil {
 			glog.Fatal(err)
 		}
-		glog.V(model.VERBOSE).Infof("Got media playlist %s with %d segments of url %s:", md.resolution, len(pl.Segments), surl)
+		glog.V(model.VERBOSE).Infof("Got media playlist %s with %d (really %d) segments of url %s:", md.resolution, len(pl.Segments), countSegments(pl), surl)
 		glog.V(model.VERBOSE).Info(pl)
 		if !gotManifest && md.saveSegmentsToDisk {
 			md.savePlayList.TargetDuration = pl.TargetDuration
 			md.savePlayList.SeqNo = pl.SeqNo
 			gotManifest = true
 		}
+		// for i := len(pl.Segments) - 1; i >= 0; i-- {
+		now := time.Now()
 		for i, segment := range pl.Segments {
+			// segment := pl.Segments[i]
 			if segment != nil {
 				// glog.Infof("Segment: %+v", *segment)
 				if md.wowzaMode {
 					// remove Wowza's session id from URL
 					segment.URI = wowzaSessionRE.ReplaceAllString(segment.URI, "_")
 				}
-				md.downTasks <- downloadTask{url: segment.URI, seqNo: pl.SeqNo + uint64(i), title: segment.Title, duration: segment.Duration}
+				if seen.Contains(segment.URI) {
+					continue
+				}
+				seen.Add(segment.URI)
+				mySeqNo++
+				md.downTasks <- downloadTask{url: segment.URI, seqNo: pl.SeqNo + uint64(i), title: segment.Title, duration: segment.Duration, mySeqNo: mySeqNo, appTime: now}
+				now = now.Add(time.Millisecond)
 				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
 			}
 		}
@@ -846,6 +958,16 @@ func (md *mediaDownloader) downloadLoop() {
 		}
 		time.Sleep(delay)
 	}
+}
+
+func countSegments(mpl *m3u8.MediaPlaylist) int {
+	var res int
+	for _, seg := range mpl.Segments {
+		if seg != nil {
+			res++
+		}
+	}
+	return res
 }
 
 func getSortedKeys(data map[string]*mediaDownloader) []string {

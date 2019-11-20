@@ -236,6 +236,7 @@ func (sr *streamer) Stats() *model.Stats {
 		MediaStreams:        len(sr.downloaders),
 		TotalSegmentsToSend: sr.totalSegmentsToSend,
 		Finished:            true,
+		WowzaMode:           sr.wowzaMode,
 	}
 	for _, rs := range sr.uploaders {
 		// Broadcaster always skips at lest first segment, and potentially more
@@ -256,6 +257,7 @@ func (sr *streamer) Stats() *model.Stats {
 		stats.FailedToDownloadSegments += ds.fail
 		stats.BytesDownloaded += ds.bytes
 		stats.Retries += ds.retries
+		stats.Gaps += ds.gaps
 		if mt.sentTimesMap != nil {
 			for _, md := range mt.downloads {
 				if md.source {

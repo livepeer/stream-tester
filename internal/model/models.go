@@ -63,20 +63,22 @@ type Stats struct {
 	TranscodedLatencies          Latencies       `json:"transcoded_latencies"`
 	RawSourceLatencies           []time.Duration `json:"raw_source_latencies"`
 	RawTranscodedLatencies       []time.Duration `json:"raw_transcoded_latencies"`
+	WowzaMode                    bool            `json:"wowza_mode"`
+	Gaps                         int             `json:"gaps"`
 }
 
 // REST requests
 
 // StartStreamsReq start streams request
 type StartStreamsReq struct {
-	FileName        string `json:"file_name,omitempty"`
-	Host            string `json:"host,omitempty"`
-	RTMP            int    `json:"rtmp,omitempty"`
-	Media           int    `json:"media,omitempty"`
-	Repeat          uint   `json:"repeat,omitempty"`
-	Simultaneous    uint   `json:"simultaneous,omitempty"`
-	Time            string `json:"time,omitempty"`
-	ProfilesNum     int    `json:"profiles_num,omitempty"`
+	FileName        string `json:"file_name"`
+	Host            string `json:"host"`
+	RTMP            int    `json:"rtmp"`
+	Media           int    `json:"media"`
+	Repeat          uint   `json:"repeat"`
+	Simultaneous    uint   `json:"simultaneous"`
+	Time            string `json:"time"`
+	ProfilesNum     int    `json:"profiles_num"`
 	DoNotClearStats bool   `json:"do_not_clear_stats"`
 	MeasureLatency  bool   `json:"measure_latency"`
 }
