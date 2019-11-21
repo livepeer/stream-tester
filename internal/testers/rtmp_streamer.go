@@ -1,6 +1,7 @@
 package testers
 
 import (
+	"fmt"
 	"io"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/livepeer/joy4/av/avutil"
 	"github.com/livepeer/joy4/av/pktque"
 	"github.com/livepeer/joy4/format/rtmp"
+	"github.com/livepeer/stream-tester/internal/messenger"
 	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/livepeer/stream-tester/internal/utils"
 )
@@ -125,8 +127,9 @@ func chooseNeededStreams(streams []av.CodecData) (int8, int8, []av.CodecData) {
 	return int8(audioidx), int8(videoidx), needed
 }
 
-func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
+func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int, waitForTarget time.Duration) {
 	var err error
+	var conn *rtmp.Conn
 	rs.file, err = avutil.Open(fn)
 	if err != nil {
 		glog.Fatal(err)
@@ -141,9 +144,26 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 	// rtmp.Debug2 = true
 	// conn, err := rtmp.Dial("rtmp://localhost:1935/" + manifestID)
 	// conn, err := rtmp.Dial(rtmpURL)
-	conn, err := rtmp.DialTimeout(rtmpURL, 4*time.Second)
-	if err != nil {
-		glog.Fatal(err)
+	started := time.Now()
+	for {
+		conn, err = rtmp.DialTimeout(rtmpURL, 4*time.Second)
+		if err != nil {
+			if waitForTarget > 0 {
+				if time.Since(started) > waitForTarget {
+					msg := fmt.Sprintf(`Can't connect to %s for %s`, rtmpURL, waitForTarget)
+					fmt.Println(msg)
+					messenger.SendFatalMessage(msg)
+					rs.file.Close()
+					close(rs.done)
+					return
+				}
+				time.Sleep(2 * time.Second)
+				continue
+			} else {
+				glog.Fatal(err)
+			}
+		}
+		break
 	}
 
 	var onError = func(err error) {
@@ -206,13 +226,13 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int) {
 				return
 			}
 			took := time.Since(start)
-			if took > 100*time.Millisecond {
+			if took > 1000*time.Millisecond {
 				glog.Infof("packet %d writing took %s rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", packetIdx, took,
 					rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
 			}
 			if rs.counter.segments > lastSegments {
 				glog.V(model.VERBOSE).Infof("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
-				glog.Infof("packet %d rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", packetIdx, rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
+				// glog.Infof("packet %d rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", packetIdx, rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
 				// fmt.Printf("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d\n\n", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
 				lastSegments = rs.counter.segments
 			}

@@ -54,7 +54,7 @@ func (sr *streamer) Stop() {
 }
 
 func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
-	notFinal, measureLatency bool, groupStartBy int, startDelayBetweenGroups time.Duration) error {
+	notFinal, measureLatency bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	var segments int
 	glog.Infof("Counting segments in %s", sourceFileName)
@@ -95,7 +95,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 				glog.Infof("Starting %d streaming session", i)
 			}
 			err := sr.startStreams(sourceFileName, host, nRtmpPort, nMediaPort, simStreams, !notFinal, measureLatency,
-				segments, groupStartBy, startDelayBetweenGroups)
+				segments, groupStartBy, startDelayBetweenGroups, waitForTarget)
 			if err != nil {
 				glog.Fatal(err)
 				return
@@ -104,7 +104,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 				break
 			}
 		}
-		messenger.SendMessage(sr.AnalyzeFormatted(true))
+		// messenger.SendMessage(sr.AnalyzeFormatted(true))
 		fmt.Printf(sr.AnalyzeFormatted(false))
 		if !notFinal {
 			close(sr.eof)
@@ -114,7 +114,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 }
 
 func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
-	measureLatency bool, totalSegments int, groupStartBy int, startDelayBetweenGroups time.Duration) error {
+	measureLatency bool, totalSegments int, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
 	msg := fmt.Sprintf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
@@ -154,7 +154,7 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 			up := newRtmpStreamer(rtmpURL, sourceFileName, sentTimesMap, bar, done, sr.wowzaMode)
 			wg.Add(1)
 			go func() {
-				up.startUpload(sourceFileName, rtmpURL, totalSegments)
+				up.startUpload(sourceFileName, rtmpURL, totalSegments, waitForTarget)
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)

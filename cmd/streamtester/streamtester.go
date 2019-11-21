@@ -42,6 +42,10 @@ func main() {
 	infinitePull := flag.String("infinite-pull", "", "URL of .m3u8 to pull from")
 	discordURL := flag.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := flag.String("discord-user-name", "", "User name to use when sending messages to Discord")
+	discordUsersToNotify := flag.String("discord-users", "", "Id's of users to notify in case of failure")
+	latencyThreshold := flag.Float64("latency-threshold", 0, "Report failure to Discord if latency is bigger than specified")
+	waitForTarget := flag.String("wait-for-target", "", "How long to wair for RTMP target to appear")
+	noExit := flag.Bool("no-exit", false, "Do not exit after test. For use in k8s as one-off job")
 	save := flag.Bool("save", false, "Save downloaded segments")
 	_ = flag.String("config", "", "config file (optional)")
 
@@ -53,11 +57,14 @@ func main() {
 	flag.Parse()
 
 	if *version {
-		fmt.Println("Stream tester version: 0.2")
+		fmt.Println("Stream tester version: 0.3")
 		fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 		return
 	}
-	messenger.Init(*discordURL, *discordUserName)
+	if *latencyThreshold > 0 {
+		*latency = true
+	}
+	messenger.Init(*discordURL, *discordUserName, *discordUsersToNotify)
 	if *infinitePull != "" {
 		puller := testers.NewInfinitePuller(*infinitePull, *save)
 		puller.Start()
@@ -86,21 +93,31 @@ func main() {
 	}
 	glog.Infof("Starting stream tester, file %s number of streams is %d, repeat %d times no bar %v", fn, *sim, *repeat, *noBar)
 
+	var waitForDur time.Duration
+	if *waitForTarget != "" {
+		waitForDur, err = time.ParseDuration(*waitForTarget)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	defer glog.Infof("Exiting")
 	model.ProfilesNum = *profiles
 	sr := testers.NewStreamer(*wowza)
 	// err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, *noBar, *latency, 3, 5*time.Second)
-	err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, false, *latency, 3, 5*time.Second)
+	err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, false, *latency, 3, 5*time.Second, waitForDur)
 	if err != nil {
 		glog.Fatal(err)
 	}
-	go func() {
-		for {
-			time.Sleep(25 * time.Second)
-			// fmt.Println(sr.Stats().FormatForConsole())
-			// fmt.Println(sr.DownStatsFormatted())
-		}
-	}()
+	/*
+		go func() {
+			for {
+				time.Sleep(25 * time.Second)
+				// fmt.Println(sr.Stats().FormatForConsole())
+				// fmt.Println(sr.DownStatsFormatted())
+			}
+		}()
+	*/
 	// Catch interrupt signal to shut down transcoder
 	exitc := make(chan os.Signal, 1)
 	signal.Notify(exitc, os.Interrupt)
@@ -113,7 +130,25 @@ func main() {
 	<-sr.Done()
 	time.Sleep(2 * time.Second)
 	fmt.Println("========= Stats: =========")
-	fmt.Println(sr.Stats().FormatForConsole())
+	stats := sr.Stats()
+	fmt.Println(stats.FormatForConsole())
 	fmt.Println(sr.AnalyzeFormatted(false))
+	if *latencyThreshold > 0 && stats.TranscodedLatencies.P95 > 0 {
+		// check latencies, report failure or success
+		var msg string
+		if float64(stats.TranscodedLatencies.P95)/float64(time.Second) > *latencyThreshold {
+			// report failure
+			msg = fmt.Sprintf(`Test failed: transcode P95 latency is %s which is bigger than threshold %v`, stats.TranscodedLatencies.P95, *latencyThreshold)
+			messenger.SendFatalMessage(msg)
+		} else {
+			msg = fmt.Sprintf(`Test succeded: transcode P95 latency is %s which is lower than threshold %v`, stats.TranscodedLatencies.P95, *latencyThreshold)
+			messenger.SendMessage(msg)
+		}
+		fmt.Println(msg)
+	}
+	if *noExit {
+		s := server.NewStreamerServer(*wowza)
+		s.StartWebServer(*serverAddr)
+	}
 	// messenger.SendMessage(sr.AnalyzeFormatted(true))
 }

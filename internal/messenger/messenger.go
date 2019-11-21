@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	webhookURL string
-	userName   string
+	webhookURL    string
+	userName      string
+	usersToNotify string
 )
 
 type discordMessage struct {
@@ -23,9 +24,18 @@ type discordMessage struct {
 }
 
 // Init ...
-func Init(WebhookURL, UserName string) {
+func Init(WebhookURL, UserName, UsersToNotify string) {
 	webhookURL = WebhookURL
 	userName = UserName
+	usersToNotify = UsersToNotify
+}
+
+// SendFatalMessage send message to Discord channel
+func SendFatalMessage(msg string) {
+	if usersToNotify != "" {
+		msg = usersToNotify + ": " + msg
+	}
+	SendMessage(msg)
 }
 
 // SendMessage send message to Discord channel
