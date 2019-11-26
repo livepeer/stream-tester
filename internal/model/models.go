@@ -22,10 +22,15 @@ type InfinitePuller interface {
 	Start()
 }
 
+// Streamer2 interface
+type Streamer2 interface {
+	StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget time.Duration)
+}
+
 // Streamer interface
 type Streamer interface {
 	StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
-		notFinal, measureLatency bool, groupStartBy int, startDelayBetweenGroups, wairForTarget time.Duration) error
+		notFinal, measureLatency bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error
 	Stats() *Stats
 	StatsFormatted() string
 	DownStatsFormatted() string

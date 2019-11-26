@@ -70,16 +70,23 @@ type fullDownloadResult struct {
 }
 
 type downloadResult struct {
-	status          string
-	bytes           int
-	try             int
-	videoParseError error
-	startTime       time.Duration
-	duration        time.Duration
-	appTime         time.Time
-	name            string
-	seqNo           uint64
-	mySeqNo         uint64
+	status           string
+	bytes            int
+	try              int
+	videoParseError  error
+	startTime        time.Duration
+	duration         time.Duration
+	appTime          time.Time
+	timeAtFirstPlace time.Time
+	name             string
+	seqNo            uint64
+	mySeqNo          uint64
+	resolution       string
+}
+
+func (r *downloadResult) String() string {
+	return fmt.Sprintf("%10s %14s seq %3d: mySeq %3d time %7s duration %7s size %7d bytes appearance time %s (%d)",
+		r.resolution, r.name, r.seqNo, r.mySeqNo, r.startTime, r.duration, r.bytes, r.appTime, r.appTime.UnixNano())
 }
 
 type downloadResultsBySeq []*downloadResult
@@ -228,6 +235,23 @@ func isTimeEqualM(t1, t2 time.Duration) bool {
 	}
 	// 1000000
 	return diff <= 100*time.Millisecond
+}
+
+func isTimeEqualT(t1, t2 time.Time) bool {
+	diff := t1.Sub(t2)
+	if diff < 0 {
+		diff *= -1
+	}
+	// 1000000
+	return diff <= 10*time.Millisecond
+}
+
+func absTimeTiff(t1, t2 time.Duration) time.Duration {
+	diff := t1 - t2
+	if diff < 0 {
+		diff *= -1
+	}
+	return diff
 }
 
 func analyzeDownloads(downloadResults fullDownloadResultsMap, short, streamEnded bool) (string, int) {
@@ -619,6 +643,7 @@ type downloadStats struct {
 }
 
 type downloadTask struct {
+	baseURL  *url.URL
 	url      string
 	seqNo    uint64
 	title    string

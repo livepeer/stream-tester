@@ -111,7 +111,7 @@ func chooseNeededStreams(streams []av.CodecData) (int8, int8, []av.CodecData) {
 		}
 		if strm.Type().IsAudio() {
 			astrm := strm.(av.AudioCodecData)
-			glog.Infof("Audio stream %d type %v", i, astrm.Type())
+			glog.V(model.VERBOSE).Infof("Audio stream %d type %v", i, astrm.Type())
 			if astrm.Type() == av.AAC {
 				audioidx = i
 				needed = append(needed, strm)
@@ -154,7 +154,8 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int, wa
 					fmt.Println(msg)
 					messenger.SendFatalMessage(msg)
 					rs.file.Close()
-					close(rs.done)
+					// close(rs.done)
+					rs.closeDone()
 					return
 				}
 				time.Sleep(2 * time.Second)
@@ -167,12 +168,14 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int, wa
 	}
 
 	var onError = func(err error) {
-		glog.Error("onError finishing upload ", err)
+		msg := fmt.Sprintf("onError finishing upload : %v", err)
+		messenger.SendFatalMessage(msg)
+		glog.Error(msg)
 		rs.connectionLost = true
 		rs.file.Close()
 		conn.Close()
 		time.Sleep(4 * time.Second)
-		close(rs.done)
+		rs.closeDone()
 		return
 	}
 
@@ -193,11 +196,20 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int, wa
 		onError(err)
 		return
 	}
-	var doneStreaming bool
+outloop:
 	for {
 		lastSegments := 0
 		packetIdx := 0
 		for {
+			select {
+			case <-rs.done:
+				glog.Infof("=========>>>> got stop singal")
+				// rs.file.Close()
+				// conn.Close()
+				// return
+				break outloop
+			default:
+			}
 			var pkt av.Packet
 			// glog.Infof("Reading packet %d", packetIdx)
 			if pkt, err = demuxer.ReadPacket(); err != nil {
@@ -208,11 +220,10 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int, wa
 					// in Wowza mode can't really loop, just stopping at EOF
 					glog.V(model.DEBUG).Info("==== RTMP streamer file ended.")
 					glog.Info("==== RTMP streamer file ended.")
-					doneStreaming = true
-					break
+					break outloop
 				}
-				if rs.counter.segments-rs.skippedSegments >= segmentsToStream {
-					doneStreaming = true
+				if segmentsToStream > 0 && rs.counter.segments-rs.skippedSegments >= segmentsToStream {
+					break outloop
 				}
 				break
 			}
@@ -236,17 +247,13 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int, wa
 				// fmt.Printf("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d\n\n", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
 				lastSegments = rs.counter.segments
 			}
-			if rs.counter.segments-rs.skippedSegments > segmentsToStream {
+			if segmentsToStream > 0 && rs.counter.segments-rs.skippedSegments > segmentsToStream {
 				glog.Info("Done streaming\n")
 				// fmt.Println("=====!!! DONE streaming")
-				doneStreaming = true
 				rs.counter.segments--
-				break
+				break outloop
 			}
 			packetIdx++
-		}
-		if doneStreaming {
-			break
 		}
 		glog.V(model.DEBUG).Infof("=== REOPENING file!")
 		// re-open same file and stream it again
@@ -303,6 +310,14 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int, wa
 	err = conn.Close()
 	glog.V(model.DEBUG).Info("---------- calling connection close DONE", err)
 	// time.Sleep(8 * time.Second)
-	close(rs.done)
+	rs.closeDone()
 	glog.V(model.DEBUG).Info("---------- done channel closed", err)
+}
+
+func (rs *rtmpStreamer) closeDone() {
+	select {
+	case <-rs.done:
+	default:
+		close(rs.done)
+	}
 }

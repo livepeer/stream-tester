@@ -45,6 +45,8 @@ func main() {
 	discordUsersToNotify := flag.String("discord-users", "", "Id's of users to notify in case of failure")
 	latencyThreshold := flag.Float64("latency-threshold", 0, "Report failure to Discord if latency is bigger than specified")
 	waitForTarget := flag.String("wait-for-target", "", "How long to wair for RTMP target to appear")
+	rtmpURL := flag.String("rtmp-url", "", "If RTMP URL specified, then infinite streamer will be used (for Wowza testing)")
+	mediaURL := flag.String("media-url", "", "If RTMP URL specified, then infinite streamer will be used (for Wowza testing)")
 	noExit := flag.Bool("no-exit", false, "Do not exit after test. For use in k8s as one-off job")
 	save := flag.Bool("save", false, "Save downloaded segments")
 	_ = flag.String("config", "", "config file (optional)")
@@ -57,7 +59,7 @@ func main() {
 	flag.Parse()
 
 	if *version {
-		fmt.Println("Stream tester version: 0.3")
+		fmt.Println("Stream tester version: 0.4")
 		fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 		return
 	}
@@ -76,8 +78,31 @@ func main() {
 		s.StartWebServer(*serverAddr)
 		return
 	}
-	var streamDuration time.Duration
+	fn := "official_test_source_2s_keys_24pfs.mp4"
+	if len(flag.Args()) > 0 {
+		fn = flag.Arg(0)
+	}
 	var err error
+	var waitForDur time.Duration
+	if *waitForTarget != "" {
+		waitForDur, err = time.ParseDuration(*waitForTarget)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if *rtmpURL != "" {
+		if *mediaURL == "" {
+			glog.Fatal("Should also specifiy -media-url")
+		}
+		sr2 := testers.NewStreamer2(*wowza)
+		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, waitForDur)
+		// to not exit
+		s := server.NewStreamerServer(*wowza)
+		s.StartWebServer("localhost:7933")
+		return
+	}
+
+	var streamDuration time.Duration
 	if *stime != "" {
 		if streamDuration, err = server.ParseStreamDurationArgument(*stime); err != nil {
 			panic(err)
@@ -87,19 +112,7 @@ func main() {
 		}
 	}
 	// fmt.Printf("Args: %+v\n", flag.Args())
-	fn := "official_test_source_2s_keys_24pfs.mp4"
-	if len(flag.Args()) > 0 {
-		fn = flag.Arg(0)
-	}
 	glog.Infof("Starting stream tester, file %s number of streams is %d, repeat %d times no bar %v", fn, *sim, *repeat, *noBar)
-
-	var waitForDur time.Duration
-	if *waitForTarget != "" {
-		waitForDur, err = time.ParseDuration(*waitForTarget)
-		if err != nil {
-			panic(err)
-		}
-	}
 
 	defer glog.Infof("Exiting")
 	model.ProfilesNum = *profiles
