@@ -30,15 +30,17 @@ type rtmpStreamer struct {
 	done            chan struct{}
 	file            av.DemuxCloser
 	wowzaMode       bool
+	segmentsMatcher *segmentsMatcher
 }
 
 // source is local file name for now
-func newRtmpStreamer(ingestURL, source string, sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, done chan struct{}, wowzaMode bool) *rtmpStreamer {
+func newRtmpStreamer(ingestURL, source string, sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, done chan struct{}, wowzaMode bool, sm *segmentsMatcher) *rtmpStreamer {
 	return &rtmpStreamer{
 		done:            done,
 		wowzaMode:       wowzaMode,
 		ingestURL:       ingestURL,
 		counter:         newSegmentsCounter(segLen, bar, false, sentTimesMap),
+		segmentsMatcher: sm,
 		skippedSegments: 1, // Broadcaster always skips first segment, but can skip more - this will be corrected when first
 		// segment downloaded back
 	}
@@ -232,6 +234,9 @@ outloop:
 			}
 			// glog.Infof("Writing packet %d pkt.Idx %d pkt.Time %s Composition Time %s", packetIdx, pkt.Idx, pkt.Time, pkt.CompositionTime)
 			start := time.Now()
+			if rs.segmentsMatcher != nil {
+				rs.segmentsMatcher.frameSent(pkt, pkt.Idx == videoidx)
+			}
 			if err = conn.WritePacket(pkt); err != nil {
 				onError(err)
 				return

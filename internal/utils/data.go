@@ -20,6 +20,82 @@ type LatenciesCalculator struct {
 	joined    []time.Duration
 }
 
+// DurationsCapped ...
+type DurationsCapped struct {
+	cap       int
+	durations []time.Duration
+	fv        []float64
+}
+
+// NewDurations ...
+func NewDurations(cap int) *DurationsCapped {
+	return &DurationsCapped{
+		cap: cap,
+	}
+}
+
+// Add ...
+func (ds *DurationsCapped) Add(d time.Duration) {
+	ds.durations = append(ds.durations, d)
+	if len(ds.durations) > ds.cap {
+		ds.durations = ds.durations[1:]
+	}
+}
+
+// AddFloat ...
+func (ds *DurationsCapped) AddFloat(v float64) {
+	ds.fv = append(ds.fv, v)
+	if len(ds.fv) > ds.cap {
+		ds.fv = ds.fv[1:]
+	}
+}
+
+// GetPercentile ...
+func (ds *DurationsCapped) GetPercentile(percentile ...int) []time.Duration {
+	if len(ds.durations) < 8 {
+		return make([]time.Duration, len(percentile))
+	}
+	cp := make([]time.Duration, len(ds.durations))
+	copy(cp, ds.durations)
+	dur := durations(cp)
+	sort.Sort(dur)
+	res := make([]time.Duration, 0, len(percentile))
+	for _, p := range percentile {
+		res = append(res, GetPercentile(cp, p))
+	}
+	return res
+}
+
+// GetPercentileFloat ...
+func (ds *DurationsCapped) GetPercentileFloat(percentile ...int) []float64 {
+	if len(ds.fv) < 8 {
+		return make([]float64, len(percentile))
+	}
+	cp := make([]float64, len(ds.fv))
+	copy(cp, ds.fv)
+	sort.Float64s(cp)
+	res := make([]float64, 0, len(percentile))
+	for _, p := range percentile {
+		res = append(res, getPercentileFloat(cp, p))
+	}
+	return res
+}
+
+func getPercentileFloat(values []float64, percentile int) float64 {
+	var per float64
+	var findex = float64(len(values)) * float64(percentile) / 100.0
+	if math.Ceil(findex) == math.Floor(findex) {
+		index := int(findex) - 1
+		// glog.Infof("== getPercentile of %v findex %v index %d len %d", percentile, findex, index, len(values))
+		per = (values[index] + values[index+1]) / 2
+	} else {
+		index := int(math.Round(findex)) - 1
+		// glog.Infof("== getPercentile of %v findex %v index %d len %d", percentile, findex, index, len(values))
+		per = values[index]
+	}
+	return per
+}
+
 // Add ..
 func (lc *LatenciesCalculator) Add(data []time.Duration) {
 	if len(data) > 0 {
@@ -48,7 +124,8 @@ func (lc *LatenciesCalculator) Prepare() {
 	lc.latencies = nil
 }
 
-func getPercentile(values []time.Duration, percentile int) time.Duration {
+// GetPercentile calc percentail for duration
+func GetPercentile(values []time.Duration, percentile int) time.Duration {
 	var per time.Duration
 	var findex = float64(len(values)) * float64(percentile) / 100.0
 	if math.Ceil(findex) == math.Floor(findex) {
@@ -80,9 +157,9 @@ func (lc *LatenciesCalculator) Calc() (time.Duration, time.Duration, time.Durati
 		avg += v
 	}
 	avg /= time.Duration(len(lc.joined))
-	p5 = getPercentile(lc.joined, 50)
-	p95 = getPercentile(lc.joined, 95)
-	p99 = getPercentile(lc.joined, 99)
+	p5 = GetPercentile(lc.joined, 50)
+	p95 = GetPercentile(lc.joined, 95)
+	p99 = GetPercentile(lc.joined, 99)
 	return avg, p5, p95, p99
 }
 

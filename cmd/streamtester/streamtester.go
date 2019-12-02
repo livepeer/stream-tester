@@ -49,6 +49,10 @@ func main() {
 	mediaURL := flag.String("media-url", "", "If RTMP URL specified, then infinite streamer will be used (for Wowza testing)")
 	noExit := flag.Bool("no-exit", false, "Do not exit after test. For use in k8s as one-off job")
 	save := flag.Bool("save", false, "Save downloaded segments")
+	gsBucket := flag.String("gsbucket", "", "Google storage bucket (to store segments that was not successfully parsed)")
+	gsKey := flag.String("gskey", "", "Google Storage private key file name (in json format)")
+	ignoreNoCodecError := flag.Bool("ignore-no-codec-error", false, "Do not stop streaming if segment without codec's info downloaded")
+	ignoreGaps := flag.Bool("ignore-gaps", false, "Do not stop streaming if gaps found")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -59,7 +63,7 @@ func main() {
 	flag.Parse()
 
 	if *version {
-		fmt.Println("Stream tester version: 0.4")
+		fmt.Println("Stream tester version: 0.5")
 		fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 		return
 	}
@@ -67,6 +71,8 @@ func main() {
 		*latency = true
 	}
 	messenger.Init(*discordURL, *discordUserName, *discordUsersToNotify)
+	testers.Bucket = *gsBucket
+	testers.CredsJSON = *gsKey
 	if *infinitePull != "" {
 		puller := testers.NewInfinitePuller(*infinitePull, *save)
 		puller.Start()
@@ -90,15 +96,21 @@ func main() {
 			panic(err)
 		}
 	}
+	testers.IgnoreNoCodecError = *ignoreNoCodecError
+	testers.IgnoreGaps = *ignoreGaps
 	if *rtmpURL != "" {
 		if *mediaURL == "" {
 			glog.Fatal("Should also specifiy -media-url")
 		}
+		msg := fmt.Sprintf(`Starting infinite stream to %s`, *mediaURL)
+		messenger.SendMessage(msg)
 		sr2 := testers.NewStreamer2(*wowza)
 		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, waitForDur)
+		// let Wowza remove session
+		time.Sleep(3 * time.Minute)
 		// to not exit
-		s := server.NewStreamerServer(*wowza)
-		s.StartWebServer("localhost:7933")
+		// s := server.NewStreamerServer(*wowza)
+		// s.StartWebServer("localhost:7933")
 		return
 	}
 

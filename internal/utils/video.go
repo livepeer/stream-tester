@@ -89,15 +89,17 @@ func GetVideoStartTimeAndDur(segment []byte) (time.Duration, time.Duration, erro
 			return 0, 0, err
 		}
 		// glog.Infof("Packet idx %d key %v time %s\n", pkt.Idx, pkt.IsKeyFrame, pkt.Time)
+		// glog.Infof("=====--- first video paket idx %d, video idx %d, time %s is key %v is video %v", pkt.Idx, videoIdx, pkt.Time, pkt.IsKeyFrame, pkt.Idx == videoIdx)
 		if pkt.Idx == videoIdx {
 			// glog.V(model.VERBOSE).Infof("=====--- first video paket idx %d, video idx %d, time %s", pkt.Idx, videoIdx, pkt.Time)
 			// pktHash := md5.Sum(pkt.Data)
 			// glog.Infof("=== downloaded hash of %s is %x", pkt.Time, pktHash)
 			if firstTime == 0 {
+				glog.V(model.VERBOSE).Infof("=====--- first video paket idx %d, video idx %d, time %s is key %v is video %v", pkt.Idx, videoIdx, pkt.Time, pkt.IsKeyFrame, pkt.Idx == videoIdx)
 				firstTime = pkt.Time
 			}
-			lastTime = pkt.Time
 		}
+		lastTime = pkt.Time
 	}
 	return firstTime, lastTime - firstTime, nil
 }

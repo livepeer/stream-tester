@@ -2,19 +2,31 @@ package testers
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/joy4/jerrors"
 	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/messenger"
 	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/livepeer/stream-tester/internal/utils"
+)
+
+// IgnoreGaps ...
+var IgnoreGaps bool
+
+const (
+	// reportStatsEvery = 5 * time.Minute
+	// reportStatsEvery = 30 * time.Second
+	reportStatsEvery = 4 * 60 * time.Second
 )
 
 type (
@@ -30,6 +42,8 @@ type (
 		wowzaMode       bool
 		streams         map[resolution]*m3uMediaStream
 		downloadResults chan *downloadResult
+		latencyResults  chan *latencyResult
+		segmentsMatcher *segmentsMatcher
 	}
 
 	// m3uMediaStream downloads media stream. Hadle stream changes
@@ -41,15 +55,24 @@ type (
 		u                *url.URL
 		downloadResults  chan *downloadResult
 		streamSwitchedTo chan nameAndURI
+		segmentsMatcher  *segmentsMatcher
 	}
 
 	nameAndURI struct {
 		name string
 		uri  *url.URL
 	}
+
+	latencyResult struct {
+		resolution string
+		seqNo      uint64
+		name       string
+		latency    time.Duration
+		speedRatio float64
+	}
 )
 
-func newM3utester2(u string, wowzaMode bool, done chan struct{}, waitForTarget time.Duration) *m3utester2 {
+func newM3utester2(u string, wowzaMode bool, done chan struct{}, waitForTarget time.Duration, sm *segmentsMatcher) *m3utester2 {
 	iu, err := url.Parse(u)
 	if err != nil {
 		glog.Fatal(err)
@@ -62,13 +85,17 @@ func newM3utester2(u string, wowzaMode bool, done chan struct{}, waitForTarget t
 		wowzaMode:       wowzaMode,
 		streams:         make(map[resolution]*m3uMediaStream),
 		downloadResults: make(chan *downloadResult, 32),
+		latencyResults:  make(chan *latencyResult, 32),
+		segmentsMatcher: sm,
 	}
 	go mut.workerLoop()
 	go mut.manifestPullerLoop(waitForTarget)
 	return mut
 }
 
-func newM3uMediaStream(name, resolution string, u *url.URL, wowzaMode bool, done chan struct{}, masterDR chan *downloadResult) *m3uMediaStream {
+func newM3uMediaStream(name, resolution string, u *url.URL, wowzaMode bool, done chan struct{}, masterDR chan *downloadResult, sm *segmentsMatcher,
+	latencyResults chan *latencyResult) *m3uMediaStream {
+
 	ms := &m3uMediaStream{
 		finite: finite{
 			done: done,
@@ -78,18 +105,45 @@ func newM3uMediaStream(name, resolution string, u *url.URL, wowzaMode bool, done
 		resolution:       resolution,
 		downloadResults:  make(chan *downloadResult, 32),
 		streamSwitchedTo: make(chan nameAndURI),
+		segmentsMatcher:  sm,
 	}
-	go ms.workerLoop(masterDR)
+	go ms.workerLoop(masterDR, latencyResults)
 	go ms.manifestPullerLoop(wowzaMode)
 	return ms
 }
 
 func (mut *m3utester2) workerLoop() {
 	results := make(map[string]downloadResultsByAppTime)
+	started := time.Now()
+	timer := time.NewTimer(reportStatsEvery)
+	// transcodedLatencies := utils.LatenciesCalculator{}
+	latencies := make(map[string]*utils.DurationsCapped)
+	printStats := func() {
+		msg := fmt.Sprintf("Stream %s is running for %s already\n```", mut.initialURL, time.Since(started))
+		for res, lat := range latencies {
+			clat := lat.GetPercentile(50, 95, 99)
+			flat := lat.GetPercentileFloat(50, 95, 99)
+			msg += fmt.Sprintf("Latencies    for %12s is p50 %s p95 %s p99 %s\n", res, clat[0], clat[1], clat[2])
+			msg += fmt.Sprintf("Speed ratios for %12s is p50 %v p95 %v p99 %v\n", res, flat[0], flat[1], flat[2])
+		}
+		msg += "```"
+		messenger.SendMessage(msg)
+	}
 	for {
 		select {
 		case <-mut.done:
+			printStats()
 			return
+		case <-timer.C:
+			printStats()
+			timer.Reset(reportStatsEvery)
+		case lres := <-mut.latencyResults:
+			if _, has := latencies[lres.resolution]; !has {
+				latencies[lres.resolution] = utils.NewDurations(256)
+			}
+			latencies[lres.resolution].Add(lres.latency)
+			latencies[lres.resolution].AddFloat(lres.speedRatio)
+
 		case dres := <-mut.downloadResults:
 			// glog.Infof("downloaded: %+v", dres)
 			continue
@@ -135,6 +189,7 @@ func (f *finite) fatalEnd(msg string) {
 	default:
 		close(f.done)
 	}
+	// panic(msg)
 }
 
 // continiously pull main manifest, starts new media streams
@@ -180,7 +235,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 		}
 		gotManifest = true
 		glog.V(model.DEBUG).Infof("Main manifest status %v", resp.Status)
-		glog.Infof("Main manifest status %v", resp.Status)
+		// glog.Infof("Main manifest status %v", resp.Status)
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			glog.Info("===== error getting master playlist: ", err)
@@ -245,7 +300,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			}
 
 			glog.Info(pvrui)
-			stream := newM3uMediaStream(variant.URI, variant.Resolution, pvrui, mut.wowzaMode, mut.done, mut.downloadResults)
+			stream := newM3uMediaStream(variant.URI, variant.Resolution, pvrui, mut.wowzaMode, mut.done, mut.downloadResults, mut.segmentsMatcher, mut.latencyResults)
 			mut.streams[res] = stream
 		}
 		time.Sleep(1 * time.Second)
@@ -260,7 +315,7 @@ func (p downloadResultsByAppTime) Less(i, j int) bool {
 }
 func (p downloadResultsByAppTime) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
-func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult) {
+func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResults chan *latencyResult) {
 	results := make(downloadResultsByAppTime, 0, 128)
 	for {
 		select {
@@ -281,12 +336,20 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult) {
 				}
 			*/
 			dres.resolution = ms.resolution
-			glog.Infof("downloaded: %+v", dres)
+			// glog.Infof("downloaded: %+v", dres)
 			if dres.videoParseError != nil {
 				msg := fmt.Sprintf("Error parsing video segment: %v", dres.videoParseError)
-				ms.fatalEnd(msg)
-				return
+				if IgnoreNoCodecError && (errors.Is(dres.videoParseError, jerrors.ErrNoAudioInfoFound) || errors.Is(dres.videoParseError, jerrors.ErrNoVideoInfoFound)) {
+					messenger.SendFatalMessage(msg)
+					continue
+				} else {
+					ms.fatalEnd(msg)
+					return
+				}
 			}
+			latency, speedRatio := ms.segmentsMatcher.matchSegment(dres.startTime, dres.duration, dres.downloadCompetedAt)
+			glog.Infof(`%s seqNo %4d latency is %s speedRatio is %v`, dres.resolution, dres.seqNo, latency, speedRatio)
+			latencyResults <- &latencyResult{name: dres.name, resolution: ms.resolution, seqNo: dres.seqNo, latency: latency, speedRatio: speedRatio}
 			// masterDR <- dres
 			results = append(results, dres)
 			sort.Sort(results)
@@ -319,15 +382,18 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult) {
 				// }
 				if problem != "" && i < len(results)-6 && fatalProblem == "" {
 					fatalProblem = msg
-					return
+					// break
 				}
 			}
 			if print {
 				fmt.Println(res)
 			}
 			if fatalProblem != "" {
-				ms.fatalEnd(fatalProblem)
-				return
+				if !IgnoreGaps {
+					ms.fatalEnd(fatalProblem)
+					return
+				}
+				messenger.SendMessage(fatalProblem)
 			}
 		}
 	}
@@ -398,8 +464,8 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 		glog.V(model.VERBOSE).Infof("Got media playlist %s with %d (really %d) segments of url %s:", ms.resolution, len(pl.Segments), countSegments(pl), surl)
 		glog.V(model.VERBOSE).Info(pl)
 
-		glog.Infof("Got media playlist %s with %d (really %d) segments of url %s:", ms.resolution, len(pl.Segments), countSegments(pl), surl)
-		glog.Info(pl)
+		// glog.Infof("Got media playlist %s with %d (really %d) segments of url %s:", ms.resolution, len(pl.Segments), countSegments(pl), surl)
+		// glog.Info(pl)
 		now := time.Now()
 		for i, segment := range pl.Segments {
 			if segment != nil {
@@ -436,7 +502,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 	}
 	try := 0
 	for {
-		glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
+		// glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
 		glog.Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
 		resp, err := httpClient.Get(fsurl)
 		if err != nil {
@@ -460,6 +526,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 			return
 		}
 		resp.Body.Close()
+		completedAt := time.Now()
 		if resp.StatusCode != http.StatusOK {
 			glog.Errorf("Error status downloading segment %s result status %s", fsurl, resp.Status)
 			if try < 8 {
@@ -470,16 +537,29 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 			res <- &downloadResult{status: resp.Status, try: try}
 			return
 		}
+		// glog.Infof("Download %s result: %s len %d", fsurl, resp.Status, len(b))
 		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(b)
 		if verr != nil {
-			glog.Errorf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
+			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
+			messenger.SendFatalMessage(msg)
 			_, sn := path.Split(fsurl)
 			glog.Infof("==============>>>>>>>>>>>>>  Saving segment %s", sn)
 			ioutil.WriteFile(sn, b, 0644)
+			sid := strconv.FormatInt(time.Now().Unix(), 10)
+			if savedName, serr := save2GS(sid+"_"+task.url, b); serr != nil {
+				messenger.SendFatalMessage(fmt.Sprintf("Failure to save segment to Google Storage %v", serr))
+			} else {
+				messenger.SendMessage(fmt.Sprintf("Segment %s (which can't be parsed) saved to Google Storage %s", task.url, savedName))
+			}
 		}
-		glog.V(model.DEBUG).Infof("Download %s result: %s len %d timeStart %s segment duration %s", fsurl, resp.Status, len(b), fsttim, dur)
+		// _, sn := path.Split(fsurl)
+		// glog.Infof("==============>>>>>>>>>>>>>  Saving segment %s", sn)
+		// ioutil.WriteFile(sn, b, 0644)
+		// glog.V(model.DEBUG).Infof("Download %s result: %s len %d timeStart %s segment duration %s", fsurl, resp.Status, len(b), fsttim, dur)
+		glog.Infof("Download %s result: %s len %d timeStart %s segment duration %s", fsurl, resp.Status, len(b), fsttim, dur)
 		res <- &downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url, seqNo: task.seqNo,
-			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime}
+			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime, downloadCompetedAt: completedAt}
+		// glog.Infof("Download %s result: %s len %d timeStart %s segment duration %s sent to channel", fsurl, resp.Status, len(b), fsttim, dur)
 		return
 	}
 }

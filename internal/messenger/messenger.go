@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"encoding/json"
+
+	"github.com/golang/glog"
 )
 
 var (
@@ -32,14 +34,19 @@ func Init(WebhookURL, UserName, UsersToNotify string) {
 
 // SendFatalMessage send message to Discord channel
 func SendFatalMessage(msg string) {
+	glog.Error(msg)
 	if usersToNotify != "" {
 		msg = usersToNotify + ": " + msg
 	}
-	SendMessage(msg)
+	sendMessage(msg)
 }
 
 // SendMessage send message to Discord channel
 func SendMessage(msg string) {
+	glog.Info(msg)
+	sendMessage(msg)
+}
+func sendMessage(msg string) {
 	if webhookURL == "" {
 		return
 	}

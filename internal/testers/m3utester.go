@@ -70,18 +70,19 @@ type fullDownloadResult struct {
 }
 
 type downloadResult struct {
-	status           string
-	bytes            int
-	try              int
-	videoParseError  error
-	startTime        time.Duration
-	duration         time.Duration
-	appTime          time.Time
-	timeAtFirstPlace time.Time
-	name             string
-	seqNo            uint64
-	mySeqNo          uint64
-	resolution       string
+	status             string
+	bytes              int
+	try                int
+	videoParseError    error
+	startTime          time.Duration
+	duration           time.Duration
+	appTime            time.Time
+	timeAtFirstPlace   time.Time
+	downloadCompetedAt time.Time
+	name               string
+	seqNo              uint64
+	mySeqNo            uint64
+	resolution         string
 }
 
 func (r *downloadResult) String() string {

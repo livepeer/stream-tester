@@ -31,3 +31,5 @@ COPY --from=builder /root/streamtester streamtester
 
 # docker build -t livepeer/streamtester:latest .
 # docker push livepeer/streamtester:latest
+# docker build -t livepeer/streamtester:test .
+# docker push livepeer/streamtester:test
