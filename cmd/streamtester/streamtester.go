@@ -53,6 +53,7 @@ func main() {
 	gsKey := flag.String("gskey", "", "Google Storage private key file name (in json format)")
 	ignoreNoCodecError := flag.Bool("ignore-no-codec-error", false, "Do not stop streaming if segment without codec's info downloaded")
 	ignoreGaps := flag.Bool("ignore-gaps", false, "Do not stop streaming if gaps found")
+	ignoreTimeDrift := flag.Bool("ignore-time-drift", false, "Do not stop streaming if time drift detected")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -63,7 +64,7 @@ func main() {
 	flag.Parse()
 
 	if *version {
-		fmt.Println("Stream tester version: 0.5")
+		fmt.Println("Stream tester version: 0.7")
 		fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 		return
 	}
@@ -98,6 +99,7 @@ func main() {
 	}
 	testers.IgnoreNoCodecError = *ignoreNoCodecError
 	testers.IgnoreGaps = *ignoreGaps
+	testers.IgnoreTimeDrift = *ignoreTimeDrift
 	if *rtmpURL != "" {
 		if *mediaURL == "" {
 			glog.Fatal("Should also specifiy -media-url")

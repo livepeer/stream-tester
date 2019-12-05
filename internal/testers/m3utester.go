@@ -86,9 +86,23 @@ type downloadResult struct {
 }
 
 func (r *downloadResult) String() string {
-	return fmt.Sprintf("%10s %14s seq %3d: mySeq %3d time %7s duration %7s size %7d bytes appearance time %s (%d)",
-		r.resolution, r.name, r.seqNo, r.mySeqNo, r.startTime, r.duration, r.bytes, r.appTime, r.appTime.UnixNano())
+	// return fmt.Sprintf("%10s %14s seq %3d: mySeq %3d time %7s duration %7s size %7d bytes appearance time %s (%d)",
+	// r.resolution, r.name, r.seqNo, r.mySeqNo, r.startTime, r.duration, r.bytes, r.appTime, r.appTime.UnixNano())
+	return fmt.Sprintf("%10s %14s seq %3d: time %7s duration %7s size %7d bytes appearance time %s (%d)",
+		r.resolution, r.name, r.seqNo, r.startTime, r.duration, r.bytes, r.appTime, r.appTime.UnixNano())
 }
+
+func (r *downloadResult) String2() string {
+	// return fmt.Sprintf("%10s %14s seq %3d: mySeq %3d time %7s duration %7s size %7d bytes appearance at first place time %s (%d)",
+	// 	r.resolution, r.name, r.seqNo, r.mySeqNo, r.startTime, r.duration, r.bytes, r.timeAtFirstPlace, r.timeAtFirstPlace.UnixNano())
+	// return fmt.Sprintf("%10s %20s seq %3d: time %7s duration %7s size %7d bytes at first %s (%d)",
+	// 	r.resolution, r.name, r.seqNo, r.startTime, r.duration, r.bytes, r.timeAtFirstPlace, r.timeAtFirstPlace.UnixNano())
+	return fmt.Sprintf("%10s %20s seq %3d: time %7s duration %7s first %s app %s",
+		r.resolution, r.name, r.seqNo, r.startTime, r.duration, r.timeAtFirstPlace.Format(printTimeFormat), r.appTime.Format(printTimeFormat))
+}
+
+// const printTimeFormat = "2006-01-02T15:04:05"
+const printTimeFormat = "2006-01-02T15:04:05.999999999"
 
 type downloadResultsBySeq []*downloadResult
 
@@ -247,8 +261,24 @@ func isTimeEqualT(t1, t2 time.Time) bool {
 	return diff <= 10*time.Millisecond
 }
 
+func isTimeEqualTD(t1, t2 time.Time, d time.Duration) bool {
+	diff := t1.Sub(t2)
+	if diff < 0 {
+		diff *= -1
+	}
+	return diff <= d
+}
+
 func absTimeTiff(t1, t2 time.Duration) time.Duration {
 	diff := t1 - t2
+	if diff < 0 {
+		diff *= -1
+	}
+	return diff
+}
+
+func absTimeTiffT(t1, t2 time.Time) time.Duration {
+	diff := t1.Sub(t2)
 	if diff < 0 {
 		diff *= -1
 	}

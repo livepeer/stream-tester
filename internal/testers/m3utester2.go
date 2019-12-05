@@ -23,10 +23,14 @@ import (
 // IgnoreGaps ...
 var IgnoreGaps bool
 
+// IgnoreTimeDrift ...
+var IgnoreTimeDrift bool
+
 const (
 	// reportStatsEvery = 5 * time.Minute
 	// reportStatsEvery = 30 * time.Second
-	reportStatsEvery = 4 * 60 * time.Second
+	reportStatsEvery  = 4 * 60 * time.Second
+	reportStatsEvery2 = 30 * time.Minute
 )
 
 type (
@@ -113,22 +117,28 @@ func newM3uMediaStream(name, resolution string, u *url.URL, wowzaMode bool, done
 }
 
 func (mut *m3utester2) workerLoop() {
-	results := make(map[string]downloadResultsByAppTime)
+	seenResolutions := make(sort.StringSlice, 0, 16)
+	results := make(map[string]downloadResultsByAtFirstTime)
 	started := time.Now()
 	timer := time.NewTimer(reportStatsEvery)
 	// transcodedLatencies := utils.LatenciesCalculator{}
 	latencies := make(map[string]*utils.DurationsCapped)
 	printStats := func() {
-		msg := fmt.Sprintf("Stream %s is running for %s already\n```", mut.initialURL, time.Since(started))
-		for res, lat := range latencies {
-			clat := lat.GetPercentile(50, 95, 99)
-			flat := lat.GetPercentileFloat(50, 95, 99)
-			msg += fmt.Sprintf("Latencies    for %12s is p50 %s p95 %s p99 %s\n", res, clat[0], clat[1], clat[2])
-			msg += fmt.Sprintf("Speed ratios for %12s is p50 %v p95 %v p99 %v\n", res, flat[0], flat[1], flat[2])
+		msg := fmt.Sprintf("Stream %s is running for %s already\n", mut.initialURL, time.Since(started))
+		if len(latencies) > 0 {
+			msg += "```"
+			for res, lat := range latencies {
+				clat := lat.GetPercentile(50, 95, 99)
+				flat := lat.GetPercentileFloat(50, 95, 99)
+				msg += fmt.Sprintf("Latencies    for %12s is p50 %s p95 %s p99 %s\n", res, clat[0], clat[1], clat[2])
+				msg += fmt.Sprintf("Speed ratios for %12s is p50 %v p95 %v p99 %v\n", res, flat[0], flat[1], flat[2])
+			}
+			msg += "```"
 		}
-		msg += "```"
 		messenger.SendMessage(msg)
 	}
+	problems := 0
+	var lastTimeDriftReportTime time.Time
 	for {
 		select {
 		case <-mut.done:
@@ -136,7 +146,11 @@ func (mut *m3utester2) workerLoop() {
 			return
 		case <-timer.C:
 			printStats()
-			timer.Reset(reportStatsEvery)
+			if time.Since(started) > time.Hour {
+				timer.Reset(reportStatsEvery2)
+			} else {
+				timer.Reset(reportStatsEvery)
+			}
 		case lres := <-mut.latencyResults:
 			if _, has := latencies[lres.resolution]; !has {
 				latencies[lres.resolution] = utils.NewDurations(256)
@@ -145,10 +159,12 @@ func (mut *m3utester2) workerLoop() {
 			latencies[lres.resolution].AddFloat(lres.speedRatio)
 
 		case dres := <-mut.downloadResults:
-			// glog.Infof("downloaded: %+v", dres)
-			continue
+			// glog.Infof("MAIN downloaded: %s", dres.String2())
+			// continue
 			if _, has := results[dres.resolution]; !has {
-				results[dres.resolution] = make(downloadResultsByAppTime, 0, 128)
+				results[dres.resolution] = make(downloadResultsByAtFirstTime, 0, 128)
+				seenResolutions = append(seenResolutions, dres.resolution)
+				seenResolutions.Sort()
 			}
 			results[dres.resolution] = append(results[dres.resolution], dres)
 			sort.Sort(results[dres.resolution])
@@ -156,27 +172,102 @@ func (mut *m3utester2) workerLoop() {
 				results[dres.resolution] = results[dres.resolution][1:]
 			}
 			// check for time drift
-			if dres.seqNo < 24 {
+			// if dres.seqNo < 24 {
+			// 	continue
+			// }
+			if len(seenResolutions) < 2 {
 				continue
 			}
-			for resolution, ress := range results {
+			// find corresponding segments
+			correspondingSegments := make(map[string]*downloadResult)
+			correspondingSegments[dres.resolution] = dres
+			for ri := 0; ri < len(seenResolutions); ri++ {
+				resolution := seenResolutions[ri]
 				if resolution == dres.resolution {
 					continue
 				}
-				// find corresponding segment
-				for i := len(ress) - 1; i >= 0; i-- {
-					cseg := ress[i]
-					if isTimeEqualT(dres.appTime, cseg.appTime) {
-						glog.Infof("=======>>> Corresponding segments:\n%s\n%s\n", dres.String(), cseg.String())
-						diff := absTimeTiff(dres.startTime, cseg.startTime)
-						if diff > 2*time.Second {
-							// msg := fmt.Sprintf("\nTime drift detected: %s : %s\ndiff: %d", dres.String(), cseg.String(), diff)
-							// mut.fatalEnd(msg)
-						}
+				segments := results[resolution]
+				for si := len(segments) - 1; si >= 0; si-- {
+					seg := segments[si]
+					if isTimeEqualTD(dres.timeAtFirstPlace, seg.timeAtFirstPlace, time.Second) {
+						correspondingSegments[seg.resolution] = seg
+						break
 					}
-					break
 				}
 			}
+			// debug print
+			/*
+				if len(correspondingSegments) > 1 {
+					glog.Infof("=======>>> Corresponding segments for %s (%d segs)", dres.String(), len(correspondingSegments))
+					for _, res := range seenResolutions {
+						if seg, has := correspondingSegments[res]; has {
+							// glog.Infof("=====> %s", seg.String2())
+							fmt.Printf("=====> %s\n", seg.String2())
+						}
+					}
+				}
+					glog.Infof("=======>>> segments by time at first ")
+					for _, res := range seenResolutions {
+						for _, seg := range results[res] {
+							// glog.Infof("=====> %s", seg.String2())
+							fmt.Printf("=====> %s\n", seg.String2())
+						}
+					}
+			*/
+			// check for drift
+			// glog.Infof("=====> seen resolutions: %+v", seenResolutions)
+			for i := 0; i < len(seenResolutions)-1; i++ {
+				for j := i + 1; j < len(seenResolutions); j++ {
+					res1 := seenResolutions[i]
+					res2 := seenResolutions[j]
+					// glog.Infof("===> i %d j %d res1 %s res2 %s", i, j, res1, res2)
+					seg1, has1 := correspondingSegments[res1]
+					seg2, has2 := correspondingSegments[res2]
+					if has1 && has2 {
+						if diff := absTimeTiff(seg1.startTime, seg2.startTime); diff > 4*time.Second {
+							msg := fmt.Sprintf("Too big (%s) time difference between %s stream (time %s seqNo %d) and %s stream (time %s seqNo %d)",
+								diff, res1, seg1.startTime, seg1.seqNo, res2, seg2.startTime, seg2.seqNo)
+							// glog.Info("================#########>>>>>>")
+							// glog.Info(msg)
+							if !IgnoreTimeDrift {
+								mut.fatalEnd(msg)
+								return
+							}
+							if time.Since(lastTimeDriftReportTime) > 5*time.Minute {
+								glog.Info(msg)
+								messenger.SendMessage(msg)
+								lastTimeDriftReportTime = time.Now()
+							}
+							// if problems > 100 {
+							// 	panic(msg)
+							// }
+							problems++
+						}
+					}
+				}
+			}
+			/*
+				for ri := 0; ri <= len(seenResolutions); ri++ {
+					// if resolution == dres.resolution {
+					// 	continue
+					// }
+
+					resolution1 := seenResolutions[i]
+					// find corresponding segment
+					for i := len(ress) - 1; i >= 0; i-- {
+						cseg := ress[i]
+						if isTimeEqualT(dres.appTime, cseg.appTime) {
+							glog.Infof("=======>>> Corresponding segments:\n%s\n%s\n", dres.String(), cseg.String())
+							diff := absTimeTiff(dres.startTime, cseg.startTime)
+							if diff > 2*time.Second {
+								// msg := fmt.Sprintf("\nTime drift detected: %s : %s\ndiff: %d", dres.String(), cseg.String(), diff)
+								// mut.fatalEnd(msg)
+							}
+						}
+						break
+					}
+				}
+			*/
 		}
 	}
 }
@@ -197,8 +288,9 @@ func (f *finite) fatalEnd(msg string) {
 func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 	surl := mut.initialURL.String()
 	startedAt := time.Now()
-	var gotManifest bool
+	var gotManifest, streamStarted bool
 	var lastNumberOfStreamsInManifest int = -1
+
 	countTimeouts := 0
 	for {
 		select {
@@ -253,12 +345,21 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			time.Sleep(2 * time.Second)
 			continue
 		}
+		glog.V(model.VERBOSE).Infof("Got playlist with %d variants (%s):", len(mpl.Variants), surl)
+		glog.V(model.VERBOSE).Info(mpl)
 		if lastNumberOfStreamsInManifest != len(mpl.Variants) {
 			glog.Infof("Got playlist with %d variants (%s):", len(mpl.Variants), surl)
 		}
+		if !streamStarted && len(mpl.Variants) >= model.ProfilesNum+1 {
+			streamStarted = true
+		} else if !streamStarted && time.Since(startedAt) > 2*waitForTarget {
+			msg := fmt.Sprintf("Stream started %s ago, but main manifest still has %d profiles instead of %d. Stopping.",
+				time.Since(startedAt), len(mpl.Variants), model.ProfilesNum+1)
+			glog.Error(msg)
+			mut.fatalEnd(msg)
+			return
+		}
 		lastNumberOfStreamsInManifest = len(mpl.Variants)
-		glog.V(model.VERBOSE).Infof("Got playlist with %d variants (%s):", len(mpl.Variants), surl)
-		glog.V(model.VERBOSE).Info(mpl)
 		// glog.Infof("Got playlist with %d variants (%s):", len(mpl.Variants), surl)
 		// glog.Info(mpl)
 		seenResolution := newStringRing(len(mpl.Variants))
@@ -315,26 +416,37 @@ func (p downloadResultsByAppTime) Less(i, j int) bool {
 }
 func (p downloadResultsByAppTime) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
+type downloadResultsByAtFirstTime []*downloadResult
+
+func (p downloadResultsByAtFirstTime) Len() int { return len(p) }
+func (p downloadResultsByAtFirstTime) Less(i, j int) bool {
+	return p[i].timeAtFirstPlace.Before(p[j].timeAtFirstPlace)
+}
+func (p downloadResultsByAtFirstTime) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+
 func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResults chan *latencyResult) {
 	results := make(downloadResultsByAppTime, 0, 128)
+	var lastPrintTime time.Time
 	for {
 		select {
 		case <-ms.done:
 			return
 		case dres := <-ms.downloadResults:
-			/*
-				if !dres.timeAtFirstPlace.IsZero() {
-					for i := len(results) - 1; i >= 0; i-- {
-						r := results[i]
-						if r.seqNo == dres.seqNo && r.name == r.name {
-							r.timeAtFirstPlace = dres.timeAtFirstPlace
-							masterDR <- r
-							break
-						}
+			// glog.Infof("== ms loop downloaded status %s res %s name %s seqNo %d len %d", dres.status, dres.resolution, dres.name, dres.seqNo, dres.bytes)
+			if dres.status != "200 OK" {
+				continue
+			}
+			if !dres.timeAtFirstPlace.IsZero() {
+				for i := len(results) - 1; i >= 0; i-- {
+					r := results[i]
+					if r.seqNo == dres.seqNo && r.name == r.name {
+						r.timeAtFirstPlace = dres.timeAtFirstPlace
+						masterDR <- r
+						break
 					}
-					continue
 				}
-			*/
+				continue
+			}
 			dres.resolution = ms.resolution
 			// glog.Infof("downloaded: %+v", dres)
 			if dres.videoParseError != nil {
@@ -347,8 +459,14 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					return
 				}
 			}
-			latency, speedRatio := ms.segmentsMatcher.matchSegment(dres.startTime, dres.duration, dres.downloadCompetedAt)
+			latency, speedRatio, merr := ms.segmentsMatcher.matchSegment(dres.startTime, dres.duration, dres.downloadCompetedAt)
 			glog.Infof(`%s seqNo %4d latency is %s speedRatio is %v`, dres.resolution, dres.seqNo, latency, speedRatio)
+			if merr != nil {
+				glog.Infof("downloaded: %+v", dres)
+				messenger.SendFatalMessage(merr.Error())
+				panic(merr)
+				continue
+			}
 			latencyResults <- &latencyResult{name: dres.name, resolution: ms.resolution, seqNo: dres.seqNo, latency: latency, speedRatio: speedRatio}
 			// masterDR <- dres
 			results = append(results, dres)
@@ -372,8 +490,8 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 						print = true
 					}
 				}
-				msg := fmt.Sprintf("%10s %14s seq %3d: mySeq %3d time %s duration %s till next %s appearance time %s %s\n",
-					ms.resolution, r.name, r.seqNo, r.mySeqNo, r.startTime, r.duration, tillNext, r.appTime, problem)
+				msg := fmt.Sprintf("%10s %14s seq %3d: time %s duration %s till next %s appearance time %s %s\n",
+					ms.resolution, r.name, r.seqNo, r.startTime, r.duration, tillNext, r.appTime, problem)
 				res += msg
 				// if problem != "" && i < len(results)-6 {
 				// 	fmt.Println(res)
@@ -385,8 +503,9 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					// break
 				}
 			}
-			if print {
+			if print && time.Since(lastPrintTime) > 10*time.Second || fatalProblem != "" && !IgnoreGaps {
 				fmt.Println(res)
+				lastPrintTime = time.Now()
 			}
 			if fatalProblem != "" {
 				if !IgnoreGaps {
@@ -405,6 +524,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 	surl := ms.u.String()
 	// startedAt := time.Now()
 	seen := newStringRing(128)
+	seenAtFirst := newStringRing(128)
 	lastTimeNewSegmentSeen := time.Now()
 	countTimeouts := 0
 	for {
@@ -474,10 +594,13 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 					// remove Wowza's session id from URL
 					segment.URI = wowzaSessionRE.ReplaceAllString(segment.URI, "_")
 				}
+				if i == 0 && !seenAtFirst.Contains(segment.URI) && seen.Contains(segment.URI) {
+					glog.Infof("===> segment at first place %s (%s) seq %d", segment.URI, ms.resolution, pl.SeqNo)
+					ms.downloadResults <- &downloadResult{timeAtFirstPlace: now, name: segment.URI, seqNo: pl.SeqNo, status: "200 OK"}
+					seenAtFirst.Add(segment.URI)
+					continue
+				}
 				if seen.Contains(segment.URI) {
-					// if i == 0 {
-					// 	ms.downloadResults <- &downloadResult{timeAtFirstPlace: now, name: segment.URI, seqNo: pl.SeqNo}
-					// }
 					continue
 				}
 				seen.Add(segment.URI)

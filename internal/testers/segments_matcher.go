@@ -51,7 +51,7 @@ func (sm *segmentsMatcher) frameSent(pkt av.Packet, isVideo bool) {
 
 // matchSegment matches received segment to sent data
 // returns latency and speed ratio
-func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDuration time.Duration, receivedAt time.Time) (time.Duration, float64) {
+func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDuration time.Duration, receivedAt time.Time) (time.Duration, float64, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	var lastPaket, curPacket sentFrameInfo
@@ -85,8 +85,8 @@ func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDur
 	// panic("stop")
 	if curPacket.sentAt.IsZero() {
 		// not found
-		panic(fmt.Sprintf(`not found match for segment with %s PTS`, firstPaketsPTS))
-		return 0, 0
+		// panic(fmt.Sprintf(`not found match for segment with %s PTS`, firstPaketsPTS))
+		return 0, 0, fmt.Errorf(`not found match for segment with %s PTS`, firstPaketsPTS)
 	}
 	for i := startInd; i < len(sentFrames); i++ {
 		pkt := sentFrames[i]
@@ -99,7 +99,7 @@ func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDur
 	if atomic.AddInt64(&sm.reqs, 1)%16 == 0 {
 		sm.cleanup()
 	}
-	return latency, float64(latency) / float64(segmentDuration)
+	return latency, float64(latency) / float64(segmentDuration), nil
 }
 
 func (sm *segmentsMatcher) cleanup() {
@@ -117,7 +117,7 @@ func (sm *segmentsMatcher) cleanup() {
 	now := time.Now()
 	for i := len(sm.sentFrames) - 1; i >= 0; i-- {
 		pkt := sm.sentFrames[i]
-		if now.Sub(pkt.sentAt) > 32*time.Second {
+		if now.Sub(pkt.sentAt) > 72*time.Second {
 			until = i
 			break
 		}
