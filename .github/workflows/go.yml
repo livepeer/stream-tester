@@ -80,7 +80,7 @@ jobs:
     - name: Compress Windows
       if: matrix.os == 'windows-latest'
       run: |
-        7z a streamtester.${{runner.os}}.zip streamtester
+        7z a streamtester.${{runner.os}}.zip streamtester.exe
 
     - name: Release Posix
       uses: softprops/action-gh-release@v1
