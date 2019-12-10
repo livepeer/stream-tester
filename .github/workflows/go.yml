@@ -5,35 +5,59 @@ on:
     tags:
       - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
 jobs:
-  # test:
-  #   name: Test
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #   - name: Set up Go 1.13
-  #     uses: actions/setup-go@v1
-  #     with:
-  #       go-version: 1.13
-  #     id: go
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go 1.13
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.13
+      id: go
 
-  #   - name: Check out code into the Go module directory
-  #     uses: actions/checkout@v1
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v1
 
-  #   - name: Get dependencies
-  #     run: |
-  #       go get -v -t -d ./...
-  #       if [ -f Gopkg.toml ]; then
-  #           curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-  #           dep ensure
-  #       fi
+    - name: Get dependencies
+      run: |
+        go get -v -t -d ./...
+        if [ -f Gopkg.toml ]; then
+            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+            dep ensure
+        fi
 
-  #   - name: Check that can be compiled
-  #     run: go build -v .
+    - name: Check that can be compiled
+      run: go build -v cmd/streamtester/streamtester.go
 
-  # create_release:
+  create_release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@master
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            Release ${{ github.ref }}
+          draft: false
+          prerelease: false
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        # os: [macos-latest, windows-latest, ubuntu-latest]
+    needs: create_release
     steps:
 
     - name: Set up Go 1.13
@@ -54,4 +78,15 @@ jobs:
         fi
 
     - name: Build
-      run: go build -v cmd/streamtester/streamtester.go
+      run: |
+        go build -v cmd/streamtester/streamtester.go
+        gzip -9 -S .${{runner.os}}.gz streamtester
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      # if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: streamtester.${{runner.os}}.gz
+          # body_path: ${{ github.workflow }}-CHANGELOG.txt
+      env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
