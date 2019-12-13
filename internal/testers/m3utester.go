@@ -541,8 +541,9 @@ func (mt *m3utester) workerLoop() {
 			if _, has := mt.downloadResults[fr.mediaPlaylistName]; !has {
 				mt.downloadResults[fr.mediaPlaylistName] = &fullDownloadResults{resolution: fr.resolution, mediaPlaylistName: fr.mediaPlaylistName}
 			}
-			r := mt.downloadResults[fr.mediaPlaylistName]
-			r.results = append(r.results, fr.downloadResult)
+			// turn off for now
+			// r := mt.downloadResults[fr.mediaPlaylistName]
+			// r.results = append(r.results, fr.downloadResult)
 			mt.dm.Unlock()
 			if mt.save {
 				err := ioutil.WriteFile(mt.savePlayListName, mt.savePlayList.Encode().Bytes(), 0644)

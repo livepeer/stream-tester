@@ -54,8 +54,9 @@ func (sr *streamer) Stop() {
 }
 
 func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
-	notFinal, measureLatency bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
+	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
+	showProgress := !noBar
 	var segments int
 	glog.Infof("Counting segments in %s", sourceFileName)
 	segments = GetNumberOfSegments(sourceFileName, streamDuration)
@@ -72,7 +73,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 
 	var overallBar *uiprogress.Bar
 	sr.totalSegmentsToSend = segments * int(simStreams) * int(repeat)
-	if !notFinal && false {
+	if showProgress {
 		uiprogress.Start()
 		if repeat > 1 {
 			overallBar = uiprogress.AddBar(sr.totalSegmentsToSend).AppendCompleted().PrependFunc(func(b *uiprogress.Bar) string {
@@ -94,7 +95,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 			if repeat > 1 {
 				glog.Infof("Starting %d streaming session", i)
 			}
-			err := sr.startStreams(sourceFileName, host, nRtmpPort, nMediaPort, simStreams, !notFinal, measureLatency,
+			err := sr.startStreams(sourceFileName, host, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
 				segments, groupStartBy, startDelayBetweenGroups, waitForTarget)
 			if err != nil {
 				glog.Fatal(err)
@@ -105,7 +106,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 			}
 		}
 		// messenger.SendMessage(sr.AnalyzeFormatted(true))
-		fmt.Printf(sr.AnalyzeFormatted(false))
+		// fmt.Printf(sr.AnalyzeFormatted(false))
 		if !notFinal {
 			close(sr.eof)
 		}

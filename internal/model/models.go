@@ -30,7 +30,7 @@ type Streamer2 interface {
 // Streamer interface
 type Streamer interface {
 	StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
-		notFinal, measureLatency bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error
+		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error
 	Stats() *Stats
 	StatsFormatted() string
 	DownStatsFormatted() string

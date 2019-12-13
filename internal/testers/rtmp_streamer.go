@@ -31,6 +31,7 @@ type rtmpStreamer struct {
 	file            av.DemuxCloser
 	wowzaMode       bool
 	segmentsMatcher *segmentsMatcher
+	hasBar          bool
 }
 
 // source is local file name for now
@@ -40,6 +41,7 @@ func newRtmpStreamer(ingestURL, source string, sentTimesMap *utils.SyncedTimesMa
 		wowzaMode:       wowzaMode,
 		ingestURL:       ingestURL,
 		counter:         newSegmentsCounter(segLen, bar, false, sentTimesMap),
+		hasBar:          bar != nil,
 		segmentsMatcher: sm,
 		skippedSegments: 1, // Broadcaster always skips first segment, but can skip more - this will be corrected when first
 		// segment downloaded back
@@ -300,6 +302,9 @@ outloop:
 	*/
 
 	rs.file.Close()
+	// if rs.hasBar {
+	// 	uiprogress.Stop()
+	// }
 	glog.Infof("Waiting before closing RTMP stream\n")
 	// fmt.Println("==== waiting before closing RTMP stream\n")
 	// wait before closing connection, so we can recieve transcoded data

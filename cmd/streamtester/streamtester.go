@@ -44,13 +44,13 @@ func main() {
 	discordUserName := flag.String("discord-user-name", "", "User name to use when sending messages to Discord")
 	discordUsersToNotify := flag.String("discord-users", "", "Id's of users to notify in case of failure")
 	latencyThreshold := flag.Float64("latency-threshold", 0, "Report failure to Discord if latency is bigger than specified")
-	waitForTarget := flag.String("wait-for-target", "", "How long to wair for RTMP target to appear")
+	waitForTarget := flag.String("wait-for-target", "", "How long to wait for RTMP target to appear")
 	rtmpURL := flag.String("rtmp-url", "", "If RTMP URL specified, then infinite streamer will be used (for Wowza testing)")
 	mediaURL := flag.String("media-url", "", "If RTMP URL specified, then infinite streamer will be used (for Wowza testing)")
 	noExit := flag.Bool("no-exit", false, "Do not exit after test. For use in k8s as one-off job")
 	save := flag.Bool("save", false, "Save downloaded segments")
 	gsBucket := flag.String("gsbucket", "", "Google storage bucket (to store segments that was not successfully parsed)")
-	gsKey := flag.String("gskey", "", "Google Storage private key file name (in json format)")
+	gsKey := flag.String("gskey", "", "Google Storage private key (in json format)")
 	ignoreNoCodecError := flag.Bool("ignore-no-codec-error", false, "Do not stop streaming if segment without codec's info downloaded")
 	ignoreGaps := flag.Bool("ignore-gaps", false, "Do not stop streaming if gaps found")
 	ignoreTimeDrift := flag.Bool("ignore-time-drift", false, "Do not stop streaming if time drift detected")
@@ -132,7 +132,7 @@ func main() {
 	model.ProfilesNum = *profiles
 	sr := testers.NewStreamer(*wowza)
 	// err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, *noBar, *latency, 3, 5*time.Second)
-	err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, false, *latency, 3, 5*time.Second, waitForDur)
+	err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func main() {
 	fmt.Println("========= Stats: =========")
 	stats := sr.Stats()
 	fmt.Println(stats.FormatForConsole())
-	fmt.Println(sr.AnalyzeFormatted(false))
+	// fmt.Println(sr.AnalyzeFormatted(false))
 	if *latencyThreshold > 0 && stats.TranscodedLatencies.P95 > 0 {
 		// check latencies, report failure or success
 		var msg string

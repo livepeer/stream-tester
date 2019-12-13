@@ -350,6 +350,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 		if lastNumberOfStreamsInManifest != len(mpl.Variants) {
 			glog.Infof("Got playlist with %d variants (%s):", len(mpl.Variants), surl)
 		}
+		// glog.Infof("==> model.ProfilesNum = %d", model.ProfilesNum)
 		if !streamStarted && len(mpl.Variants) >= model.ProfilesNum+1 {
 			streamStarted = true
 		} else if !streamStarted && time.Since(startedAt) > 2*waitForTarget {
@@ -486,7 +487,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					ns := results[i+1]
 					tillNext = ns.startTime - r.startTime
 					if tillNext > 0 && !isTimeEqualM(r.duration, tillNext) {
-						problem = fmt.Sprintf(" ===> possible gap - to big time difference %s", r.duration-tillNext)
+						problem = fmt.Sprintf(" ===> possible gap - to big time difference %s (d i: %d, now %d)", tillNext-r.duration, i, time.Now().UnixNano())
 						print = true
 					}
 				}
@@ -611,6 +612,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
 			}
 		}
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 

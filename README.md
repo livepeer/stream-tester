@@ -75,7 +75,7 @@ Params:
 
 Running
 
-`/streamtester -save -infinite-pull http://site.com:1935/live/main_playlist.m3u8`
+`./streamtester -save -infinite-pull http://site.com:1935/live/main_playlist.m3u8`
 
 will save pull `main_playlist.m3u8` stream and save all the segments along with (`VOD`) manifests to current directory.
 
