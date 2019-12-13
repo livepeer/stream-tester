@@ -513,7 +513,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					ms.fatalEnd(fatalProblem)
 					return
 				}
-				messenger.SendMessage(fatalProblem)
+				messenger.SendMessageDebounced(fatalProblem)
 			}
 		}
 	}

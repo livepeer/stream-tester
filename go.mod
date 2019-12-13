@@ -11,6 +11,7 @@ require (
 	github.com/livepeer/joy4 v0.1.2-0.20191129012739-74c87098190e
 	github.com/livepeer/m3u8 v0.11.0
 	github.com/mattn/go-isatty v0.0.8 // indirect
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/peterbourgon/ff v1.6.0
 	golang.org/x/text v0.3.2
 	google.golang.org/api v0.14.0

@@ -12,12 +12,14 @@ import (
 	"encoding/json"
 
 	"github.com/golang/glog"
+	"github.com/patrickmn/go-cache"
 )
 
 var (
 	webhookURL    string
 	userName      string
 	usersToNotify string
+	debounceCache *cache.Cache = cache.New(5*time.Minute, 30*time.Minute)
 )
 
 type discordMessage struct {
@@ -46,6 +48,16 @@ func SendMessage(msg string) {
 	glog.Info(msg)
 	sendMessage(msg)
 }
+
+// SendMessageDebounced send message to Discord channel
+func SendMessageDebounced(msg string) {
+	glog.Info(msg)
+	if _, has := debounceCache.Get(msg); !has {
+		sendMessage(msg)
+		debounceCache.SetDefault(msg, true)
+	}
+}
+
 func sendMessage(msg string) {
 	if webhookURL == "" {
 		return
