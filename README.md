@@ -16,7 +16,7 @@ First one is for (load) testing Livepeer Broadcaster and second one was develope
 
 If name of the file to stream is not specified, then default one - `official_test_source_2s_keys_24pfs.mp4` is used. It should be placed in the same directory as Stream Tester. Can be downloaded from [here](https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs.mp4).
 
-All options can be put into config file and used like `./streamtester -config stream.cfg`
+All options can be put into config file and used like `./streamtester -config local.cfg`
 
 ### Load testing mode
 
@@ -37,7 +37,7 @@ Params:
  - `-latency` Measure transcoding latency
  - `-time` Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option
 
-### Livepeer-Wowza testing mode
+### Infinite stream testing mode
 In this mode streaming is stopped only on error, so it will be infinite if transcoding is done ideally.
 
 Errors can be reported to Discord.
