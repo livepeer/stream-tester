@@ -460,7 +460,12 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					return
 				}
 			}
-			latency, speedRatio, merr := ms.segmentsMatcher.matchSegment(dres.startTime, dres.duration, dres.downloadCompetedAt)
+			var latency time.Duration
+			var speedRatio float64
+			var merr error
+			if ms.segmentsMatcher != nil {
+				latency, speedRatio, merr = ms.segmentsMatcher.matchSegment(dres.startTime, dres.duration, dres.downloadCompetedAt)
+			}
 			glog.Infof(`%s seqNo %4d latency is %s speedRatio is %v`, dres.resolution, dres.seqNo, latency, speedRatio)
 			if merr != nil {
 				glog.Infof("downloaded: %+v", dres)
@@ -468,7 +473,9 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 				panic(merr)
 				continue
 			}
-			latencyResults <- &latencyResult{name: dres.name, resolution: ms.resolution, seqNo: dres.seqNo, latency: latency, speedRatio: speedRatio}
+			if ms.segmentsMatcher != nil {
+				latencyResults <- &latencyResult{name: dres.name, resolution: ms.resolution, seqNo: dres.seqNo, latency: latency, speedRatio: speedRatio}
+			}
 			// masterDR <- dres
 			results = append(results, dres)
 			sort.Sort(results)
@@ -483,7 +490,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 			for i, r := range results {
 				problem = ""
 				tillNext = 0
-				if i < len(results)-1 {
+				if i < len(results)-2 {
 					ns := results[i+1]
 					tillNext = ns.startTime - r.startTime
 					if tillNext > 0 && !isTimeEqualM(r.duration, tillNext) {
@@ -499,7 +506,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 				// 	ms.fatalEnd(msg)
 				// 	return
 				// }
-				if problem != "" && i < len(results)-6 && fatalProblem == "" {
+				if problem != "" && i < len(results)-6 {
 					fatalProblem = msg
 					// break
 				}
@@ -588,6 +595,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 		// glog.Infof("Got media playlist %s with %d (really %d) segments of url %s:", ms.resolution, len(pl.Segments), countSegments(pl), surl)
 		// glog.Info(pl)
 		now := time.Now()
+		var lastTimeDownloadStarted time.Time
 		for i, segment := range pl.Segments {
 			if segment != nil {
 				// glog.Infof("Segment: %+v", *segment)
@@ -596,7 +604,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 					segment.URI = wowzaSessionRE.ReplaceAllString(segment.URI, "_")
 				}
 				if i == 0 && !seenAtFirst.Contains(segment.URI) && seen.Contains(segment.URI) {
-					glog.Infof("===> segment at first place %s (%s) seq %d", segment.URI, ms.resolution, pl.SeqNo)
+					glog.V(model.DEBUG).Infof("===> segment at first place %s (%s) seq %d", segment.URI, ms.resolution, pl.SeqNo)
 					ms.downloadResults <- &downloadResult{timeAtFirstPlace: now, name: segment.URI, seqNo: pl.SeqNo, status: "200 OK"}
 					seenAtFirst.Add(segment.URI)
 					continue
@@ -606,8 +614,12 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 				}
 				seen.Add(segment.URI)
 				lastTimeNewSegmentSeen = time.Now()
+				if time.Since(lastTimeDownloadStarted) < 50*time.Millisecond {
+					time.Sleep(50 * time.Millisecond)
+				}
 				dTask := &downloadTask{baseURL: ms.u, url: segment.URI, seqNo: pl.SeqNo + uint64(i), title: segment.Title, duration: segment.Duration, appTime: now}
 				go downloadSegment(dTask, ms.downloadResults)
+				lastTimeDownloadStarted = time.Now()
 				now = now.Add(time.Millisecond)
 				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
 			}

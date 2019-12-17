@@ -25,6 +25,8 @@ type InfinitePuller interface {
 // Streamer2 interface
 type Streamer2 interface {
 	StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget time.Duration)
+	// StartPulling pull arbitrary HLS stream and report found errors
+	StartPulling(mediaURL string)
 }
 
 // Streamer interface

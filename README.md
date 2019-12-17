@@ -38,7 +38,7 @@ Params:
  - `-time` Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option
 
 ### Infinite stream testing mode
-In this mode streaming is stopped only on error, so it will be infinite if transcoding is done ideally.
+In this mode Stream Tester streams video to RTMP ingest point and read HLS stream back. Streaming is stopped only on error, so it will be infinite if transcoding is done ideally.
 
 Errors can be reported to Discord.
 
@@ -70,6 +70,13 @@ Params:
  - `discord-user-name` User name to use when sending messages to Discord
  - `gsbucket` Google Storage bucket (to store segments that was not successfully parsed)
  - `gskey` Google Storage private key (in json format (actual key, not file name))
+
+### Infinite HLS pull testing mode
+In this mode Stream Tester pulls arbitrary HLS stream and runs same checks as in previous mode.
+To use it specify `-media-url` without specifying `-rtmp-url`.
+
+
+
 
 ### Saving arbitrary stream to file
 
