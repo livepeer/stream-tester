@@ -32,6 +32,7 @@ type rtmpStreamer struct {
 	wowzaMode       bool
 	segmentsMatcher *segmentsMatcher
 	hasBar          bool
+	started         time.Time
 }
 
 // source is local file name for now
@@ -149,6 +150,7 @@ func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int, wa
 	// conn, err := rtmp.Dial("rtmp://localhost:1935/" + manifestID)
 	// conn, err := rtmp.Dial(rtmpURL)
 	started := time.Now()
+	rs.started = started
 	for {
 		conn, err = rtmp.DialTimeout(rtmpURL, 4*time.Second)
 		if err != nil {

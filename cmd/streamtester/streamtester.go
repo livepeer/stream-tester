@@ -89,7 +89,6 @@ func main() {
 	if len(flag.Args()) > 0 {
 		fn = flag.Arg(0)
 	}
-	model.ProfilesNum = *profiles
 	var err error
 	var waitForDur time.Duration
 	if *waitForTarget != "" {
@@ -101,13 +100,6 @@ func main() {
 	testers.IgnoreNoCodecError = *ignoreNoCodecError
 	testers.IgnoreGaps = *ignoreGaps
 	testers.IgnoreTimeDrift = *ignoreTimeDrift
-	if *mediaURL != "" && *rtmpURL == "" {
-		msg := fmt.Sprintf(`Starting infinite stream to %s`, *mediaURL)
-		messenger.SendMessage(msg)
-		sr2 := testers.NewStreamer2(*wowza)
-		sr2.StartPulling(*mediaURL)
-		return
-	}
 	if *rtmpURL != "" {
 		if *mediaURL == "" {
 			glog.Fatal("Should also specifiy -media-url")
@@ -137,21 +129,14 @@ func main() {
 	glog.Infof("Starting stream tester, file %s number of streams is %d, repeat %d times no bar %v", fn, *sim, *repeat, *noBar)
 
 	defer glog.Infof("Exiting")
+	model.ProfilesNum = *profiles
 	sr := testers.NewStreamer(*wowza)
 	// err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, *noBar, *latency, 3, 5*time.Second)
-	err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
+	baseManifestID, err := sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
 	if err != nil {
 		glog.Fatal(err)
 	}
-	/*
-		go func() {
-			for {
-				time.Sleep(25 * time.Second)
-				// fmt.Println(sr.Stats().FormatForConsole())
-				// fmt.Println(sr.DownStatsFormatted())
-			}
-		}()
-	*/
+
 	// Catch interrupt signal to shut down transcoder
 	exitc := make(chan os.Signal, 1)
 	signal.Notify(exitc, os.Interrupt)
@@ -164,9 +149,9 @@ func main() {
 	<-sr.Done()
 	time.Sleep(2 * time.Second)
 	fmt.Println("========= Stats: =========")
-	stats := sr.Stats()
+	stats := sr.Stats(baseManifestID)
+
 	fmt.Println(stats.FormatForConsole())
-	// fmt.Println(sr.AnalyzeFormatted(false))
 	if *latencyThreshold > 0 && stats.TranscodedLatencies.P95 > 0 {
 		// check latencies, report failure or success
 		var msg string
@@ -184,5 +169,4 @@ func main() {
 		s := server.NewStreamerServer(*wowza)
 		s.StartWebServer(*serverAddr)
 	}
-	// messenger.SendMessage(sr.AnalyzeFormatted(true))
 }

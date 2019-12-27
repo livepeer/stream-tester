@@ -25,8 +25,8 @@ func init() {
 // reads back source and transcoded segments and count them
 // and calculates success rate from these numbers
 type streamer struct {
-	uploaders           []*rtmpStreamer
-	downloaders         []*m3utester
+	uploaders           map[string]map[string]*rtmpStreamer
+	downloaders         map[string]map[string]*m3utester
 	totalSegmentsToSend int
 	stopSignal          bool
 	eof                 chan struct{}
@@ -35,7 +35,12 @@ type streamer struct {
 
 // NewStreamer returns new streamer
 func NewStreamer(wowzaMode bool) model.Streamer {
-	return &streamer{eof: make(chan struct{}), wowzaMode: wowzaMode}
+	return &streamer{
+		eof:         make(chan struct{}),
+		wowzaMode:   wowzaMode,
+		uploaders:   make(map[string]map[string]*rtmpStreamer),
+		downloaders: make(map[string]map[string]*m3utester),
+	}
 }
 
 func (sr *streamer) Done() <-chan struct{} {
@@ -48,13 +53,15 @@ func (sr *streamer) Cancel() {
 
 func (sr *streamer) Stop() {
 	sr.stopSignal = true
-	for _, up := range sr.uploaders {
-		up.file.Close()
+	for _, ups := range sr.uploaders {
+		for _, up := range ups {
+			up.file.Close()
+		}
 	}
 }
 
 func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
-	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
+	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error) {
 
 	showProgress := !noBar
 	var segments int
@@ -64,12 +71,14 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 
 	nRtmpPort, err := strconv.Atoi(rtmpPort)
 	if err != nil {
-		return err
+		return "", err
 	}
 	nMediaPort, err := strconv.Atoi(mediaPort)
 	if err != nil {
-		return err
+		return "", err
 	}
+
+	baseManifestID := strings.ReplaceAll(path.Base(sourceFileName), ".", "") + "_" + randName()
 
 	var overallBar *uiprogress.Bar
 	sr.totalSegmentsToSend = segments * int(simStreams) * int(repeat)
@@ -82,7 +91,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 			go func() {
 				for {
 					time.Sleep(5 * time.Second)
-					st := sr.Stats()
+					st := sr.Stats(baseManifestID)
 					overallBar.Set(st.SentSegments)
 				}
 			}()
@@ -95,7 +104,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 			if repeat > 1 {
 				glog.Infof("Starting %d streaming session", i)
 			}
-			err := sr.startStreams(sourceFileName, host, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
+			err := sr.startStreams(baseManifestID, sourceFileName, host, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
 				segments, groupStartBy, startDelayBetweenGroups, waitForTarget)
 			if err != nil {
 				glog.Fatal(err)
@@ -105,16 +114,14 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 				break
 			}
 		}
-		// messenger.SendMessage(sr.AnalyzeFormatted(true))
-		// fmt.Printf(sr.AnalyzeFormatted(false))
 		if !notFinal {
 			close(sr.eof)
 		}
 	}()
-	return nil
+	return baseManifestID, nil
 }
 
-func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
+func (sr *streamer) startStreams(baseManifestID string, sourceFileName, host string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
 	measureLatency bool, totalSegments int, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
@@ -128,9 +135,15 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 		mediaURLTemplate = "http://%s:%d/live/ngrp:%s_all/playlist.m3u8"
 	}
 
+	if sr.uploaders[baseManifestID] == nil {
+		sr.uploaders[baseManifestID] = make(map[string]*rtmpStreamer)
+	}
+	if sr.downloaders[baseManifestID] == nil {
+		sr.downloaders[baseManifestID] = make(map[string]*m3utester)
+	}
+
 	var wg sync.WaitGroup
 	started := make(chan interface{})
-	baseManfistID := strings.ReplaceAll(path.Base(sourceFileName), ".", "") + "_" + randName()
 	go func() {
 		for i := 0; i < int(simStreams); i++ {
 			if groupStartBy > 0 && i%groupStartBy == 0 {
@@ -138,9 +151,9 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 				glog.Infof("Waiting for %s before starting stream %d", startDelayBetweenGroups, i)
 				time.Sleep(startDelayBetweenGroups)
 			}
-			manifesID := fmt.Sprintf("%s_%d", baseManfistID, i)
-			rtmpURL := fmt.Sprintf(rtmpURLTemplate, host, nRtmpPort, manifesID)
-			mediaURL := fmt.Sprintf(mediaURLTemplate, host, nMediaPort, manifesID)
+			manifestID := fmt.Sprintf("%s_%d", baseManifestID, i)
+			rtmpURL := fmt.Sprintf(rtmpURLTemplate, host, nRtmpPort, manifestID)
+			mediaURL := fmt.Sprintf(mediaURLTemplate, host, nMediaPort, manifestID)
 			glog.Infof("RTMP: %s", rtmpURL)
 			glog.Infof("MEDIA: %s", mediaURL)
 			var bar *uiprogress.Bar
@@ -158,10 +171,10 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 				up.startUpload(sourceFileName, rtmpURL, totalSegments, waitForTarget)
 				wg.Done()
 			}()
-			sr.uploaders = append(sr.uploaders, up)
+			sr.uploaders[baseManifestID][manifestID] = up
 			down := newM3UTester(done, sentTimesMap, sr.wowzaMode, false, false)
 			go findSkippedSegmentsNumber(up, down)
-			sr.downloaders = append(sr.downloaders, down)
+			sr.downloaders[baseManifestID][manifestID] = down
 			down.Start(mediaURL)
 			// put random delay before start of next stream
 			// time.Sleep(time.Duration(rand.Intn(2)+2) * time.Second)
@@ -195,51 +208,24 @@ func findSkippedSegmentsNumber(rtmp *rtmpStreamer, mt *m3utester) {
 	}
 }
 
-func (sr *streamer) StatsFormatted() string {
-	r := ""
-	for _, md := range sr.downloaders {
-		r += md.StatsFormatted()
+func (sr *streamer) AllStats() map[string]*model.Stats {
+	all := make(map[string]*model.Stats)
+	for mid, _ := range sr.uploaders {
+		all[mid] = sr.Stats(mid)
 	}
-	return r
+	return all
 }
 
-func (sr *streamer) DownStatsFormatted() string {
-	res := ""
-	for i, dl := range sr.downloaders {
-		if len(sr.downloaders) > 1 {
-			res += fmt.Sprintf("Downloads for stream %d\n", i)
-		}
-		res += dl.DownloadStatsFormatted()
-	}
-	return res
-}
-
-func (sr *streamer) AnalyzeFormatted(short bool) string {
-	return sr.analyzeFormatted(short, true)
-}
-
-func (sr *streamer) analyzeFormatted(short, streamEnded bool) string {
-	res := ""
-	for i, dl := range sr.downloaders {
-		if len(sr.downloaders) > 1 {
-			res += fmt.Sprintf("Analisys for stream %d\n", i)
-		}
-		res += dl.AnalyzeFormatted(short)
-	}
-	stats := sr.Stats()
-	res += "Latencies: " + stats.TranscodedLatencies.String() + "\n"
-	return res
-}
-
-func (sr *streamer) Stats() *model.Stats {
+func (sr *streamer) Stats(baseManifestID string) *model.Stats {
 	stats := &model.Stats{
-		RTMPstreams:         len(sr.uploaders),
-		MediaStreams:        len(sr.downloaders),
+		RTMPstreams:         len(sr.uploaders[baseManifestID]),
+		MediaStreams:        len(sr.downloaders[baseManifestID]),
 		TotalSegmentsToSend: sr.totalSegmentsToSend,
 		Finished:            true,
 		WowzaMode:           sr.wowzaMode,
+		StartTime:           sr.uploaders[baseManifestID][baseManifestID+"_0"].started,
 	}
-	for _, rs := range sr.uploaders {
+	for _, rs := range sr.uploaders[baseManifestID] {
 		// Broadcaster always skips at lest first segment, and potentially more
 		stats.SentSegments += rs.counter.segments - rs.skippedSegments
 		if rs.connectionLost {
@@ -252,7 +238,7 @@ func (sr *streamer) Stats() *model.Stats {
 	}
 	sourceLatencies := utils.LatenciesCalculator{}
 	transcodedLatencies := utils.LatenciesCalculator{}
-	for _, mt := range sr.downloaders {
+	for _, mt := range sr.downloaders[baseManifestID] {
 		ds := mt.stats()
 		stats.DownloadedSegments += ds.success
 		stats.FailedToDownloadSegments += ds.fail
@@ -278,9 +264,9 @@ func (sr *streamer) Stats() *model.Stats {
 	avg, p50, p95, p99 = transcodedLatencies.Calc()
 	stats.TranscodedLatencies = model.Latencies{Avg: avg, P50: p50, P95: p95, P99: p99}
 	if stats.SentSegments > 0 {
-		stats.SuccessRate = float64(stats.DownloadedSegments) / ((float64(model.ProfilesNum) + 1) * float64(stats.SentSegments)) * 100
+		stats.SuccessRate = float64(stats.DownloadedSegments) / (float64(model.ProfilesNum) * float64(stats.SentSegments)) * 100
 	}
-	stats.ShouldHaveDownloadedSegments = (model.ProfilesNum + 1) * stats.SentSegments
+	stats.ShouldHaveDownloadedSegments = (model.ProfilesNum) * stats.SentSegments
 	stats.ProfilesNum = model.ProfilesNum
 	stats.RawSourceLatencies = sourceLatencies.Raw()
 	stats.RawTranscodedLatencies = transcodedLatencies.Raw()

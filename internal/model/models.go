@@ -25,18 +25,14 @@ type InfinitePuller interface {
 // Streamer2 interface
 type Streamer2 interface {
 	StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget time.Duration)
-	// StartPulling pull arbitrary HLS stream and report found errors
-	StartPulling(mediaURL string)
 }
 
 // Streamer interface
 type Streamer interface {
 	StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
-		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error
-	Stats() *Stats
-	StatsFormatted() string
-	DownStatsFormatted() string
-	AnalyzeFormatted(short bool) string
+		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error)
+	Stats(baseManifestID string) *Stats
+	AllStats() map[string]*Stats
 	Done() <-chan struct{}
 	Stop() // Stop active streams
 	Cancel()
@@ -53,7 +49,7 @@ type Latencies struct {
 // Stats represents global test statistics
 type Stats struct {
 	RTMPActiveStreams            int             `json:"rtmp_active_streams"` // number of active RTMP streams
-	RTMPstreams                  int             `json:"rtm_pstreams"`        // number of RTMP streams
+	RTMPstreams                  int             `json:"rtmp_streams"`        // number of RTMP streams
 	MediaStreams                 int             `json:"media_streams"`       // number of media streams
 	TotalSegmentsToSend          int             `json:"total_segments_to_send"`
 	SentSegments                 int             `json:"sent_segments"`
@@ -72,6 +68,7 @@ type Stats struct {
 	RawTranscodedLatencies       []time.Duration `json:"raw_transcoded_latencies"`
 	WowzaMode                    bool            `json:"wowza_mode"`
 	Gaps                         int             `json:"gaps"`
+	StartTime                    time.Time       `json:"start_time"`
 }
 
 // REST requests
@@ -88,6 +85,16 @@ type StartStreamsReq struct {
 	ProfilesNum     int    `json:"profiles_num"`
 	DoNotClearStats bool   `json:"do_not_clear_stats"`
 	MeasureLatency  bool   `json:"measure_latency"`
+}
+
+// StartStreamsRes start streams response
+type StartStreamsRes struct {
+	Success        bool   `json:"success"`
+	BaseManifestID string `json:"base_manifest_id"`
+}
+
+type StatsReq struct {
+	BaseManifestID string `json:"base_manifest_id"`
 }
 
 // FormatForConsole formats stats to be shown in console

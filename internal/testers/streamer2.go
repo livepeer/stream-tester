@@ -55,15 +55,6 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	messenger.SendMessage(msg)
 }
 
-// StartPulling pull arbitrary HLS stream and report found errors
-func (sr *streamer2) StartPulling(mediaURL string) {
-	sr.downloader = newM3utester2(mediaURL, sr.wowzaMode, sr.eof, 0, nil) // starts to download at creation
-	started := time.Now()
-	<-sr.eof
-	msg := fmt.Sprintf(`Streaming stopped after %s`, time.Since(started))
-	messenger.SendMessage(msg)
-}
-
 func (sr *streamer2) waitForTCP(waitForTarget time.Duration, rtmpIngestURL string) error {
 	var u *url.URL
 	var err error

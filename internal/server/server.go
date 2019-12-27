@@ -76,15 +76,26 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	returnRawLatencies := false
-	if _, ok := r.URL.Query()["latencies"]; ok {
-		returnRawLatencies = true
+
+	var statsReq model.StatsReq
+	defer r.Body.Close()
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
 	}
-	stats := ss.streamer.Stats()
-	if !returnRawLatencies {
-		stats.RawSourceLatencies = nil
-		stats.RawTranscodedLatencies = nil
+	err = json.Unmarshal(body, &statsReq)
+	if statsReq.BaseManifestID == "" || err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		if err != nil {
+			w.Write([]byte(err.Error()))
+		}
+		w.Write([]byte("must supply base_manifest_id\n"))
+		return
 	}
+	stats := ss.streamer.Stats(statsReq.BaseManifestID)
+
 	// glog.Infof("Lat avg %d p50 %d p95 %d p99 %d  avg %s p50 %s p95 %s p99 %s", stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95,
 	// 	stats.SourceLatencies.P99, stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95, stats.SourceLatencies.P99)
 	b, err := json.Marshal(stats)
@@ -158,9 +169,26 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous,
+	baseManifestID, err := ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), strconv.Itoa(ssr.Media), ssr.Simultaneous,
 		ssr.Repeat, streamDuration, true, ssr.MeasureLatency, true, 3, 5*time.Second, 0)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"success": true}`))
+
+	res, err := json.Marshal(
+		&model.StartStreamsRes{
+			Success:        true,
+			BaseManifestID: baseManifestID,
+		},
+	)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write(res)
 }
