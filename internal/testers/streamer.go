@@ -161,10 +161,9 @@ func (sr *streamer) startStreams(baseManifestID string, sourceFileName, host str
 				bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
 			}
 			done := make(chan struct{})
-			var sentTimesMap *utils.SyncedTimesMap
-			if measureLatency {
-				sentTimesMap = utils.NewSyncedTimesMap()
-			}
+
+			sentTimesMap := utils.NewSyncedTimesMap()
+
 			up := newRtmpStreamer(rtmpURL, sourceFileName, sentTimesMap, bar, done, sr.wowzaMode, nil)
 			wg.Add(1)
 			go func() {
@@ -226,7 +225,7 @@ func (sr *streamer) Stats(baseManifestID string) *model.Stats {
 		StartTime:           sr.uploaders[baseManifestID][baseManifestID+"_0"].started,
 	}
 	for _, rs := range sr.uploaders[baseManifestID] {
-		// Broadcaster always skips at lest first segment, and potentially more
+		// Broadcaster always skips at least first segment, and potentially more
 		stats.SentSegments += rs.counter.segments - rs.skippedSegments
 		if rs.connectionLost {
 			stats.ConnectionLost++
@@ -255,8 +254,6 @@ func (sr *streamer) Stats(baseManifestID string) *model.Stats {
 			}
 		}
 	}
-	// glog.Infof("=== source latencies: %+v", sourceLatencies)
-	// glog.Infof("=== transcoded latencies: %+v", transcodedLatencies)
 	sourceLatencies.Prepare()
 	transcodedLatencies.Prepare()
 	avg, p50, p95, p99 := sourceLatencies.Calc()
@@ -270,6 +267,10 @@ func (sr *streamer) Stats(baseManifestID string) *model.Stats {
 	stats.ProfilesNum = model.ProfilesNum
 	stats.RawSourceLatencies = sourceLatencies.Raw()
 	stats.RawTranscodedLatencies = transcodedLatencies.Raw()
+	// remove stats when finished
+	if stats.Finished {
+		defer sr.removeStats(baseManifestID)
+	}
 	return stats
 }
 
@@ -279,4 +280,17 @@ func randName() string {
 		x[i] = byte(rand.Uint32())
 	}
 	return fmt.Sprintf("%x", x)
+}
+
+func (sr *streamer) removeStats(baseManifestID string) {
+	// keep the stats for an arbitrary set of time before removing for external availability purposes
+	go func() {
+		time.Sleep(1 * time.Minute)
+		if _, ok := sr.downloaders[baseManifestID]; ok {
+			delete(sr.downloaders, baseManifestID)
+		}
+		if _, ok := sr.uploaders[baseManifestID]; ok {
+			delete(sr.uploaders, baseManifestID)
+		}
+	}()
 }

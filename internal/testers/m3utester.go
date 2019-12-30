@@ -851,7 +851,6 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 					latency = now.Sub(st)
 					md.latencies = append(md.latencies, latency)
 				}
-				// glog.Infof("== downloaded segment seqNo %d segment start time %s latency %s current time %s", task.seqNo, fsttim, latency, now)
 			}
 		}
 
