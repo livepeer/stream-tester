@@ -2,6 +2,7 @@ package testers
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"github.com/livepeer/joy4/av/pktque"
 	"github.com/livepeer/joy4/format/ts"
 	"github.com/livepeer/joy4/jerrors"
+	"github.com/livepeer/stream-tester/internal/model"
 )
 
 // segmenter take video file and cuts it into .ts segments
@@ -34,13 +36,13 @@ type hlsSegment struct {
 	data     []byte
 }
 
-func startSegmenting(fileName string, stopAtFileEnd bool, stopAfter time.Duration, out chan<- *hlsSegment) error {
+func startSegmenting(ctx context.Context, fileName string, stopAtFileEnd bool, stopAfter time.Duration, out chan<- *hlsSegment) error {
 	glog.Infof("Starting segmenting file %s", fileName)
 	inFile, err := avutil.Open(fileName)
 	if err != nil {
 		glog.Fatal(err)
 	}
-	go segmentingLoop(fileName, inFile, stopAtFileEnd, stopAfter, out)
+	go segmentingLoop(ctx, fileName, inFile, stopAtFileEnd, stopAfter, out)
 
 	return err
 }
@@ -65,7 +67,7 @@ func createInMemoryTSMuxer() (av.Muxer, *bytes.Buffer) {
 	return ts.NewMuxer(buf), buf
 }
 
-func segmentingLoop(fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bool, stopAfter time.Duration, out chan<- *hlsSegment) {
+func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bool, stopAfter time.Duration, out chan<- *hlsSegment) {
 	var err error
 	var streams []av.CodecData
 	var videoidx, audioidx int8
@@ -89,7 +91,7 @@ func segmentingLoop(fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bo
 			videoidx = int8(i)
 		}
 	}
-	fmt.Printf("Video stream index %d, audio stream index %d\n", videoidx, audioidx)
+	glog.V(model.VERBOSE).Infof("Video stream index %d, audio stream index %d\n", videoidx, audioidx)
 
 	seqNo := 0
 	// var curPTS time.Duration
@@ -119,6 +121,11 @@ func segmentingLoop(fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bo
 		var rerr error
 		var pkt av.Packet
 		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			pkt, rerr = inFile.ReadPacket()
 			if rerr != nil {
 				if rerr == io.EOF {
@@ -140,7 +147,7 @@ func segmentingLoop(fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bo
 			// This matches segmenter algorithm used in ffmpeg
 			if pkt.IsKeyFrame && pkt.Time >= time.Duration(seqNo+1)*segLen {
 				firstFramePacket = &pkt
-				fmt.Printf("Packet Is Keyframe %v Is Audio %v Is Video %v PTS %s sinc prev %s seqNo %d\n", pkt.IsKeyFrame, pkt.Idx == audioidx, pkt.Idx == videoidx, pkt.Time,
+				glog.V(model.VERBOSE).Infof("Packet Is Keyframe %v Is Audio %v Is Video %v PTS %s sinc prev %s seqNo %d\n", pkt.IsKeyFrame, pkt.Idx == audioidx, pkt.Idx == videoidx, pkt.Time,
 					pkt.Time-prevPTS, seqNo+1)
 				// prevPTS = pkt.Time
 				curDur = pkt.Time - prevPTS

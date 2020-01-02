@@ -131,7 +131,7 @@ func main() {
 			panic(err)
 		}
 		if *repeat > 1 {
-			glog.Fatal("Can't set both -time and -repeat.")
+			// glog.Fatal("Can't set both -time and -repeat.")
 		}
 	}
 	// fmt.Printf("Args: %+v\n", flag.Args())
@@ -148,18 +148,22 @@ func main() {
 	if err != nil {
 		glog.Fatal(err)
 	}
-	/*
+	if *noBar {
 		go func() {
 			for {
 				time.Sleep(25 * time.Second)
-				// fmt.Println(sr.Stats().FormatForConsole())
+				fmt.Println(sr.Stats().FormatForConsole())
 				// fmt.Println(sr.DownStatsFormatted())
 			}
 		}()
-	*/
+	}
+	// go func() {
+	// 	time.Sleep(10 * time.Second)
+	// 	sr.Cancel()
+	// }()
 	// Catch interrupt signal to shut down transcoder
 	exitc := make(chan os.Signal, 1)
-	signal.Notify(exitc, os.Interrupt)
+	signal.Notify(exitc, os.Interrupt, os.Kill)
 	go func() {
 		<-exitc
 		fmt.Println("Got Ctrl-C, cancelling")

@@ -2,6 +2,7 @@ package testers
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/internal/messenger"
+	"github.com/livepeer/stream-tester/internal/model"
 	"github.com/livepeer/stream-tester/internal/utils"
 )
 
@@ -30,7 +32,7 @@ type Uploader interface {
 // then it reads resutls back, check if video segments are
 // parseable, and calculates transcode latecies and succes rate
 type httpStreamer struct {
-	done          chan struct{}
+	ctx           context.Context
 	saveLatencies bool
 	dstats        httpStats
 	mu            sync.RWMutex
@@ -47,10 +49,11 @@ type httpStats struct {
 	bytes             int64
 	errors            map[string]int
 	latencies         []time.Duration
+	finished          bool
 }
 
-func newHTTPtreamer(done chan struct{}, saveLatencies bool) *httpStreamer {
-	hs := &httpStreamer{done: done, saveLatencies: saveLatencies}
+func newHTTPtreamer(ctx context.Context, saveLatencies bool) *httpStreamer {
+	hs := &httpStreamer{ctx: ctx, saveLatencies: saveLatencies}
 	hs.dstats.errors = make(map[string]int)
 	return hs
 }
@@ -65,34 +68,36 @@ var savePrefix = ""
 // StartUpload starts HTTP segments. Blocks until end.
 func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToStream int, waitForTarget, stopAfter time.Duration) {
 	segmentsIn := make(chan *hlsSegment)
-	err := startSegmenting(fn, true, stopAfter, segmentsIn)
+	err := startSegmenting(hs.ctx, fn, true, stopAfter, segmentsIn)
 	if err != nil {
 		glog.Infof("Error starting segmenter: %v", err)
 		panic(err)
 	}
+	var seg *hlsSegment
 outloop:
-	for seg := range segmentsIn {
+	for {
 		select {
-		case <-hs.done:
+		case seg = <-segmentsIn:
+		case <-hs.ctx.Done():
 			glog.Infof("=========>>>> got stop singal")
-			// rs.file.Close()
-			// conn.Close()
-			// return
 			break outloop
-		default:
 		}
 		if seg.err != nil {
-			glog.Infof("Error during segmenting: %v", seg.err)
+			if seg.err != io.EOF {
+				glog.Warningf("Error during segmenting: %v", seg.err)
+			}
 			break
 		}
 		go hs.pushSegment(httpURL, manifestID, seg)
 	}
-	hs.closeDone()
+	hs.mu.Lock()
+	hs.dstats.finished = true
+	hs.mu.Unlock()
 }
 
 func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment) {
 	urlToUp := fmt.Sprintf("%s/%d.ts", httpURL, seg.seqNo)
-	glog.Infof("Got segment manifes %s seqNo %d pts %s dur %s bytes %d from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
+	glog.V(model.SHORT).Infof("Got segment manifes %s seqNo %d pts %s dur %s bytes %d from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
 	var body io.Reader
 	body = bytes.NewReader(seg.data)
 	req, err := http.NewRequest("POST", urlToUp, body)
@@ -113,7 +118,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	if resp != nil {
 		status = resp.Status
 	}
-	glog.Infof("Post segment manifest %s seqNo %d pts %s dur %s took %s timed out %v status '%v'", manifestID, seg.seqNo, seg.pts, seg.duration, postTook, timedout, status)
+	glog.V(model.DEBUG).Infof("Post segment manifest %s seqNo %d pts %s dur %s took %s timed out %v status '%v'", manifestID, seg.seqNo, seg.pts, seg.duration, postTook, timedout, status)
 	if err != nil {
 		hs.mu.Lock()
 		hs.dstats.triedToSend++
@@ -122,7 +127,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		return
 		// panic(err)
 	}
-	glog.Infof("Got manifest %s resp status %s reading body started", manifestID, resp.Status)
+	glog.V(model.VERBOSE).Infof("Got manifest %s resp status %s reading body started", manifestID, resp.Status)
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
@@ -179,7 +184,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		tbody, err := ioutil.ReadAll(resp.Body)
 	*/
 	took := time.Since(started)
-	glog.Infof("Reading body back for manifest %s took %s profiles %d", manifestID, took, len(segments))
+	glog.V(model.VERBOSE).Infof("Reading body back for manifest %s took %s profiles %d", manifestID, took, len(segments))
 	// glog.Infof("Body: %s", string(tbody))
 
 	if err != nil {
@@ -213,7 +218,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 				hs.mu.Unlock()
 				panic(msg)
 			}
-			glog.Infof("Got back manifest %s seg seq %d profile %d len %d bytes pts %s dur %s (source duration is %s)", manifestID, seg.seqNo, i, len(tseg), fsttim, dur, seg.duration)
+			glog.V(model.VERBOSE).Infof("Got back manifest %s seg seq %d profile %d len %d bytes pts %s dur %s (source duration is %s)", manifestID, seg.seqNo, i, len(tseg), fsttim, dur, seg.duration)
 			if savePrefix != "" {
 				fn := fmt.Sprintf("trans_%d_%d.ts", i, seg.seqNo)
 				err = ioutil.WriteFile(path.Join(savePrefix, fn), tseg, 0644)
@@ -248,14 +253,6 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		for _, url := range urls {
 			glog.Info(url)
 		}
-	}
-}
-
-func (hs *httpStreamer) closeDone() {
-	select {
-	case <-hs.done:
-	default:
-		close(hs.done)
 	}
 }
 

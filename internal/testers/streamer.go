@@ -155,7 +155,7 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 			up := newRtmpStreamer(rtmpURL, sourceFileName, sentTimesMap, bar, done, sr.wowzaMode, nil)
 			wg.Add(1)
 			go func() {
-				up.startUpload(sourceFileName, rtmpURL, totalSegments, waitForTarget)
+				up.StartUpload(sourceFileName, rtmpURL, totalSegments, waitForTarget)
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)

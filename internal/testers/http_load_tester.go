@@ -1,6 +1,7 @@
 package testers
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"path"
@@ -20,35 +21,34 @@ import (
 // streams N streams simultaneously into B using HTTP ingest,
 // repeats M times, calculates success rate and latecies
 type HTTPLoadTester struct {
-	done      chan struct{}
+	ctx       context.Context
+	cancel    func()
 	streamers []*httpStreamer
 }
 
 // NewHTTPLoadTester returns new HTTPLoadTester
 func NewHTTPLoadTester() model.Streamer {
-	return &HTTPLoadTester{done: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &HTTPLoadTester{ctx: ctx, cancel: cancel}
 }
 
-// Done returns channel that will be closed once streaming done
+// Done returns channel that will be closed once streaming is done
 func (hlt *HTTPLoadTester) Done() <-chan struct{} {
-	return hlt.done
+	return hlt.ctx.Done()
 }
 
 // Cancel closes done channel immidiately
 func (hlt *HTTPLoadTester) Cancel() {
-	select {
-	case <-hlt.done:
-	default:
-		close(hlt.done)
-	}
+	hlt.cancel()
 }
 
 // Stop calls stop method on all the running streamers
 func (hlt *HTTPLoadTester) Stop() {
 	// sr.stopSignal = true
-	for _, str := range hlt.streamers {
-		str.Stop()
-	}
+	// for _, str := range hlt.streamers {
+	// 	str.Stop()
+	// }
+	hlt.Cancel()
 }
 
 // StartStreams start streaming
@@ -77,16 +77,17 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, host, rtmpPort, mediaPor
 				return
 			}
 			select {
-			case <-hlt.done:
-				break
+			case <-hlt.ctx.Done():
+				return
 			default:
 			}
 		}
+		hlt.Cancel()
 		// messenger.SendMessage(sr.AnalyzeFormatted(true))
 		// fmt.Printf(sr.AnalyzeFormatted(false))
-		if !notFinal {
-			hlt.Cancel()
-		}
+		// if !notFinal {
+		// 	hlt.Cancel()
+		// }
 	}()
 	return nil
 }
@@ -114,9 +115,8 @@ func (hlt *HTTPLoadTester) startStreams(sourceFileName, host string, nRtmpPort, 
 		// if showProgress {
 		// 	bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
 		// }
-		// done := make(chan struct{})
 
-		up := newHTTPtreamer(hlt.done, measureLatency)
+		up := newHTTPtreamer(hlt.ctx, measureLatency)
 		wg.Add(1)
 		go func() {
 			up.StartUpload(sourceFileName, httpIngestURL, manifesID, 0, waitForTarget, stopAfter)
@@ -177,6 +177,9 @@ func (hlt *HTTPLoadTester) Stats() *model.Stats {
 			for e, i := range ds.errors {
 				stats.Errors[e] = i
 			}
+		}
+		if !ds.finished {
+			stats.Finished = false
 		}
 	}
 	transcodedLatencies.Prepare()

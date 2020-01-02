@@ -142,7 +142,8 @@ Accepts object:
     "repeat": 1,
     "simultaneous": 1,
     "profiles_num": 2,
-    "do_not_clear_stats": false
+    "do_not_clear_stats": false,
+    "http_ingest": false
 } 
 
 ```
