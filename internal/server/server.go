@@ -26,7 +26,7 @@ type StreamerServer struct {
 // NewStreamerServer creates new StreamerServer
 func NewStreamerServer(wowzaMode bool) *StreamerServer {
 	return &StreamerServer{
-		streamer:  testers.NewStreamer(wowzaMode),
+		// streamer:  testers.NewStreamer(wowzaMode),
 		wowzaMode: wowzaMode,
 	}
 }
@@ -66,7 +66,9 @@ func (ss *StreamerServer) handleStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	glog.Info("Got stop request.")
-	ss.streamer.Stop()
+	if ss.streamer != nil {
+		ss.streamer.Stop()
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -76,11 +78,15 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	returnRawLatencies := false
 	if _, ok := r.URL.Query()["latencies"]; ok {
 		returnRawLatencies = true
 	}
-	stats := ss.streamer.Stats()
+	stats := &model.Stats{}
+	if ss.streamer != nil {
+		stats = ss.streamer.Stats()
+	}
 	if !returnRawLatencies {
 		stats.RawSourceLatencies = nil
 		stats.RawTranscodedLatencies = nil
@@ -129,7 +135,6 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 	}
 	if ssr.FileName == "" {
 		ssr.FileName = "BigBuckBunny.mp4"
-
 	}
 	if ssr.RTMP == 0 {
 		ssr.RTMP = 1935
@@ -146,8 +151,12 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	glog.Infof("Get request: %+v", ssr)
-	if !ssr.DoNotClearStats {
-		ss.streamer = testers.NewStreamer(ss.wowzaMode)
+	if !ssr.DoNotClearStats || ss.streamer == nil {
+		if ssr.HTTPIngest {
+			ss.streamer = testers.NewHTTPLoadTester()
+		} else {
+			ss.streamer = testers.NewStreamer(ss.wowzaMode)
+		}
 	}
 	var streamDuration time.Duration
 	if ssr.Time != "" {

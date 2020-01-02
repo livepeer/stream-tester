@@ -131,7 +131,12 @@ func chooseNeededStreams(streams []av.CodecData) (int8, int8, []av.CodecData) {
 	return int8(audioidx), int8(videoidx), needed
 }
 
-func (rs *rtmpStreamer) startUpload(fn, rtmpURL string, segmentsToStream int, waitForTarget time.Duration) {
+func (rs *rtmpStreamer) Stop() {
+	rs.file.Close()
+}
+
+// StartUpload starts RTMP stream. Blocks until end.
+func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, segmentsToStream int, waitForTarget time.Duration) {
 	var err error
 	var conn *rtmp.Conn
 	rs.file, err = avutil.Open(fn)
@@ -282,7 +287,7 @@ outloop:
 			}
 		}
 	*/
-	glog.Info("Writing trailer")
+	glog.V(model.DEBUG).Info("Writing trailer")
 	if err = conn.WriteTrailer(); err != nil {
 		onError(err)
 		return
@@ -305,7 +310,7 @@ outloop:
 	// if rs.hasBar {
 	// 	uiprogress.Stop()
 	// }
-	glog.Infof("Waiting before closing RTMP stream\n")
+	glog.V(model.DEBUG).Infof("Waiting before closing RTMP stream\n")
 	// fmt.Println("==== waiting before closing RTMP stream\n")
 	// wait before closing connection, so we can recieve transcoded data
 	// if we do not wait, last segment will be thrown out by broadcaster

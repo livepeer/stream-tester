@@ -36,6 +36,7 @@ Params:
  - `-repeat` How many times to repeat streaming 
  - `-latency` Measure transcoding latency
  - `-time` Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option
+ - `-http-ingest` Use HTTP push instead of RTMP
 
 ### Infinite stream testing mode
 In this mode Stream Tester streams video to RTMP ingest point and read HLS stream back. Streaming is stopped only on error, so it will be infinite if transcoding is done ideally.

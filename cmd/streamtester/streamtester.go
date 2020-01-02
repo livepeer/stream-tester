@@ -54,6 +54,7 @@ func main() {
 	ignoreNoCodecError := flag.Bool("ignore-no-codec-error", false, "Do not stop streaming if segment without codec's info downloaded")
 	ignoreGaps := flag.Bool("ignore-gaps", false, "Do not stop streaming if gaps found")
 	ignoreTimeDrift := flag.Bool("ignore-time-drift", false, "Do not stop streaming if time drift detected")
+	httpIngest := flag.Bool("http-ingest", false, "Use Livepeer HTTP HLS ingest")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -137,8 +138,12 @@ func main() {
 	glog.Infof("Starting stream tester, file %s number of streams is %d, repeat %d times no bar %v", fn, *sim, *repeat, *noBar)
 
 	defer glog.Infof("Exiting")
-	sr := testers.NewStreamer(*wowza)
-	// err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, *noBar, *latency, 3, 5*time.Second)
+	var sr model.Streamer
+	if !*httpIngest {
+		sr = testers.NewStreamer(*wowza)
+	} else {
+		sr = testers.NewHTTPLoadTester()
+	}
 	err = sr.StartStreams(fn, *host, *rtmp, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
 	if err != nil {
 		glog.Fatal(err)

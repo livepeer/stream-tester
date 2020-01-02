@@ -35,8 +35,8 @@ type Streamer interface {
 		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error
 	Stats() *Stats
 	StatsFormatted() string
-	DownStatsFormatted() string
-	AnalyzeFormatted(short bool) string
+	// DownStatsFormatted() string
+	// AnalyzeFormatted(short bool) string
 	Done() <-chan struct{}
 	Stop() // Stop active streams
 	Cancel()
@@ -72,6 +72,7 @@ type Stats struct {
 	RawTranscodedLatencies       []time.Duration `json:"raw_transcoded_latencies"`
 	WowzaMode                    bool            `json:"wowza_mode"`
 	Gaps                         int             `json:"gaps"`
+	Errors                       map[string]int
 }
 
 // REST requests
@@ -88,6 +89,7 @@ type StartStreamsReq struct {
 	ProfilesNum     int    `json:"profiles_num"`
 	DoNotClearStats bool   `json:"do_not_clear_stats"`
 	MeasureLatency  bool   `json:"measure_latency"`
+	HTTPIngest      bool   `json:"http_ingest"`
 }
 
 // FormatForConsole formats stats to be shown in console
@@ -107,6 +109,9 @@ Source latencies:                             %s
 Transcoded latencies:                         %s
 Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams, st.TotalSegmentsToSend, st.SentSegments, st.DownloadedSegments,
 		st.ShouldHaveDownloadedSegments, st.Retries, st.SuccessRate, st.ConnectionLost, st.SourceLatencies.String(), st.TranscodedLatencies.String(), st.BytesDownloaded)
+	if len(st.Errors) > 0 {
+		r = fmt.Sprintf("%s\nErrors: %+v\n", r, st.Errors)
+	}
 	return r
 }
 

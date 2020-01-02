@@ -26,6 +26,17 @@ func (pkf *printKeyFrame) ModifyPacket(pkt *av.Packet, streams []av.CodecData, v
 	return
 }
 
+// timeShifter just shift time by specified duration
+// used when streaming same file in loop
+type timeShifter struct {
+	timeShift time.Duration
+}
+
+func (ts *timeShifter) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoidx int, audioidx int) (drop bool, err error) {
+	pkt.Time += ts.timeShift
+	return
+}
+
 // segmentsCounter counts segments by counting key frames
 // with same algorithm used by ffmeg to cut RTMP streams into HLS segments
 type segmentsCounter struct {

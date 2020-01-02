@@ -7,8 +7,7 @@ require (
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
-	// github.com/livepeer/joy4 v0.1.1
-	github.com/livepeer/joy4 v0.1.2-0.20191129012739-74c87098190e
+	github.com/livepeer/joy4 v0.1.2-0.20191220171501-3d0cd11ebf39
 	github.com/livepeer/m3u8 v0.11.0
 	github.com/mattn/go-isatty v0.0.8 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible

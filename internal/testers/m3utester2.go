@@ -494,7 +494,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					ns := results[i+1]
 					tillNext = ns.startTime - r.startTime
 					if tillNext > 0 && !isTimeEqualM(r.duration, tillNext) {
-						problem = fmt.Sprintf(" ===> possible gap - to big time difference %s (d i: %d, now %d)", tillNext-r.duration, i, time.Now().UnixNano())
+						problem = fmt.Sprintf(" ===> possible gap - to big time difference %s (d2 i: %d, now %d)", tillNext-r.duration, i, time.Now().UnixNano())
 						print = true
 					}
 				}
@@ -677,7 +677,8 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 		// glog.Infof("Download %s result: %s len %d", fsurl, resp.Status, len(b))
 		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(b)
 		if verr != nil {
-			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
+			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v",
+				fsurl, resp.Status, len(b), verr)
 			messenger.SendFatalMessage(msg)
 			_, sn := path.Split(fsurl)
 			glog.Infof("==============>>>>>>>>>>>>>  Saving segment %s", sn)

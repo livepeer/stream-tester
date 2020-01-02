@@ -63,6 +63,8 @@ github.com/livepeer/joy4 v0.1.2-0.20191128210708-f970566a6229 h1:Zuk0Lot2SZ4/8zK
 github.com/livepeer/joy4 v0.1.2-0.20191128210708-f970566a6229/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
 github.com/livepeer/joy4 v0.1.2-0.20191129012739-74c87098190e h1:9PN6zkrL+VPSIzN/HoZLfqxid7aJWdWPe/aC4mtzAWw=
 github.com/livepeer/joy4 v0.1.2-0.20191129012739-74c87098190e/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
+github.com/livepeer/joy4 v0.1.2-0.20191220171501-3d0cd11ebf39 h1:+sx634Wp8kglEtkDAoiIIkGZLYPVaBVK/i0cMshYXbk=
+github.com/livepeer/joy4 v0.1.2-0.20191220171501-3d0cd11ebf39/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
 github.com/livepeer/m3u8 v0.11.0 h1:aI2hLXV5h5VqxjjmAOs55TpUR35KzNL2XWLkbETql5g=
 github.com/livepeer/m3u8 v0.11.0/go.mod h1:IUqAtwWPAG2CblfQa4SVzTQoDcEMPyfNOaBSxqHMS04=
 github.com/mattn/go-isatty v0.0.8 h1:HLtExJ+uU2HOZ+wI0Tt5DtUDrx8yhUqDcp7fYERX4CE=

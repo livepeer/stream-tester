@@ -46,7 +46,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	// sr.uploader = newRtmpStreamer(rtmpIngestURL, sourceFileName, nil, nil, sr.eof, sr.wowzaMode)
 	sr.uploader = newRtmpStreamer(rtmpIngestURL, sourceFileName, nil, nil, sr.eof, false, sm)
 	go func() {
-		sr.uploader.startUpload(sourceFileName, rtmpIngestURL, -1, waitForTarget)
+		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, -1, waitForTarget)
 	}()
 	sr.downloader = newM3utester2(mediaURL, sr.wowzaMode, sr.eof, waitForTarget, sm) // starts to download at creation
 	started := time.Now()
