@@ -31,7 +31,7 @@ type Streamer2 interface {
 
 // Streamer interface
 type Streamer interface {
-	StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
+	StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
 		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error
 	Stats() *Stats
 	StatsFormatted() string
@@ -79,7 +79,8 @@ type Stats struct {
 // StartStreamsReq start streams request
 type StartStreamsReq struct {
 	FileName        string `json:"file_name"`
-	Host            string `json:"host"`
+	BHost           string `json:"host"`
+	OHost           string `json:"ohost"`
 	RTMP            int    `json:"rtmp"`
 	Media           int    `json:"media"`
 	Repeat          uint   `json:"repeat"`
