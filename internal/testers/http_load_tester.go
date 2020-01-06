@@ -52,7 +52,7 @@ func (hlt *HTTPLoadTester) Stop() {
 }
 
 // StartStreams start streaming
-func (hlt *HTTPLoadTester) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
+func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
 	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	nRtmpPort, err := strconv.Atoi(rtmpPort)
@@ -70,7 +70,7 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, host, rtmpPort, mediaPor
 			if repeat > 1 {
 				glog.Infof("Starting %d streaming session", i)
 			}
-			err := hlt.startStreams(sourceFileName, host, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
+			err := hlt.startStreams(sourceFileName, bhost, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
 				streamDuration, groupStartBy, startDelayBetweenGroups, waitForTarget)
 			if err != nil {
 				glog.Fatal(err)

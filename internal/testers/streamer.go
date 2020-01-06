@@ -53,7 +53,7 @@ func (sr *streamer) Stop() {
 	}
 }
 
-func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
+func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
 	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	showProgress := !noBar
@@ -95,7 +95,7 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 			if repeat > 1 {
 				glog.Infof("Starting %d streaming session", i)
 			}
-			err := sr.startStreams(sourceFileName, host, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
+			err := sr.startStreams(sourceFileName, bhost, ohost, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
 				segments, groupStartBy, startDelayBetweenGroups, waitForTarget)
 			if err != nil {
 				glog.Fatal(err)
@@ -114,11 +114,11 @@ func (sr *streamer) StartStreams(sourceFileName, host, rtmpPort, mediaPort strin
 	return nil
 }
 
-func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
+func (sr *streamer) startStreams(sourceFileName, bhost, ohost string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
 	measureLatency bool, totalSegments int, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
-	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
-	msg := fmt.Sprintf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
+	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, bhost, nRtmpPort, simStreams)
+	msg := fmt.Sprintf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, bhost, nRtmpPort, simStreams)
 	messenger.SendMessage(msg)
 	fmt.Println(msg)
 	rtmpURLTemplate := "rtmp://%s:%d/%s"
@@ -139,8 +139,8 @@ func (sr *streamer) startStreams(sourceFileName, host string, nRtmpPort, nMediaP
 				time.Sleep(startDelayBetweenGroups)
 			}
 			manifesID := fmt.Sprintf("%s_%d", baseManfistID, i)
-			rtmpURL := fmt.Sprintf(rtmpURLTemplate, host, nRtmpPort, manifesID)
-			mediaURL := fmt.Sprintf(mediaURLTemplate, host, nMediaPort, manifesID)
+			rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifesID)
+			mediaURL := fmt.Sprintf(mediaURLTemplate, ohost, nMediaPort, manifesID)
 			glog.Infof("RTMP: %s", rtmpURL)
 			glog.Infof("MEDIA: %s", mediaURL)
 			var bar *uiprogress.Bar
