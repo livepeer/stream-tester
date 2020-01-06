@@ -30,8 +30,8 @@ func main() {
 	sim := flag.Uint("sim", 1, "Number of simulteneous streams to stream")
 	repeat := flag.Uint("repeat", 1, "Number of time to repeat")
 	profiles := flag.Int("profiles", 2, "Number of transcoding profiles configured on broadcaster")
-	bhost := flag.String("host", "localhost", "Broadcaster's host name")
-	ohost := flag.String("orch", "", "Orchestrator's host name - Broadcaster host will be used by default if not specified")
+	bhost := flag.String("host", "localhost", "Host name (usually broadcaster's) to stream RTMP stream to")
+	mhost := flag.String("media-host", "", "Host name to read transcoded segments back from. -host will be used by default if not specified")
 	rtmp := flag.String("rtmp", "1935", "RTMP port number")
 	media := flag.String("media", "8935", "Media port number")
 	stime := flag.String("time", "", "Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option.")
@@ -126,9 +126,9 @@ func main() {
 		return
 	}
 
-	oHost := *ohost
-	if oHost == "" {
-		oHost = *bhost
+	mHost := *mhost
+	if mHost == "" {
+		mHost = *bhost
 	}
 
 	var streamDuration time.Duration
@@ -150,7 +150,7 @@ func main() {
 	} else {
 		sr = testers.NewHTTPLoadTester()
 	}
-	err = sr.StartStreams(fn, *bhost, *rtmp, oHost, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
+	err = sr.StartStreams(fn, *bhost, *rtmp, mHost, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
 	if err != nil {
 		glog.Fatal(err)
 	}

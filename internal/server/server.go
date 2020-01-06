@@ -122,13 +122,13 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	glog.Infof("Start streams request %+v", *ssr)
-	if ssr.BHost == "" {
+	if ssr.Host == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Should specify 'host' field"))
 		return
 	}
-	if ssr.OHost == "" {
-		ssr.OHost = ssr.BHost
+	if ssr.MHost == "" {
+		ssr.MHost = ssr.Host
 	}
 	if ssr.Repeat <= 0 {
 		ssr.Repeat = 1
@@ -170,7 +170,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	ss.streamer.StartStreams(ssr.FileName, ssr.BHost, strconv.Itoa(ssr.RTMP), ssr.OHost, strconv.Itoa(ssr.Media), ssr.Simultaneous,
+	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), ssr.MHost, strconv.Itoa(ssr.Media), ssr.Simultaneous,
 		ssr.Repeat, streamDuration, true, ssr.MeasureLatency, true, 3, 5*time.Second, 0)
 
 	w.Header().Set("Content-Type", "application/json")

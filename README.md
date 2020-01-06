@@ -29,6 +29,7 @@ Usage:
 Params:
 
  - `-host` Host name of broadcaster to stream to
+ - `-media-host` Host name to read transcoded stream from. If not specified, `-host` will be used
  - `-rtmp` Port number to stream RTMP stream to
  - `-media` Port number to download media from
  - `-profiles` How many transcoding profiles broadcaster configured with
@@ -136,6 +137,7 @@ Accepts object:
 ```json
 {
     "host": "localhost",
+    "media_host": "",
     "file_name": "official_test_source_2s_keys_24pfs.mp4",
     "rtmp": 1935,
     "media": 8935,

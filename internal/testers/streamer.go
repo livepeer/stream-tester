@@ -114,11 +114,12 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 	return nil
 }
 
-func (sr *streamer) startStreams(sourceFileName, bhost, ohost string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
+func (sr *streamer) startStreams(sourceFileName, bhost, mhost string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
 	measureLatency bool, totalSegments int, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, bhost, nRtmpPort, simStreams)
-	msg := fmt.Sprintf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, bhost, nRtmpPort, simStreams)
+	msg := fmt.Sprintf("Starting streaming %s to %s:%d, number of streams is %d, reading back from %s:%d\n", sourceFileName, bhost, nRtmpPort, simStreams,
+		mhost, nMediaPort)
 	messenger.SendMessage(msg)
 	fmt.Println(msg)
 	rtmpURLTemplate := "rtmp://%s:%d/%s"
@@ -140,7 +141,7 @@ func (sr *streamer) startStreams(sourceFileName, bhost, ohost string, nRtmpPort,
 			}
 			manifesID := fmt.Sprintf("%s_%d", baseManfistID, i)
 			rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifesID)
-			mediaURL := fmt.Sprintf(mediaURLTemplate, ohost, nMediaPort, manifesID)
+			mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifesID)
 			glog.Infof("RTMP: %s", rtmpURL)
 			glog.Infof("MEDIA: %s", mediaURL)
 			var bar *uiprogress.Bar
