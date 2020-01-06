@@ -1,0 +1,25 @@
+name: Docker Image CI
+
+on: [push]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Docker Registry
+      env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD 
+    - name: Build the Docker image
+      # run: docker build . --file Dockerfile --tag livepeer/streamtester:$(date +%s)
+      run: docker build . --file Dockerfile --tag livepeer/streamtester:latest
+    - name: Push Docker Container to Registry
+      env:
+          CONTAINER_IMAGE_NAME: ${{ secrets.CONTAINER_IMAGE_NAME }}
+          DOCKER_REGISTRY_URL: ${{ secrets.DOCKER_REGISTRY_URL }}
+      run: docker push livepeer/streamtester:latest
