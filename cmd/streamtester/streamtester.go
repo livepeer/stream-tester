@@ -165,6 +165,7 @@ func main() {
 		}
 		fmt.Println(msg)
 	}
+
 	if *noExit {
 		s := server.NewStreamerServer(*wowza)
 		s.StartWebServer(*serverAddr)
