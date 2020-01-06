@@ -11,6 +11,10 @@ When running from command line, Stream tester has two different modes.
 First one is for (load) testing Livepeer Broadcaster and second one was developed for running long test against Livepeer Wowza plugin, but can be used with any transcoder that takes RTMP input and output HLS.
 
 
+## Binaries
+Automatically built binaries can be found on [releases](https://github.com/livepeer/stream-tester/releases) page.
+
+
 
 ## Command line
 
