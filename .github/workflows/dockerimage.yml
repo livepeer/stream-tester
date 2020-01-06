@@ -18,8 +18,13 @@ jobs:
     - name: Build the Docker image
       # run: docker build . --file Dockerfile --tag livepeer/streamtester:$(date +%s)
       run: docker build . --file Dockerfile --tag livepeer/streamtester:latest
+    - name: Get tag name
+      id: get_version
+      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+    - name: Tag version
+      if: startsWith(github.ref, 'refs/tags/v')
+      run: |
+        docker tag livepeer/streamtester:latest livepeer/streamtester:${{ steps.get_version.outputs.VERSION }}
+        docker push livepeer/streamtester:${{ steps.get_version.outputs.VERSION }}
     - name: Push Docker Container to Registry
-      env:
-          CONTAINER_IMAGE_NAME: ${{ secrets.CONTAINER_IMAGE_NAME }}
-          DOCKER_REGISTRY_URL: ${{ secrets.DOCKER_REGISTRY_URL }}
       run: docker push livepeer/streamtester:latest
