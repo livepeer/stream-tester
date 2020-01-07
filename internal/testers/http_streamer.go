@@ -32,10 +32,11 @@ type Uploader interface {
 // then it reads resutls back, check if video segments are
 // parseable, and calculates transcode latecies and succes rate
 type httpStreamer struct {
-	ctx           context.Context
-	saveLatencies bool
-	dstats        httpStats
-	mu            sync.RWMutex
+	ctx            context.Context
+	baseManifestID string
+	saveLatencies  bool
+	dstats         httpStats
+	mu             sync.RWMutex
 }
 
 type httpStats struct {
@@ -50,10 +51,11 @@ type httpStats struct {
 	errors            map[string]int
 	latencies         []time.Duration
 	finished          bool
+	started           time.Time
 }
 
-func newHTTPtreamer(ctx context.Context, saveLatencies bool) *httpStreamer {
-	hs := &httpStreamer{ctx: ctx, saveLatencies: saveLatencies}
+func newHTTPtreamer(ctx context.Context, saveLatencies bool, baseManifestID string) *httpStreamer {
+	hs := &httpStreamer{ctx: ctx, saveLatencies: saveLatencies, baseManifestID: baseManifestID}
 	hs.dstats.errors = make(map[string]int)
 	return hs
 }
@@ -96,6 +98,11 @@ outloop:
 }
 
 func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment) {
+	hs.mu.Lock()
+	if hs.dstats.started.IsZero() {
+		hs.dstats.started = time.Now()
+	}
+	hs.mu.Unlock()
 	urlToUp := fmt.Sprintf("%s/%d.ts", httpURL, seg.seqNo)
 	glog.V(model.SHORT).Infof("Got segment manifes %s seqNo %d pts %s dur %s bytes %d from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
 	var body io.Reader

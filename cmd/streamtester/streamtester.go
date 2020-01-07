@@ -150,7 +150,7 @@ func main() {
 	} else {
 		sr = testers.NewHTTPLoadTester()
 	}
-	err = sr.StartStreams(fn, *bhost, *rtmp, mHost, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
+	_, err = sr.StartStreams(fn, *bhost, *rtmp, mHost, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func main() {
 		go func() {
 			for {
 				time.Sleep(25 * time.Second)
-				fmt.Println(sr.Stats().FormatForConsole())
+				fmt.Println(sr.Stats("").FormatForConsole())
 				// fmt.Println(sr.DownStatsFormatted())
 			}
 		}()
@@ -179,7 +179,7 @@ func main() {
 	<-sr.Done()
 	time.Sleep(2 * time.Second)
 	fmt.Println("========= Stats: =========")
-	stats := sr.Stats()
+	stats := sr.Stats("")
 	fmt.Println(stats.FormatForConsole())
 	// fmt.Println(sr.AnalyzeFormatted(false))
 	if *latencyThreshold > 0 && stats.TranscodedLatencies.P95 > 0 {

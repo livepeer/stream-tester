@@ -32,8 +32,8 @@ type Streamer2 interface {
 // Streamer interface
 type Streamer interface {
 	StartStreams(sourceFileName, bhost, rtmpPort, mhost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
-		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error
-	Stats() *Stats
+		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error)
+	Stats(basedManifestID string) *Stats
 	StatsFormatted() string
 	// DownStatsFormatted() string
 	// AnalyzeFormatted(short bool) string
@@ -53,7 +53,7 @@ type Latencies struct {
 // Stats represents global test statistics
 type Stats struct {
 	RTMPActiveStreams            int             `json:"rtmp_active_streams"` // number of active RTMP streams
-	RTMPstreams                  int             `json:"rtm_pstreams"`        // number of RTMP streams
+	RTMPstreams                  int             `json:"rtmp_streams"`        // number of RTMP streams
 	MediaStreams                 int             `json:"media_streams"`       // number of media streams
 	TotalSegmentsToSend          int             `json:"total_segments_to_send"`
 	SentSegments                 int             `json:"sent_segments"`
@@ -72,7 +72,8 @@ type Stats struct {
 	RawTranscodedLatencies       []time.Duration `json:"raw_transcoded_latencies"`
 	WowzaMode                    bool            `json:"wowza_mode"`
 	Gaps                         int             `json:"gaps"`
-	Errors                       map[string]int
+	StartTime                    time.Time       `json:"start_time"`
+	Errors                       map[string]int  `json:"errors"`
 }
 
 // REST requests
@@ -93,12 +94,19 @@ type StartStreamsReq struct {
 	HTTPIngest      bool   `json:"http_ingest"`
 }
 
+// StartStreamsRes start streams response
+type StartStreamsRes struct {
+	Success        bool   `json:"success"`
+	BaseManifestID string `json:"base_manifest_id"`
+}
+
 // FormatForConsole formats stats to be shown in console
 func (st *Stats) FormatForConsole() string {
 	p := message.NewPrinter(message.MatchLanguage("en"))
 	r := p.Sprintf(`
 Number of RTMP streams:                       %7d
 Number of media streams:                      %7d
+Started ago                                   %7s
 Total number of segments to be sent:          %7d
 Total number of segments sent to broadcaster: %7d
 Total number of segments read back:           %7d
@@ -108,7 +116,7 @@ Success rate:                                     %9.5f%%
 Lost connection to broadcaster:               %7d
 Source latencies:                             %s
 Transcoded latencies:                         %s
-Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams, st.TotalSegmentsToSend, st.SentSegments, st.DownloadedSegments,
+Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams, time.Now().Sub(st.StartTime), st.TotalSegmentsToSend, st.SentSegments, st.DownloadedSegments,
 		st.ShouldHaveDownloadedSegments, st.Retries, st.SuccessRate, st.ConnectionLost, st.SourceLatencies.String(), st.TranscodedLatencies.String(), st.BytesDownloaded)
 	if len(st.Errors) > 0 {
 		r = fmt.Sprintf("%s\nErrors: %+v\n", r, st.Errors)

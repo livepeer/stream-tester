@@ -54,7 +54,7 @@ func (sr *streamer) Stop() {
 }
 
 func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
-	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
+	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error) {
 
 	showProgress := !noBar
 	var segments int
@@ -64,11 +64,11 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 
 	nRtmpPort, err := strconv.Atoi(rtmpPort)
 	if err != nil {
-		return err
+		return "", err
 	}
 	nMediaPort, err := strconv.Atoi(mediaPort)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	var overallBar *uiprogress.Bar
@@ -82,7 +82,7 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 			go func() {
 				for {
 					time.Sleep(5 * time.Second)
-					st := sr.Stats()
+					st := sr.Stats("")
 					overallBar.Set(st.SentSegments)
 				}
 			}()
@@ -90,12 +90,14 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 	}
 
 	sr.stopSignal = false
+	baseManfistID := strings.ReplaceAll(path.Base(sourceFileName), ".", "") + "_" + randName()
+
 	go func() {
 		for i := 0; i < int(repeat); i++ {
 			if repeat > 1 {
 				glog.Infof("Starting %d streaming session", i)
 			}
-			err := sr.startStreams(sourceFileName, bhost, ohost, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
+			err := sr.startStreams(baseManfistID, sourceFileName, i, bhost, ohost, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
 				segments, groupStartBy, startDelayBetweenGroups, waitForTarget)
 			if err != nil {
 				glog.Fatal(err)
@@ -111,14 +113,14 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 			close(sr.eof)
 		}
 	}()
-	return nil
+	return baseManfistID, nil
 }
 
-func (sr *streamer) startStreams(sourceFileName, bhost, mhost string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
+func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum int, bhost, mhost string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
 	measureLatency bool, totalSegments int, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, bhost, nRtmpPort, simStreams)
-	msg := fmt.Sprintf("Starting streaming %s to %s:%d, number of streams is %d, reading back from %s:%d\n", sourceFileName, bhost, nRtmpPort, simStreams,
+	msg := fmt.Sprintf("Starting streaming %s (repeat %d) to %s:%d, number of streams is %d, reading back from %s:%d\n", baseManfistID, repeatNum, bhost, nRtmpPort, simStreams,
 		mhost, nMediaPort)
 	messenger.SendMessage(msg)
 	fmt.Println(msg)
@@ -131,7 +133,6 @@ func (sr *streamer) startStreams(sourceFileName, bhost, mhost string, nRtmpPort,
 
 	var wg sync.WaitGroup
 	started := make(chan interface{})
-	baseManfistID := strings.ReplaceAll(path.Base(sourceFileName), ".", "") + "_" + randName()
 	go func() {
 		for i := 0; i < int(simStreams); i++ {
 			if groupStartBy > 0 && i%groupStartBy == 0 {
@@ -139,7 +140,7 @@ func (sr *streamer) startStreams(sourceFileName, bhost, mhost string, nRtmpPort,
 				glog.Infof("Waiting for %s before starting stream %d", startDelayBetweenGroups, i)
 				time.Sleep(startDelayBetweenGroups)
 			}
-			manifesID := fmt.Sprintf("%s_%d", baseManfistID, i)
+			manifesID := fmt.Sprintf("%s_%d_%d", baseManfistID, repeatNum, i)
 			rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifesID)
 			mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifesID)
 			glog.Infof("RTMP: %s", rtmpURL)
@@ -153,7 +154,7 @@ func (sr *streamer) startStreams(sourceFileName, bhost, mhost string, nRtmpPort,
 			if measureLatency {
 				sentTimesMap = utils.NewSyncedTimesMap()
 			}
-			up := newRtmpStreamer(rtmpURL, sourceFileName, sentTimesMap, bar, done, sr.wowzaMode, nil)
+			up := newRtmpStreamer(rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, done, sr.wowzaMode, nil)
 			wg.Add(1)
 			go func() {
 				up.StartUpload(sourceFileName, rtmpURL, totalSegments, waitForTarget)
@@ -227,12 +228,12 @@ func (sr *streamer) analyzeFormatted(short, streamEnded bool) string {
 		}
 		res += dl.AnalyzeFormatted(short)
 	}
-	stats := sr.Stats()
+	stats := sr.Stats("")
 	res += "Latencies: " + stats.TranscodedLatencies.String() + "\n"
 	return res
 }
 
-func (sr *streamer) Stats() *model.Stats {
+func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 	stats := &model.Stats{
 		RTMPstreams:         len(sr.uploaders),
 		MediaStreams:        len(sr.downloaders),
@@ -240,7 +241,17 @@ func (sr *streamer) Stats() *model.Stats {
 		Finished:            true,
 		WowzaMode:           sr.wowzaMode,
 	}
-	for _, rs := range sr.uploaders {
+	sourceLatencies := utils.LatenciesCalculator{}
+	transcodedLatencies := utils.LatenciesCalculator{}
+	for i, rs := range sr.uploaders {
+		if basedManifestID != "" && rs.baseManifestID != basedManifestID {
+			continue
+		}
+		if stats.StartTime.IsZero() {
+			stats.StartTime = rs.started
+		} else if !rs.started.IsZero() && stats.StartTime.After(rs.started) {
+			stats.StartTime = rs.started
+		}
 		// Broadcaster always skips at lest first segment, and potentially more
 		stats.SentSegments += rs.counter.segments - rs.skippedSegments
 		if rs.connectionLost {
@@ -250,10 +261,7 @@ func (sr *streamer) Stats() *model.Stats {
 			stats.RTMPActiveStreams++
 			stats.Finished = false
 		}
-	}
-	sourceLatencies := utils.LatenciesCalculator{}
-	transcodedLatencies := utils.LatenciesCalculator{}
-	for _, mt := range sr.downloaders {
+		mt := sr.downloaders[i]
 		ds := mt.stats()
 		stats.DownloadedSegments += ds.success
 		stats.FailedToDownloadSegments += ds.fail

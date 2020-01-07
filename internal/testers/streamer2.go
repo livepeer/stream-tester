@@ -15,6 +15,7 @@ import (
 var IgnoreNoCodecError bool
 
 type (
+	// streamer2 is used for running continious tests against Wowza servers
 	streamer2 struct {
 		uploader   *rtmpStreamer
 		downloader *m3utester2
@@ -44,7 +45,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 
 	sm := newsementsMatcher()
 	// sr.uploader = newRtmpStreamer(rtmpIngestURL, sourceFileName, nil, nil, sr.eof, sr.wowzaMode)
-	sr.uploader = newRtmpStreamer(rtmpIngestURL, sourceFileName, nil, nil, sr.eof, false, sm)
+	sr.uploader = newRtmpStreamer(rtmpIngestURL, sourceFileName, sourceFileName, nil, nil, sr.eof, false, sm)
 	go func() {
 		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, -1, waitForTarget)
 	}()

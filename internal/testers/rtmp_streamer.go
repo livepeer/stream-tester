@@ -22,6 +22,7 @@ var segLen = 2 * time.Second
 
 // rtmpStreamer streams one video file to RTMP server
 type rtmpStreamer struct {
+	baseManifestID  string
 	ingestURL       string
 	counter         *segmentsCounter
 	skippedSegments int
@@ -32,16 +33,18 @@ type rtmpStreamer struct {
 	wowzaMode       bool
 	segmentsMatcher *segmentsMatcher
 	hasBar          bool
+	started         time.Time
 }
 
 // source is local file name for now
-func newRtmpStreamer(ingestURL, source string, sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, done chan struct{}, wowzaMode bool, sm *segmentsMatcher) *rtmpStreamer {
+func newRtmpStreamer(ingestURL, source, baseManifestID string, sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, done chan struct{}, wowzaMode bool, sm *segmentsMatcher) *rtmpStreamer {
 	return &rtmpStreamer{
 		done:            done,
 		wowzaMode:       wowzaMode,
 		ingestURL:       ingestURL,
 		counter:         newSegmentsCounter(segLen, bar, false, sentTimesMap),
 		hasBar:          bar != nil,
+		baseManifestID:  baseManifestID,
 		segmentsMatcher: sm,
 		skippedSegments: 1, // Broadcaster always skips first segment, but can skip more - this will be corrected when first
 		// segment downloaded back
@@ -154,6 +157,7 @@ func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, segmentsToStream int, wa
 	// conn, err := rtmp.Dial("rtmp://localhost:1935/" + manifestID)
 	// conn, err := rtmp.Dial(rtmpURL)
 	started := time.Now()
+	rs.started = started
 	for {
 		conn, err = rtmp.DialTimeout(rtmpURL, 4*time.Second)
 		if err != nil {

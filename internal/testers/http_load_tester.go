@@ -53,24 +53,25 @@ func (hlt *HTTPLoadTester) Stop() {
 
 // StartStreams start streaming
 func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
-	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
+	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error) {
 
 	nRtmpPort, err := strconv.Atoi(rtmpPort)
 	if err != nil {
-		return err
+		return "", err
 	}
 	nMediaPort, err := strconv.Atoi(mediaPort)
 	if err != nil {
-		return err
+		return "", err
 	}
 	showProgress := false
+	baseManifestID := strings.ReplaceAll(path.Base(sourceFileName), ".", "") + "_" + randName()
 
 	go func() {
 		for i := 0; i < int(repeat); i++ {
 			if repeat > 1 {
 				glog.Infof("Starting %d streaming session", i)
 			}
-			err := hlt.startStreams(sourceFileName, bhost, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
+			err := hlt.startStreams(baseManifestID, sourceFileName, i, bhost, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
 				streamDuration, groupStartBy, startDelayBetweenGroups, waitForTarget)
 			if err != nil {
 				glog.Fatal(err)
@@ -89,10 +90,10 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 		// 	hlt.Cancel()
 		// }
 	}()
-	return nil
+	return baseManifestID, nil
 }
 
-func (hlt *HTTPLoadTester) startStreams(sourceFileName, host string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
+func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, repeatNum int, host string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
 	measureLatency bool, stopAfter time.Duration, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
@@ -100,7 +101,6 @@ func (hlt *HTTPLoadTester) startStreams(sourceFileName, host string, nRtmpPort, 
 	messenger.SendMessage(msg)
 	fmt.Println(msg)
 	httpIngestURLTemplate := "http://%s:%d/live/%s"
-	baseManfistID := strings.ReplaceAll(path.Base(sourceFileName), ".", "") + "_" + randName()
 	var wg sync.WaitGroup
 	for i := 0; i < int(simStreams); i++ {
 		if groupStartBy > 0 && i%groupStartBy == 0 {
@@ -108,7 +108,7 @@ func (hlt *HTTPLoadTester) startStreams(sourceFileName, host string, nRtmpPort, 
 			glog.Infof("Waiting for %s before starting stream %d", startDelayBetweenGroups, i)
 			time.Sleep(startDelayBetweenGroups)
 		}
-		manifesID := fmt.Sprintf("%s_%d", baseManfistID, i)
+		manifesID := fmt.Sprintf("%s_%d_%d", baseManifestID, repeatNum, i)
 		httpIngestURL := fmt.Sprintf(httpIngestURLTemplate, host, nMediaPort, manifesID)
 		glog.Infof("HTTP ingest: %s", httpIngestURL)
 		// var bar *uiprogress.Bar
@@ -116,7 +116,7 @@ func (hlt *HTTPLoadTester) startStreams(sourceFileName, host string, nRtmpPort, 
 		// 	bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
 		// }
 
-		up := newHTTPtreamer(hlt.ctx, measureLatency)
+		up := newHTTPtreamer(hlt.ctx, measureLatency, baseManifestID)
 		wg.Add(1)
 		go func() {
 			up.StartUpload(sourceFileName, httpIngestURL, manifesID, 0, waitForTarget, stopAfter)
@@ -154,7 +154,7 @@ func (hlt *HTTPLoadTester) AnalyzeFormatted(short bool) string {
 }
 
 // Stats ...
-func (hlt *HTTPLoadTester) Stats() *model.Stats {
+func (hlt *HTTPLoadTester) Stats(basedManifestID string) *model.Stats {
 	stats := &model.Stats{
 		RTMPstreams:         len(hlt.streamers),
 		MediaStreams:        len(hlt.streamers),
@@ -164,7 +164,15 @@ func (hlt *HTTPLoadTester) Stats() *model.Stats {
 	}
 	transcodedLatencies := utils.LatenciesCalculator{}
 	for _, st := range hlt.streamers {
+		if basedManifestID != "" && st.baseManifestID != basedManifestID {
+			continue
+		}
 		ds := st.stats()
+		if stats.StartTime.IsZero() {
+			stats.StartTime = ds.started
+		} else if !ds.started.IsZero() && stats.StartTime.After(ds.started) {
+			stats.StartTime = ds.started
+		}
 		stats.SentSegments += ds.triedToSend
 		stats.DownloadedSegments += ds.success
 		stats.FailedToDownloadSegments += ds.downloadFailures
@@ -188,5 +196,8 @@ func (hlt *HTTPLoadTester) Stats() *model.Stats {
 	if stats.SentSegments > 0 {
 		stats.SuccessRate = float64(stats.DownloadedSegments) / (float64(model.ProfilesNum) * float64(stats.SentSegments)) * 100
 	}
+	stats.ShouldHaveDownloadedSegments = model.ProfilesNum * stats.SentSegments
+	stats.ProfilesNum = model.ProfilesNum
+	stats.RawTranscodedLatencies = transcodedLatencies.Raw()
 	return stats
 }

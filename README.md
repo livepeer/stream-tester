@@ -101,13 +101,16 @@ This command block until interrupted.
 It provide these REST endpoints:
 
 ---
-GET `/stats`
+GET `/stats?latencies&base_manifest_id=basemanifestid`
+
+if optional parameter `latencies` present, `/stats` will return raw latencies values
+if optional parameter `base_manifest_id` present, then stats will be filtered by that base manifest id
 
 returns object:
 ```json
 {
   "rtmp_active_streams": 1,
-  "rtm_pstreams": 1,
+  "rtmp_streams": 1,
   "media_streams": 1,
   "sent_segments": 3,
   "downloaded_segments": 7,
@@ -116,7 +119,16 @@ returns object:
   "bytes_downloaded": 2721864,
   "success_rate": 77.77777777777779,
   "connection_lost": 0,
-  "finished": false
+  "start_time": "2020-01-07T21:59:51.008881+02:00",
+  "finished": false,
+  "raw_source_latencies": [
+    79210696,
+    87020114
+  ],
+  "raw_transcoded_latencies": [
+    298718923,
+    324982522
+  ]
 }
 ```
 
@@ -149,6 +161,7 @@ Accepts object:
     "simultaneous": 1,
     "profiles_num": 2,
     "do_not_clear_stats": false,
+    "measure_latency": true,
     "http_ingest": false
 } 
 
@@ -161,7 +174,10 @@ Accepts object:
 Returns 
 
 ```json
-{"success": true}
+{
+  "success": true,
+  "base_manifest_id": "manifest_id_here"
+}
 ```
 
 Can return 404 if request contains wrong parameters.

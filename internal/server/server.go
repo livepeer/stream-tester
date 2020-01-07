@@ -47,15 +47,9 @@ func (ss *StreamerServer) StartWebServer(bindAddr string) {
 func (ss *StreamerServer) webServerHandlers(bindAddr string) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/start_streams", func(w http.ResponseWriter, r *http.Request) {
-		ss.handleStartStreams(w, r)
-	})
-	mux.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
-		ss.handleStats(w, r)
-	})
-	mux.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
-		ss.handleStop(w, r)
-	})
+	mux.HandleFunc("/start_streams", ss.handleStartStreams)
+	mux.HandleFunc("/stats", ss.handleStats)
+	mux.HandleFunc("/stop", ss.handleStop)
 	return mux
 }
 
@@ -80,12 +74,18 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	returnRawLatencies := false
+	var baseManifestID string
 	if _, ok := r.URL.Query()["latencies"]; ok {
 		returnRawLatencies = true
 	}
+	if bmids, ok := r.URL.Query()["base_manifest_id"]; ok {
+		if len(bmids) > 0 {
+			baseManifestID = bmids[0]
+		}
+	}
 	stats := &model.Stats{}
 	if ss.streamer != nil {
-		stats = ss.streamer.Stats()
+		stats = ss.streamer.Stats(baseManifestID)
 	}
 	if !returnRawLatencies {
 		stats.RawSourceLatencies = nil
@@ -170,9 +170,27 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), ssr.MHost, strconv.Itoa(ssr.Media), ssr.Simultaneous,
+	baseManifestID, err := ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), ssr.MHost, strconv.Itoa(ssr.Media), ssr.Simultaneous,
 		ssr.Repeat, streamDuration, true, ssr.MeasureLatency, true, 3, 5*time.Second, 0)
 
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(`{"success": true}`))
+	res, err := json.Marshal(
+		&model.StartStreamsRes{
+			Success:        true,
+			BaseManifestID: baseManifestID,
+		},
+	)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write(res)
+
 }
