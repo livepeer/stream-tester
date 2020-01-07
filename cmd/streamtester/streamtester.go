@@ -66,7 +66,7 @@ func main() {
 	flag.Parse()
 
 	if *version {
-		fmt.Println("Stream tester version: 0.7")
+		fmt.Println("Stream tester version: 0.8")
 		fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 		return
 	}
