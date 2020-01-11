@@ -151,17 +151,19 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			}
 			done := make(chan struct{})
 			var sentTimesMap *utils.SyncedTimesMap
+			var segmentsMatcher *segmentsMatcher
 			if measureLatency {
-				sentTimesMap = utils.NewSyncedTimesMap()
+				// sentTimesMap = utils.NewSyncedTimesMap()
+				segmentsMatcher = newsementsMatcher()
 			}
-			up := newRtmpStreamer(rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, done, sr.wowzaMode, nil)
+			up := newRtmpStreamer(rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, done, sr.wowzaMode, segmentsMatcher)
 			wg.Add(1)
 			go func() {
 				up.StartUpload(sourceFileName, rtmpURL, totalSegments, waitForTarget)
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)
-			down := newM3UTester(done, sentTimesMap, sr.wowzaMode, false, false)
+			down := newM3UTester(done, sentTimesMap, sr.wowzaMode, false, false, segmentsMatcher)
 			go findSkippedSegmentsNumber(up, down)
 			sr.downloaders = append(sr.downloaders, down)
 			down.Start(mediaURL)
@@ -268,13 +270,20 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 		stats.BytesDownloaded += ds.bytes
 		stats.Retries += ds.retries
 		stats.Gaps += ds.gaps
-		if mt.sentTimesMap != nil {
+		if mt.segmentsMatcher != nil {
 			for _, md := range mt.downloads {
+				md.mu.Lock()
+				lcp := make([]time.Duration, len(md.latencies), len(md.latencies))
+				copy(lcp, md.latencies)
 				if md.source {
-					sourceLatencies.Add(md.latencies)
+					sourceLatencies.Add(lcp)
 				} else {
-					transcodedLatencies.Add(md.latencies)
+					transcodedLatencies.Add(lcp)
+					lcp := make([]time.Duration, len(md.latenciesPerStream))
+					copy(lcp, md.latenciesPerStream)
+					stats.RawTranscodeLatenciesPerStream = append(stats.RawTranscodeLatenciesPerStream, lcp)
 				}
+				md.mu.Unlock()
 			}
 		}
 	}

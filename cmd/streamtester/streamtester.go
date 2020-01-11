@@ -56,6 +56,7 @@ func main() {
 	ignoreGaps := flag.Bool("ignore-gaps", false, "Do not stop streaming if gaps found")
 	ignoreTimeDrift := flag.Bool("ignore-time-drift", false, "Do not stop streaming if time drift detected")
 	httpIngest := flag.Bool("http-ingest", false, "Use Livepeer HTTP HLS ingest")
+	fileArg := flag.String("file", "", "File to stream")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -90,6 +91,9 @@ func main() {
 	fn := "official_test_source_2s_keys_24pfs.mp4"
 	if len(flag.Args()) > 0 {
 		fn = flag.Arg(0)
+	}
+	if *fileArg != "" {
+		fn = *fileArg
 	}
 	model.ProfilesNum = *profiles
 	var err error

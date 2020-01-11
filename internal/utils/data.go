@@ -180,7 +180,7 @@ func NewSyncedTimesMap() *SyncedTimesMap {
 
 // SetTime sets time
 func (stp *SyncedTimesMap) SetTime(mark time.Duration, t time.Time) {
-	m := mark / (time.Millisecond * 100)
+	m := mark / (time.Millisecond * 500)
 	stp.m.Lock()
 	stp.times[m] = t
 	stp.m.Unlock()
@@ -190,7 +190,7 @@ func (stp *SyncedTimesMap) SetTime(mark time.Duration, t time.Time) {
 func (stp *SyncedTimesMap) GetTime(mark time.Duration, name string) (time.Time, bool) {
 	// glog.Infof("=== get for name %s", name)
 	_, file := path.Split(name)
-	m := mark / (time.Millisecond * 100)
+	m := mark / (time.Millisecond * 500)
 	// stp.m.RLock()
 	stp.m.Lock()
 	t, h := stp.times[m]

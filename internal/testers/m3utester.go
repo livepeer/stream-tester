@@ -46,6 +46,7 @@ type m3utester struct {
 	startTime        time.Time
 	done             <-chan struct{} // signals to stop
 	sentTimesMap     *utils.SyncedTimesMap
+	segmentsMatcher  *segmentsMatcher
 	downloadResults  fullDownloadResultsMap
 	fullResultsCh    chan fullDownloadResult
 	dm               sync.Mutex
@@ -131,7 +132,7 @@ func (p downloadResultsBySeq) findByMySeqNo(seqNo uint64) *downloadResult {
 }
 
 // newM3UTester ...
-func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, infiniteMode, save bool) *m3utester {
+func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, infiniteMode, save bool, sm *segmentsMatcher) *m3utester {
 	t := &m3utester{
 		downloads:       make(map[string]*mediaDownloader),
 		done:            done,
@@ -139,6 +140,7 @@ func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowz
 		wowzaMode:       wowzaMode,
 		infiniteMode:    infiniteMode,
 		save:            save,
+		segmentsMatcher: sm,
 		downloadResults: make(map[string]*fullDownloadResults),
 		fullResultsCh:   make(chan fullDownloadResult, 16),
 	}
@@ -640,7 +642,7 @@ func (mt *m3utester) downloadLoop() {
 				// variantID := strconv.Itoa(variant.Bandwidth) + variant.Resolution
 				mt.mu.Lock()
 				if _, ok := mt.downloads[mediaURL]; !ok {
-					md := newMediaDownloader(variant.URI, mediaURL, variant.Resolution, mt.done, mt.sentTimesMap, mt.wowzaMode, mt.save, mt.fullResultsCh, mt.saveDirName)
+					md := newMediaDownloader(variant.URI, mediaURL, variant.Resolution, mt.done, mt.sentTimesMap, mt.wowzaMode, mt.save, mt.fullResultsCh, mt.saveDirName, mt.segmentsMatcher)
 					mt.downloads[mediaURL] = md
 					// md.source = strings.Contains(mediaURL, "source")
 					md.source = i == 0
@@ -703,7 +705,8 @@ type mediaDownloader struct {
 	firstSegmentTime   time.Duration
 	done               <-chan struct{} // signals to stop
 	sentTimesMap       *utils.SyncedTimesMap
-	latencies          []time.Duration
+	latencies          []time.Duration // latencies stored as segments get downloaded
+	latenciesPerStream []time.Duration // here index is seqNo, so if segment is failed download then value will be zero
 	source             bool
 	wowzaMode          bool
 	saveSegmentsToDisk bool
@@ -712,19 +715,21 @@ type mediaDownloader struct {
 	saveDir            string
 	livepeerNameSchema bool
 	fullResultsCh      chan fullDownloadResult
+	segmentsMatcher    *segmentsMatcher
 }
 
 func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan fullDownloadResult,
-	baseSaveDir string) *mediaDownloader {
+	baseSaveDir string, sm *segmentsMatcher) *mediaDownloader {
 	pu, err := url.Parse(u)
 	if err != nil {
 		glog.Fatal(err)
 	}
 	md := &mediaDownloader{
-		name:       name,
-		u:          pu,
-		resolution: resolution,
-		downTasks:  make(chan downloadTask, 16),
+		name:            name,
+		u:               pu,
+		resolution:      resolution,
+		segmentsMatcher: sm,
+		downTasks:       make(chan downloadTask, 16),
 		stats: downloadStats{
 			errors: make(map[string]int),
 		},
@@ -839,19 +844,46 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			md.firstSegmentParsed = true
 			md.firstSegmentTime = fst
 		}
-		if md.sentTimesMap != nil {
-			fsttim, err := utils.GetVideoStartTime(b)
+		if md.segmentsMatcher != nil {
+			fsttim, dur, err := utils.GetVideoStartTimeAndDur(b)
 			if err != nil {
 				if err != io.EOF {
 					glog.Fatal(err)
 				}
 			} else {
-				var latency time.Duration
-				if st, has := md.sentTimesMap.GetTime(fsttim, fsurl); has {
-					latency = now.Sub(st)
-					md.latencies = append(md.latencies, latency)
+				latency, speedRatio, merr := md.segmentsMatcher.matchSegment(fsttim, dur, now)
+				src := "    source"
+				if !md.source {
+					src = "transcoded"
 				}
-				// glog.Infof("== downloaded segment seqNo %d segment start time %s latency %s current time %s", task.seqNo, fsttim, latency, now)
+				glog.V(model.DEBUG).Infof("== downloaded %s seqNo %d start time %s lat %s now %s speed ratio %v merr %v", src, task.seqNo, fsttim, latency, now, speedRatio, merr)
+				if merr == nil {
+					md.mu.Lock()
+					md.latencies = append(md.latencies, latency)
+					for len(md.latenciesPerStream) <= int(task.seqNo) {
+						md.latenciesPerStream = append(md.latenciesPerStream, 0)
+					}
+					md.latenciesPerStream[task.seqNo] = latency
+					glog.V(model.VVERBOSE).Infof("lat: %+v", md.latenciesPerStream)
+					md.mu.Unlock()
+				}
+				/*
+					var st time.Time
+					var has bool
+					if st, has = md.sentTimesMap.GetTime(fsttim, fsurl); has {
+						latency = now.Sub(st)
+						md.latencies = append(md.latencies, latency)
+						md.mu.Lock()
+						for len(md.latenciesPerStream) <= int(task.seqNo) {
+							md.latenciesPerStream = append(md.latenciesPerStream, 0)
+						}
+						md.latenciesPerStream[task.seqNo] = latency
+						md.mu.Unlock()
+					}
+					latency2, speedRatio, merr := md.segmentsMatcher.matchSegment(fsttim, dur, now)
+					glog.Infof("== downloaded %s seqNo %d start time %s lat %s mlat %s now %s lat found %v sr %v merr %v",
+						src, task.seqNo, fsttim, latency, latency2, now, has, speedRatio, merr)
+				*/
 			}
 		}
 
@@ -967,8 +999,10 @@ func (md *mediaDownloader) downloadLoop() {
 			time.Sleep(time.Second)
 			continue
 		}
-		// fmt.Println("-----################")
-		// fmt.Println(string(b))
+		// if !md.source {
+		// 	fmt.Println("-----################")
+		// 	fmt.Println(string(b))
+		// }
 		// glog.Infoln("-----################")
 		// glog.Infoln(string(b))
 		// err = mpl.DecodeFrom(resp.Body, true)
@@ -982,8 +1016,8 @@ func (md *mediaDownloader) downloadLoop() {
 		if err != nil {
 			glog.Fatal(err)
 		}
-		glog.V(model.VERBOSE).Infof("Got media playlist %s with %d (really %d) segments of url %s:", md.resolution, len(pl.Segments), countSegments(pl), surl)
-		glog.V(model.VERBOSE).Info(pl)
+		glog.V(model.INSANE).Infof("Got media playlist %s with %d (really %d) segments of url %s:", md.resolution, len(pl.Segments), countSegments(pl), surl)
+		glog.V(model.INSANE).Info(pl)
 		if !gotManifest && md.saveSegmentsToDisk {
 			md.savePlayList.TargetDuration = pl.TargetDuration
 			md.savePlayList.SeqNo = pl.SeqNo
@@ -1004,7 +1038,16 @@ func (md *mediaDownloader) downloadLoop() {
 				}
 				seen.Add(segment.URI)
 				mySeqNo++
-				md.downTasks <- downloadTask{url: segment.URI, seqNo: pl.SeqNo + uint64(i), title: segment.Title, duration: segment.Duration, mySeqNo: mySeqNo, appTime: now}
+				seqNo := pl.SeqNo + uint64(i)
+				// attempt to parse seqNo from file name
+				_, fn := path.Split(segment.URI)
+				ext := path.Ext(fn)
+				fn = strings.TrimSuffix(fn, ext)
+				parsedSeq, err := strconv.ParseUint(fn, 10, 64)
+				if err == nil {
+					seqNo = parsedSeq
+				}
+				md.downTasks <- downloadTask{url: segment.URI, seqNo: seqNo, title: segment.Title, duration: segment.Duration, mySeqNo: mySeqNo, appTime: now}
 				now = now.Add(time.Millisecond)
 				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
 			}

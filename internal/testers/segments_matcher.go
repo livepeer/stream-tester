@@ -103,11 +103,11 @@ func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDur
 }
 
 func (sm *segmentsMatcher) cleanup() {
-	glog.Infof(`segments matcher cleanup start len %d`, len(sm.sentFrames))
+	glog.V(model.VVERBOSE).Infof(`segments matcher cleanup start len %d`, len(sm.sentFrames))
 	// sm.mu.Lock()
 	// glog.Infof(`segments matcher cleanup start len %d 2`, len(sm.sentFrames))
 	defer func() {
-		glog.Infof(`segments matcher cleanup start len %d end`, len(sm.sentFrames))
+		glog.V(model.VVERBOSE).Infof(`segments matcher cleanup start len %d end`, len(sm.sentFrames))
 	}()
 	// defer sm.mu.Unlock()
 	if len(sm.sentFrames) == 0 {
@@ -122,7 +122,7 @@ func (sm *segmentsMatcher) cleanup() {
 			break
 		}
 	}
-	glog.Infof(`segments matcher cleanup  len %d until %d`, len(sm.sentFrames), until)
+	glog.V(model.VVERBOSE).Infof(`segments matcher cleanup  len %d until %d`, len(sm.sentFrames), until)
 	if until > 0 {
 		sm.sentFrames = sm.sentFrames[until:]
 	}

@@ -8,9 +8,11 @@ import (
 )
 
 const (
-	SHORT   = 4
-	DEBUG   = 5
-	VERBOSE = 6
+	SHORT    = 4
+	DEBUG    = 5
+	VERBOSE  = 6
+	VVERBOSE = 7
+	INSANE   = 12
 )
 
 // ProfilesNum number of transcoding profiles
@@ -52,28 +54,29 @@ type Latencies struct {
 
 // Stats represents global test statistics
 type Stats struct {
-	RTMPActiveStreams            int             `json:"rtmp_active_streams"` // number of active RTMP streams
-	RTMPstreams                  int             `json:"rtmp_streams"`        // number of RTMP streams
-	MediaStreams                 int             `json:"media_streams"`       // number of media streams
-	TotalSegmentsToSend          int             `json:"total_segments_to_send"`
-	SentSegments                 int             `json:"sent_segments"`
-	DownloadedSegments           int             `json:"downloaded_segments"`
-	ShouldHaveDownloadedSegments int             `json:"should_have_downloaded_segments"`
-	FailedToDownloadSegments     int             `json:"failed_to_download_segments"`
-	BytesDownloaded              int64           `json:"bytes_downloaded"`
-	Retries                      int             `json:"retries"`
-	SuccessRate                  float64         `json:"success_rate"` // DownloadedSegments/profilesNum*SentSegments
-	ConnectionLost               int             `json:"connection_lost"`
-	Finished                     bool            `json:"finished"`
-	ProfilesNum                  int             `json:"profiles_num"`
-	SourceLatencies              Latencies       `json:"source_latencies"`
-	TranscodedLatencies          Latencies       `json:"transcoded_latencies"`
-	RawSourceLatencies           []time.Duration `json:"raw_source_latencies"`
-	RawTranscodedLatencies       []time.Duration `json:"raw_transcoded_latencies"`
-	WowzaMode                    bool            `json:"wowza_mode"`
-	Gaps                         int             `json:"gaps"`
-	StartTime                    time.Time       `json:"start_time"`
-	Errors                       map[string]int  `json:"errors"`
+	RTMPActiveStreams              int               `json:"rtmp_active_streams"` // number of active RTMP streams
+	RTMPstreams                    int               `json:"rtmp_streams"`        // number of RTMP streams
+	MediaStreams                   int               `json:"media_streams"`       // number of media streams
+	TotalSegmentsToSend            int               `json:"total_segments_to_send"`
+	SentSegments                   int               `json:"sent_segments"`
+	DownloadedSegments             int               `json:"downloaded_segments"`
+	ShouldHaveDownloadedSegments   int               `json:"should_have_downloaded_segments"`
+	FailedToDownloadSegments       int               `json:"failed_to_download_segments"`
+	BytesDownloaded                int64             `json:"bytes_downloaded"`
+	Retries                        int               `json:"retries"`
+	SuccessRate                    float64           `json:"success_rate"` // DownloadedSegments/profilesNum*SentSegments
+	ConnectionLost                 int               `json:"connection_lost"`
+	Finished                       bool              `json:"finished"`
+	ProfilesNum                    int               `json:"profiles_num"`
+	SourceLatencies                Latencies         `json:"source_latencies"`
+	TranscodedLatencies            Latencies         `json:"transcoded_latencies"`
+	RawSourceLatencies             []time.Duration   `json:"raw_source_latencies"`
+	RawTranscodedLatencies         []time.Duration   `json:"raw_transcoded_latencies"`
+	RawTranscodeLatenciesPerStream [][]time.Duration `json:"raw_transcode_latencies_per_stream"`
+	WowzaMode                      bool              `json:"wowza_mode"`
+	Gaps                           int               `json:"gaps"`
+	StartTime                      time.Time         `json:"start_time"`
+	Errors                         map[string]int    `json:"errors"`
 }
 
 // REST requests
@@ -120,6 +123,12 @@ Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams,
 		st.ShouldHaveDownloadedSegments, st.Retries, st.SuccessRate, st.ConnectionLost, st.SourceLatencies.String(), st.TranscodedLatencies.String(), st.BytesDownloaded)
 	if len(st.Errors) > 0 {
 		r = fmt.Sprintf("%s\nErrors: %+v\n", r, st.Errors)
+	}
+	if len(st.RawTranscodeLatenciesPerStream) > 0 {
+		r += "\nTranscode latencies per stream:\n"
+		for _, rtl := range st.RawTranscodeLatenciesPerStream {
+			r += fmt.Sprintf("%+v\n", rtl)
+		}
 	}
 	return r
 }
