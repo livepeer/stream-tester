@@ -14,6 +14,15 @@ First one is for (load) testing Livepeer Broadcaster and second one was develope
 ## Binaries
 Automatically built binaries can be found on [releases](https://github.com/livepeer/stream-tester/releases) page.
 
+## Video test files
+[official_test_source_2s_keys_24pfs.mp4](https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs.mp4)
+
+[official_test_source_2s_keys_24pfs_3min.mp4](https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_3min.mp4)
+
+[bbb_sunflower_1080p_30fps_normal_t02.mp4](https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_t02.mp4)
+
+[bbb_sunflower_1080p_30fps_normal_2min.mp4](https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_2min.mp4)
+
 
 
 ## Command line
@@ -22,12 +31,14 @@ If name of the file to stream is not specified, then default one - `official_tes
 
 All options can be put into config file and used like `./streamtester -config local.cfg`
 
+Config file example: [local.cfg](local.cfg)
+
 ### Load testing mode
 
 Streams file to its end, or for the time specified. Can stream arbitrary number of streams simultaneously and repeat streaming any number of times. Counts number of segments streamed and number of segments that was readed back. Reports success rate (readed segments / segments should have been readed). Calculate transcode latency (should be enabled from command line).
 
 Usage:
-`./streamtester -host localhost -rtmp 1935 -media 8935 -profiles 2 -repeat 1 -sim 1 file_to_stream.mp4`
+`./streamtester -host localhost -rtmp 1935 -media 8935 -profiles 2 -repeat 1 -sim 1 -file file_to_stream.mp4`
 
 
 Params:
@@ -42,6 +53,7 @@ Params:
  - `-latency` Measure transcoding latency
  - `-time` Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option
  - `-http-ingest` Use HTTP push instead of RTMP
+ - `-file` Name of the file to stream
 
 ### Infinite stream testing mode
 In this mode Stream Tester streams video to RTMP ingest point and read HLS stream back. Streaming is stopped only on error, so it will be infinite if transcoding is done ideally.
@@ -58,7 +70,7 @@ Stops streaming if there is no new segments in HLS stream for a 30 seconds.
 
 
 Usage:
-`./streamtester -ignore-time-drift -ignore-gaps -wowza -wait-for-target 150s -media-url http://site.com:1935/something.m3u8 -rtmp-url rtmp://site.com:1935/something -profiles 3   file_to_stream.mp4`
+`./streamtester -ignore-time-drift -ignore-gaps -wowza -wait-for-target 150s -media-url http://site.com:1935/something.m3u8 -rtmp-url rtmp://site.com:1935/something -profiles 3   -file file_to_stream.mp4`
 
 
 Params:
@@ -76,6 +88,7 @@ Params:
  - `discord-user-name` User name to use when sending messages to Discord
  - `gsbucket` Google Storage bucket (to store segments that was not successfully parsed)
  - `gskey` Google Storage private key (in json format (actual key, not file name))
+ - `-file` Name of the file to stream
 
 ### Infinite HLS pull testing mode
 In this mode Stream Tester pulls arbitrary HLS stream and runs same checks as in previous mode.
