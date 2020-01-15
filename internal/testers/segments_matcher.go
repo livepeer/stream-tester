@@ -78,7 +78,7 @@ func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDur
 		}
 		lastPaket = pkt
 	}
-	glog.V(model.VERBOSE).Infof(`cur packet: %s`, curPacket.String())
+	glog.V(model.VERBOSE).Infof(`looking for %s cur packet: %s last packet %s startInd %d`, firstPaketsPTS, curPacket.String(), lastPaket.String(), startInd)
 	// for i, pkt := range sm.sentFrames {
 	// 	glog.Info(i, pkt.String())
 	// }
@@ -90,12 +90,13 @@ func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDur
 	}
 	for i := startInd; i < len(sentFrames); i++ {
 		pkt := sentFrames[i]
-		if pkt.pts > firstPaketsPTS+segmentDuration {
+		if pkt.pts > firstPaketsPTS+segmentDuration && pkt.isKeyFrame {
 			break
 		}
 		lastPaket = pkt
 	}
 	latency := receivedAt.Sub(lastPaket.sentAt)
+	glog.V(model.VERBOSE).Infof(`last packet %s sent at %s received at %s latency %s`, lastPaket.String(), lastPaket.sentAt, receivedAt, latency)
 	if atomic.AddInt64(&sm.reqs, 1)%16 == 0 {
 		sm.cleanup()
 	}

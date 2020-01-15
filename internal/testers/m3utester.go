@@ -729,7 +729,7 @@ func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTi
 		u:               pu,
 		resolution:      resolution,
 		segmentsMatcher: sm,
-		downTasks:       make(chan downloadTask, 16),
+		downTasks:       make(chan downloadTask, 256),
 		stats: downloadStats{
 			errors: make(map[string]int),
 		},
@@ -1053,8 +1053,8 @@ func (md *mediaDownloader) downloadLoop() {
 			}
 		}
 		delay := 1 * time.Second
-		if md.sentTimesMap != nil {
-			delay = 250 * time.Millisecond
+		if md.sentTimesMap != nil || md.segmentsMatcher != nil {
+			delay = 100 * time.Millisecond
 		}
 		time.Sleep(delay)
 	}
