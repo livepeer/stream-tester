@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"golang.org/x/text/message"
@@ -127,7 +128,7 @@ Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams,
 	if len(st.RawTranscodeLatenciesPerStream) > 0 {
 		r += "\nTranscode latencies per stream:\n"
 		for _, rtl := range st.RawTranscodeLatenciesPerStream {
-			r += fmt.Sprintf("%+v\n", rtl)
+			r += formatLatenciesSlice(rtl) + "\n"
 		}
 	}
 	return r
@@ -136,4 +137,19 @@ Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams,
 func (ls *Latencies) String() string {
 	r := fmt.Sprintf(`{Average: %s, P50: %s, P95: %s, P99: %s}`, ls.Avg, ls.P50, ls.P95, ls.P99)
 	return r
+}
+
+func formatLatenciesSlice(lat []time.Duration) string {
+	var buf []string
+	if len(lat) < 17 {
+		return fmt.Sprintf("%+v", lat)
+	}
+	for i := 0; i < 8; i++ {
+		buf = append(buf, fmt.Sprintf("%s", lat[i]))
+	}
+	buf = append(buf, "...")
+	for i := len(lat) - 9; i < len(lat); i++ {
+		buf = append(buf, fmt.Sprintf("%s", lat[i]))
+	}
+	return "[" + strings.Join(buf, " ") + "]"
 }
