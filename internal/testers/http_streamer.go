@@ -272,8 +272,13 @@ func (hs *httpStreamer) stats() httpStats {
 
 func (hs *httpStats) clone() httpStats {
 	r := *hs
+	r.errors = make(map[string]int)
 	for e, i := range hs.errors {
 		r.errors[e] = i
+	}
+	if len(hs.latencies) > 0 {
+		r.latencies = make([]time.Duration, len(hs.latencies))
+		copy(r.latencies, hs.latencies)
 	}
 	return r
 }
