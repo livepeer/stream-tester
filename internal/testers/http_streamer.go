@@ -146,7 +146,9 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		return
 	}
 	if hs.saveLatencies {
+		hs.mu.Lock()
 		hs.dstats.latencies = append(hs.dstats.latencies, postTook)
+		hs.mu.Unlock()
 	}
 	started := time.Now()
 	mediaType, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
@@ -223,6 +225,8 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 				hs.mu.Lock()
 				hs.dstats.errors["Video parsing error"] = hs.dstats.errors["Video parsing error"] + 1
 				hs.mu.Unlock()
+				glog.Infof("Data:\n%x", tseg)
+				glog.Infof("Data as string:\n%s", string(tseg))
 				panic(msg)
 			}
 			glog.V(model.VERBOSE).Infof("Got back manifest %s seg seq %d profile %d len %d bytes pts %s dur %s (source duration is %s)", manifestID, seg.seqNo, i, len(tseg), fsttim, dur, seg.duration)
