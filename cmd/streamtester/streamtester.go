@@ -14,7 +14,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/format"
-	"github.com/livepeer/stream-tester/internal/messenger"
+	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"

@@ -13,7 +13,7 @@ import (
 	"github.com/livepeer/joy4/av/avutil"
 	"github.com/livepeer/joy4/av/pktque"
 	"github.com/livepeer/joy4/format/rtmp"
-	"github.com/livepeer/stream-tester/internal/messenger"
+	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/utils"
 )

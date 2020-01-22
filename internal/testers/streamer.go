@@ -12,7 +12,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/gosuri/uiprogress"
 
-	"github.com/livepeer/stream-tester/internal/messenger"
+	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/utils"
 )
