@@ -35,6 +35,7 @@ func Init(WebhookURL, UserName, UsersToNotify string) {
 }
 
 // SendFatalMessage send message to Discord channel
+// and automatically mentiones UsersToNotify in the message
 func SendFatalMessage(msg string) {
 	glog.Error(msg)
 	if usersToNotify != "" {
