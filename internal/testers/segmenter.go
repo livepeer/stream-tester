@@ -14,7 +14,7 @@ import (
 	"github.com/livepeer/joy4/av/pktque"
 	"github.com/livepeer/joy4/format/ts"
 	"github.com/livepeer/joy4/jerrors"
-	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/model"
 )
 
 // segmenter take video file and cuts it into .ts segments

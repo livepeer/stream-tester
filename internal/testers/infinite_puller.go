@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/livepeer/stream-tester/internal/messenger"
-	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/model"
 )
 
 type infinitePuller struct {

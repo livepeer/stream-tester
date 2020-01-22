@@ -6,7 +6,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/gosuri/uiprogress"
 	"github.com/livepeer/joy4/av"
-	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/utils"
 )
 

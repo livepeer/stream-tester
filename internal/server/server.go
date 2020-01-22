@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/testers"
 )
 

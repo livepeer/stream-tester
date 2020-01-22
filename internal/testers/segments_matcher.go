@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/av"
-	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/model"
 )
 
 type (

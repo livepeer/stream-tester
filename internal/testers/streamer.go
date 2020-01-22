@@ -13,7 +13,7 @@ import (
 	"github.com/gosuri/uiprogress"
 
 	"github.com/livepeer/stream-tester/internal/messenger"
-	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/utils"
 )
 

@@ -16,7 +16,7 @@ import (
 	"github.com/livepeer/joy4/jerrors"
 	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/messenger"
-	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/utils"
 )
 

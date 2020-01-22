@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/format/ts"
-	"github.com/livepeer/stream-tester/internal/model"
+	"github.com/livepeer/stream-tester/model"
 )
 
 // GetVideoStartTime returns timestamp of first frame of `ts` segment
