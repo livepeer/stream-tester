@@ -15,6 +15,8 @@ RUN go mod download
 
 COPY cmd cmd 
 COPY internal internal
+COPY model model
+COPY messenger messenger
 
 RUN go build cmd/streamtester/streamtester.go
 
