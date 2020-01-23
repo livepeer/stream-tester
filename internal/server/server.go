@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/testers"
+	"github.com/livepeer/stream-tester/model"
 )
 
 // StreamerServer implements web server, to be used in test harness
@@ -171,7 +171,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	baseManifestID, err := ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(ssr.RTMP), ssr.MHost, strconv.Itoa(ssr.Media), ssr.Simultaneous,
+	baseManifestID, err := ss.streamer.StartStreams(ssr.FileName, ssr.Host, strconv.Itoa(int(ssr.RTMP)), ssr.MHost, strconv.Itoa(int(ssr.Media)), ssr.Simultaneous,
 		ssr.Repeat, streamDuration, true, ssr.MeasureLatency, true, 3, 5*time.Second, 0)
 
 	if err != nil {
