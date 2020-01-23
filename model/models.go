@@ -19,6 +19,9 @@ const (
 // ProfilesNum number of transcoding profiles
 var ProfilesNum = 2
 
+// FailHardOnBadSegments if true then panic if can't parse downloaded segments
+var FailHardOnBadSegments bool
+
 // InfinitePuller interface
 type InfinitePuller interface {
 	// Start blocks

@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
-	"github.com/livepeer/stream-tester/internal/utils"
 )
 
 // Uploader draft for common interface for both RTMP and HTTP uploaders
@@ -225,12 +225,14 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 				hs.mu.Lock()
 				hs.dstats.errors["Video parsing error"] = hs.dstats.errors["Video parsing error"] + 1
 				hs.mu.Unlock()
-				fname := fmt.Sprintf("bad_video_%s_%d_%d", manifestID, seg.seqNo, i)
-				ioutil.WriteFile(fname, tseg, 0644)
-				glog.Infof("Wrote bad segment to '%s'", fname)
-				glog.Infof("Data:\n%x", tseg)
-				glog.Infof("Data as string:\n%s", string(tseg))
-				panic(msg)
+				if model.FailHardOnBadSegments {
+					fname := fmt.Sprintf("bad_video_%s_%d_%d.ts", manifestID, seg.seqNo, i)
+					ioutil.WriteFile(fname, tseg, 0644)
+					glog.Infof("Wrote bad segment to '%s'", fname)
+					// glog.Infof("Data:\n%x", tseg)
+					// glog.Infof("Data as string:\n%s", string(tseg))
+					panic(msg)
+				}
 			}
 			glog.V(model.VERBOSE).Infof("Got back manifest %s seg seq %d profile %d len %d bytes pts %s dur %s (source duration is %s)", manifestID, seg.seqNo, i, len(tseg), fsttim, dur, seg.duration)
 			if savePrefix != "" {

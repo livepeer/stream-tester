@@ -18,8 +18,8 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/m3u8"
-	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/utils"
+	"github.com/livepeer/stream-tester/model"
 )
 
 // HTTPTimeout http timeout downloading manifests/segments
@@ -833,7 +833,14 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 		}
 		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(b)
 		if verr != nil {
-			glog.Errorf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
+			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
+			glog.Error(msg)
+			if model.FailHardOnBadSegments {
+				fname := fmt.Sprintf("bad_video_%s_%d.ts", md.name, task.seqNo)
+				ioutil.WriteFile(fname, b, 0644)
+				glog.Infof("Wrote bad segment to '%s'", fname)
+				panic(err)
+			}
 		}
 		glog.V(model.DEBUG).Infof("Download %s result: %s len %d timeStart %s segment duration %s", fsurl, resp.Status, len(b), fsttim, dur)
 		if !md.firstSegmentParsed && task.seqNo == 0 {

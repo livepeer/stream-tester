@@ -14,10 +14,10 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/format"
-	"github.com/livepeer/stream-tester/messenger"
-	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"
+	"github.com/livepeer/stream-tester/messenger"
+	"github.com/livepeer/stream-tester/model"
 )
 
 func init() {
@@ -57,6 +57,7 @@ func main() {
 	ignoreTimeDrift := flag.Bool("ignore-time-drift", false, "Do not stop streaming if time drift detected")
 	httpIngest := flag.Bool("http-ingest", false, "Use Livepeer HTTP HLS ingest")
 	fileArg := flag.String("file", "", "File to stream")
+	failHard := flag.Bool("fail-hard", false, "Panic if can't parse downloaded segments")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -96,6 +97,7 @@ func main() {
 		fn = *fileArg
 	}
 	model.ProfilesNum = *profiles
+	model.FailHardOnBadSegments = *failHard
 	var err error
 	var waitForDur time.Duration
 	if *waitForTarget != "" {
