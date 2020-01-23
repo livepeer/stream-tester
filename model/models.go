@@ -87,8 +87,8 @@ type StartStreamsReq struct {
 	FileName        string `json:"file_name"`
 	Host            string `json:"host"`
 	MHost           string `json:"media_host"`
-	RTMP            int    `json:"rtmp"`
-	Media           int    `json:"media"`
+	RTMP            uint16 `json:"rtmp"`
+	Media           uint16 `json:"media"`
 	Repeat          uint   `json:"repeat"`
 	Simultaneous    uint   `json:"simultaneous"`
 	Time            string `json:"time"`
@@ -125,12 +125,14 @@ Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams,
 	if len(st.Errors) > 0 {
 		r = fmt.Sprintf("%s\nErrors: %+v\n", r, st.Errors)
 	}
+	/* disable temporarily
 	if len(st.RawTranscodeLatenciesPerStream) > 0 {
 		r += "\nTranscode latencies per stream:\n"
 		for _, rtl := range st.RawTranscodeLatenciesPerStream {
 			r += formatLatenciesSlice(rtl) + "\n"
 		}
 	}
+	*/
 	return r
 }
 
