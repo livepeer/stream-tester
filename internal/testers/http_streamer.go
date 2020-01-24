@@ -1,6 +1,7 @@
 package testers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -10,12 +11,14 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
@@ -67,10 +70,65 @@ func (hs *httpStreamer) Stop() {
 // var savePrefix = "segmented3"
 var savePrefix = ""
 
+func pushHLSSegments(ctx context.Context, manifestFileName string, stopAfter time.Duration, out chan *hlsSegment) error {
+	f, err := os.Open(manifestFileName)
+	if err != nil {
+		return err
+	}
+	p, _, err := m3u8.DecodeFrom(bufio.NewReader(f), true)
+	if err != nil {
+		return err
+	}
+	f.Close()
+	pl, ok := p.(*m3u8.MediaPlaylist)
+	if !ok {
+		return fmt.Errorf("Expecting media PL")
+	}
+	dir := path.Dir(manifestFileName)
+	go pushHLSSegmentsLoop(dir, pl, stopAfter, out)
+	return nil
+}
+
+func pushHLSSegmentsLoop(dir string, pl *m3u8.MediaPlaylist, stopAfter time.Duration, out chan *hlsSegment) {
+	for i, seg := range pl.Segments {
+		if seg == nil {
+			continue
+		}
+		segData, err := ioutil.ReadFile(path.Join(dir, seg.URI))
+		if err != nil {
+			out <- &hlsSegment{err: err}
+			return
+		}
+		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(segData)
+		if verr != nil {
+			out <- &hlsSegment{err: verr}
+			return
+		}
+		hseg := &hlsSegment{
+			seqNo:    i,
+			pts:      fsttim,
+			data:     segData,
+			duration: dur,
+		}
+		time.Sleep(dur)
+		out <- hseg
+		if stopAfter > 0 && fsttim > stopAfter {
+			break
+		}
+	}
+	out <- &hlsSegment{err: io.EOF}
+}
+
 // StartUpload starts HTTP segments. Blocks until end.
 func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToStream int, waitForTarget, stopAfter time.Duration) {
 	segmentsIn := make(chan *hlsSegment)
-	err := startSegmenting(hs.ctx, fn, true, stopAfter, segmentsIn)
+	var err error
+	ext := path.Ext(fn)
+	if ext == ".m3u8" {
+		err = pushHLSSegments(hs.ctx, fn, stopAfter, segmentsIn)
+	} else {
+		err = startSegmenting(hs.ctx, fn, true, stopAfter, segmentsIn)
+	}
 	if err != nil {
 		glog.Infof("Error starting segmenter: %v", err)
 		panic(err)
@@ -143,6 +201,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.dstats.transcodeFailures++
 		hs.dstats.errors[string(b)] = hs.dstats.errors[string(b)] + 1
 		hs.mu.Unlock()
+		glog.V(model.DEBUG).Infof("Got manifest %s resp status %s error in body $%s", manifestID, resp.Status, string(b))
 		return
 	}
 	if hs.saveLatencies {
