@@ -21,12 +21,13 @@ type (
 		downloader *m3utester2
 		eof        chan struct{}
 		wowzaMode  bool
+		mistMode   bool
 	}
 )
 
 // NewStreamer2 returns new streamer2
-func NewStreamer2(wowzaMode bool) model.Streamer2 {
-	return &streamer2{eof: make(chan struct{}), wowzaMode: wowzaMode}
+func NewStreamer2(wowzaMode, mistMode bool) model.Streamer2 {
+	return &streamer2{eof: make(chan struct{}), wowzaMode: wowzaMode, mistMode: mistMode}
 }
 
 // StartStreaming starts streaming into rtmpIngestURL and reading back from mediaURL.
@@ -49,7 +50,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	go func() {
 		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, -1, waitForTarget)
 	}()
-	sr.downloader = newM3utester2(mediaURL, sr.wowzaMode, sr.eof, waitForTarget, sm) // starts to download at creation
+	sr.downloader = newM3utester2(mediaURL, sr.wowzaMode, sr.mistMode, sr.eof, waitForTarget, sm) // starts to download at creation
 	started := time.Now()
 	<-sr.eof
 	msg := fmt.Sprintf(`Streaming stopped after %s`, time.Since(started))
@@ -58,7 +59,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 
 // StartPulling pull arbitrary HLS stream and report found errors
 func (sr *streamer2) StartPulling(mediaURL string) {
-	sr.downloader = newM3utester2(mediaURL, sr.wowzaMode, sr.eof, 0, nil) // starts to download at creation
+	sr.downloader = newM3utester2(mediaURL, sr.wowzaMode, sr.mistMode, sr.eof, 0, nil) // starts to download at creation
 	started := time.Now()
 	<-sr.eof
 	msg := fmt.Sprintf(`Streaming stopped after %s`, time.Since(started))

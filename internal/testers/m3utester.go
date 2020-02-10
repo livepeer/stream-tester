@@ -32,6 +32,7 @@ var httpClient = &http.Client{
 
 var wowzaSessionRE *regexp.Regexp = regexp.MustCompile(`_(w\d+)_`)
 var wowzaBandwidthRE *regexp.Regexp = regexp.MustCompile(`_b(\d+)\.`)
+var mistSessionRE *regexp.Regexp = regexp.MustCompile(`(\?sessId=\d+)`)
 
 // m3utester tests one stream, reading all the media streams
 type m3utester struct {
@@ -41,6 +42,7 @@ type m3utester struct {
 	started          bool
 	finished         bool
 	wowzaMode        bool
+	mistMode         bool
 	infiniteMode     bool
 	save             bool
 	startTime        time.Time
@@ -132,12 +134,13 @@ func (p downloadResultsBySeq) findByMySeqNo(seqNo uint64) *downloadResult {
 }
 
 // newM3UTester ...
-func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, infiniteMode, save bool, sm *segmentsMatcher) *m3utester {
+func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, mistMode, infiniteMode, save bool, sm *segmentsMatcher) *m3utester {
 	t := &m3utester{
 		downloads:       make(map[string]*mediaDownloader),
 		done:            done,
 		sentTimesMap:    sentTimesMap,
 		wowzaMode:       wowzaMode,
+		mistMode:        mistMode,
 		infiniteMode:    infiniteMode,
 		save:            save,
 		segmentsMatcher: sm,
@@ -168,7 +171,7 @@ func (mt *m3utester) Start(u string) {
 		if upl > 1 {
 			if up[upl-2] == "stream" {
 				mt.saveDirName = strings.Split(up[upl-1], ".")[0] + "/"
-			} else if mt.wowzaMode {
+			} else if mt.wowzaMode || mt.mistMode {
 				mt.saveDirName = up[upl-2]
 			}
 		}
@@ -504,7 +507,8 @@ func (mt *m3utester) stats() downloadStats {
 		errors: make(map[string]int),
 	}
 	mt.mu.RLock()
-	for _, d := range mt.downloads {
+	for i, d := range mt.downloads {
+		glog.Infof("==> for media stream %d succ %d fail %d", i, d.stats.success, d.stats.fail)
 		stats.bytes += d.stats.bytes
 		stats.success += d.stats.success
 		stats.fail += d.stats.fail
@@ -625,6 +629,9 @@ func (mt *m3utester) downloadLoop() {
 				if mt.wowzaMode {
 					// remove Wowza's session id from URL
 					variant.URI = wowzaSessionRE.ReplaceAllString(variant.URI, "_")
+				}
+				if mt.mistMode {
+					variant.URI = mistSessionRE.ReplaceAllString(variant.URI, "")
 				}
 				pvrui, err := url.Parse(variant.URI)
 				if err != nil {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/peterbourgon/ff"
@@ -17,6 +18,7 @@ import (
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/messenger"
+	mistapi "github.com/livepeer/stream-tester/mist"
 	"github.com/livepeer/stream-tester/model"
 )
 
@@ -38,6 +40,7 @@ func main() {
 	fServer := flag.Bool("server", false, "Server mode")
 	latency := flag.Bool("latency", false, "Measure latency")
 	wowza := flag.Bool("wowza", false, "Wowza mode")
+	mist := flag.Bool("mist", false, "Mist mode")
 	noBar := flag.Bool("no-bar", false, "Do not show progress bar")
 	serverAddr := flag.String("serverAddr", "localhost:7934", "Server address to bind to")
 	infinitePull := flag.String("infinite-pull", "", "URL of .m3u8 to pull from")
@@ -58,6 +61,8 @@ func main() {
 	httpIngest := flag.Bool("http-ingest", false, "Use Livepeer HTTP HLS ingest")
 	fileArg := flag.String("file", "", "File to stream")
 	failHard := flag.Bool("fail-hard", false, "Panic if can't parse downloaded segments")
+	mistCreds := flag.String("mist-creds", "", "login:password of the Mist server")
+	apiToken := flag.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -85,7 +90,7 @@ func main() {
 		return
 	}
 	if *fServer {
-		s := server.NewStreamerServer(*wowza)
+		s := server.NewStreamerServer(*wowza, *mist)
 		s.StartWebServer(*serverAddr)
 		return
 	}
@@ -110,9 +115,9 @@ func main() {
 	testers.IgnoreGaps = *ignoreGaps
 	testers.IgnoreTimeDrift = *ignoreTimeDrift
 	if *mediaURL != "" && *rtmpURL == "" {
-		msg := fmt.Sprintf(`Starting infinite stream to %s`, *mediaURL)
+		msg := fmt.Sprintf(`Starting infinite pull from %s`, *mediaURL)
 		messenger.SendMessage(msg)
-		sr2 := testers.NewStreamer2(*wowza)
+		sr2 := testers.NewStreamer2(*wowza, *mist)
 		sr2.StartPulling(*mediaURL)
 		return
 	}
@@ -122,10 +127,12 @@ func main() {
 		}
 		msg := fmt.Sprintf(`Starting infinite stream to %s`, *mediaURL)
 		messenger.SendMessage(msg)
-		sr2 := testers.NewStreamer2(*wowza)
+		sr2 := testers.NewStreamer2(*wowza, *mist)
 		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, waitForDur)
-		// let Wowza remove session
-		time.Sleep(3 * time.Minute)
+		if *wowza {
+			// let Wowza remove session
+			time.Sleep(3 * time.Minute)
+		}
 		// to not exit
 		// s := server.NewStreamerServer(*wowza)
 		// s.StartWebServer("localhost:7933")
@@ -146,13 +153,32 @@ func main() {
 			// glog.Fatal("Can't set both -time and -repeat.")
 		}
 	}
+	if *mist && (*mistCreds == "" || *apiToken == "") {
+		glog.Fatal("If Mist server should be load-tested, then -mist-creds and -api-token should be specified. It is needed to create streams on Mist server using API.")
+	}
+	var mapi *mistapi.API
+	if *mist {
+		if *httpIngest {
+			glog.Fatal("HTTP ingest can't be used for Mist server")
+		}
+		mcreds := strings.Split(*mistCreds, ":")
+		if len(mcreds) != 2 {
+			glog.Fatal("Mist server's credentials should be in form 'login:password'")
+		}
+
+		mapi = mistapi.NewMist(*bhost, mcreds[0], mcreds[1], *apiToken)
+		mapi.Login()
+		// mapi.CreateStream("dark1", "P720p30fps16x9")
+		// mapi.DeleteStreams("dark1")
+	}
+	// panic("fuc")
 	// fmt.Printf("Args: %+v\n", flag.Args())
 	glog.Infof("Starting stream tester, file %s number of streams is %d, repeat %d times no bar %v", fn, *sim, *repeat, *noBar)
 
 	defer glog.Infof("Exiting")
 	var sr model.Streamer
 	if !*httpIngest {
-		sr = testers.NewStreamer(*wowza)
+		sr = testers.NewStreamer(*wowza, *mist, mapi)
 	} else {
 		sr = testers.NewHTTPLoadTester()
 	}
@@ -202,7 +228,7 @@ func main() {
 		fmt.Println(msg)
 	}
 	if *noExit {
-		s := server.NewStreamerServer(*wowza)
+		s := server.NewStreamerServer(*wowza, *mist)
 		s.StartWebServer(*serverAddr)
 	}
 	// messenger.SendMessage(sr.AnalyzeFormatted(true))

@@ -15,9 +15,9 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/jerrors"
 	"github.com/livepeer/m3u8"
+	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
-	"github.com/livepeer/stream-tester/internal/utils"
 )
 
 // IgnoreGaps ...
@@ -44,6 +44,7 @@ type (
 		finite
 		initialURL      *url.URL
 		wowzaMode       bool
+		mistMode        bool
 		streams         map[resolution]*m3uMediaStream
 		downloadResults chan *downloadResult
 		latencyResults  chan *latencyResult
@@ -76,7 +77,7 @@ type (
 	}
 )
 
-func newM3utester2(u string, wowzaMode bool, done chan struct{}, waitForTarget time.Duration, sm *segmentsMatcher) *m3utester2 {
+func newM3utester2(u string, wowzaMode, mistMode bool, done chan struct{}, waitForTarget time.Duration, sm *segmentsMatcher) *m3utester2 {
 	iu, err := url.Parse(u)
 	if err != nil {
 		glog.Fatal(err)
@@ -87,6 +88,7 @@ func newM3utester2(u string, wowzaMode bool, done chan struct{}, waitForTarget t
 		},
 		initialURL:      iu,
 		wowzaMode:       wowzaMode,
+		mistMode:        mistMode,
 		streams:         make(map[resolution]*m3uMediaStream),
 		downloadResults: make(chan *downloadResult, 32),
 		latencyResults:  make(chan *latencyResult, 32),
@@ -382,6 +384,9 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			if mut.wowzaMode {
 				// remove Wowza's session id from URL
 				variant.URI = wowzaSessionRE.ReplaceAllString(variant.URI, "_")
+			}
+			if mut.mistMode {
+				variant.URI = mistSessionRE.ReplaceAllString(variant.URI, "")
 			}
 			pvrui, err := url.Parse(variant.URI)
 			if err != nil {

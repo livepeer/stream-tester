@@ -21,13 +21,15 @@ type StreamerServer struct {
 	streamer  model.Streamer
 	lock      sync.RWMutex
 	wowzaMode bool
+	mistMode  bool
 }
 
 // NewStreamerServer creates new StreamerServer
-func NewStreamerServer(wowzaMode bool) *StreamerServer {
+func NewStreamerServer(wowzaMode, mistMode bool) *StreamerServer {
 	return &StreamerServer{
 		// streamer:  testers.NewStreamer(wowzaMode),
 		wowzaMode: wowzaMode,
+		mistMode:  mistMode,
 	}
 }
 
@@ -159,7 +161,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		if ssr.HTTPIngest {
 			ss.streamer = testers.NewHTTPLoadTester()
 		} else {
-			ss.streamer = testers.NewStreamer(ss.wowzaMode)
+			ss.streamer = testers.NewStreamer(ss.wowzaMode, ss.mistMode, nil)
 		}
 	}
 	var streamDuration time.Duration

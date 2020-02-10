@@ -12,9 +12,10 @@ import (
 	"github.com/golang/glog"
 	"github.com/gosuri/uiprogress"
 
-	"github.com/livepeer/stream-tester/messenger"
-	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/utils"
+	"github.com/livepeer/stream-tester/messenger"
+	"github.com/livepeer/stream-tester/mist"
+	"github.com/livepeer/stream-tester/model"
 )
 
 func init() {
@@ -31,11 +32,14 @@ type streamer struct {
 	stopSignal          bool
 	eof                 chan struct{}
 	wowzaMode           bool
+	mistMode            bool
+	mapi                *mist.API
+	createdMistStreams  []string
 }
 
 // NewStreamer returns new streamer
-func NewStreamer(wowzaMode bool) model.Streamer {
-	return &streamer{eof: make(chan struct{}), wowzaMode: wowzaMode}
+func NewStreamer(wowzaMode, mistMode bool, mapi *mist.API) model.Streamer {
+	return &streamer{eof: make(chan struct{}), wowzaMode: wowzaMode, mistMode: mistMode, mapi: mapi}
 }
 
 func (sr *streamer) Done() <-chan struct{} {
@@ -43,6 +47,10 @@ func (sr *streamer) Done() <-chan struct{} {
 }
 
 func (sr *streamer) Cancel() {
+	if sr.mapi != nil && len(sr.createdMistStreams) > 0 {
+		sr.mapi.DeleteStreams(sr.createdMistStreams...)
+		sr.createdMistStreams = nil
+	}
 	close(sr.eof)
 }
 
@@ -130,6 +138,10 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 		rtmpURLTemplate = "rtmp://%s:%d/live/%s"
 		mediaURLTemplate = "http://%s:%d/live/ngrp:%s_all/playlist.m3u8"
 	}
+	if sr.mistMode {
+		rtmpURLTemplate = "rtmp://%s:%d/live/%s"
+		mediaURLTemplate = "http://%s:%d/hls/%s/index.m3u8"
+	}
 
 	var wg sync.WaitGroup
 	started := make(chan interface{})
@@ -141,6 +153,10 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 				time.Sleep(startDelayBetweenGroups)
 			}
 			manifesID := fmt.Sprintf("%s_%d_%d", baseManfistID, repeatNum, i)
+			if sr.mapi != nil {
+				sr.mapi.CreateStream(manifesID, "P720p30fps16x9")
+				sr.createdMistStreams = append(sr.createdMistStreams, manifesID)
+			}
 			rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifesID)
 			mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifesID)
 			glog.Infof("RTMP: %s", rtmpURL)
@@ -163,7 +179,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)
-			down := newM3UTester(done, sentTimesMap, sr.wowzaMode, false, false, segmentsMatcher)
+			down := newM3UTester(done, sentTimesMap, sr.wowzaMode, sr.mistMode, false, false, segmentsMatcher)
 			go findSkippedSegmentsNumber(up, down)
 			sr.downloaders = append(sr.downloaders, down)
 			down.Start(mediaURL)
@@ -176,6 +192,10 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 	glog.Info("Streams started, waiting.")
 	wg.Wait()
 	glog.Info("RTMP upload done.")
+	if sr.mapi != nil && len(sr.createdMistStreams) > 0 {
+		sr.mapi.DeleteStreams(sr.createdMistStreams...)
+		sr.createdMistStreams = nil
+	}
 	return nil
 }
 
