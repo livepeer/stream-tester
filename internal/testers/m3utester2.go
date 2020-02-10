@@ -468,9 +468,10 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 			}
 			glog.Infof(`%s seqNo %4d latency is %s speedRatio is %v`, dres.resolution, dres.seqNo, latency, speedRatio)
 			if merr != nil {
-				glog.Infof("downloaded: %+v", dres)
-				messenger.SendFatalMessage(merr.Error())
-				panic(merr)
+				glog.Infof("downloaded: %+v, segment matching error %v", dres, merr)
+				// TODO investigate why getting this with Mist server
+				// messenger.SendFatalMessage(merr.Error())
+				// panic(merr)
 				continue
 			}
 			if ms.segmentsMatcher != nil {
