@@ -12,6 +12,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/gosuri/uiprogress"
 
+	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/mist"
@@ -34,12 +35,13 @@ type streamer struct {
 	wowzaMode           bool
 	mistMode            bool
 	mapi                *mist.API
+	lapi                *livepeer.API
 	createdMistStreams  []string
 }
 
 // NewStreamer returns new streamer
-func NewStreamer(wowzaMode, mistMode bool, mapi *mist.API) model.Streamer {
-	return &streamer{eof: make(chan struct{}), wowzaMode: wowzaMode, mistMode: mistMode, mapi: mapi}
+func NewStreamer(wowzaMode, mistMode bool, mapi *mist.API, lapi *livepeer.API) model.Streamer {
+	return &streamer{eof: make(chan struct{}), wowzaMode: wowzaMode, mistMode: mistMode, mapi: mapi, lapi: lapi}
 }
 
 func (sr *streamer) Done() <-chan struct{} {
@@ -152,13 +154,22 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 				glog.Infof("Waiting for %s before starting stream %d", startDelayBetweenGroups, i)
 				time.Sleep(startDelayBetweenGroups)
 			}
-			manifesID := fmt.Sprintf("%s_%d_%d", baseManfistID, repeatNum, i)
+			manifestID := fmt.Sprintf("%s_%d_%d", baseManfistID, repeatNum, i)
 			if sr.mapi != nil {
-				sr.mapi.CreateStream(manifesID, "P720p30fps16x9")
-				sr.createdMistStreams = append(sr.createdMistStreams, manifesID)
+				sr.mapi.CreateStream(manifestID, "P720p30fps16x9")
+				sr.createdMistStreams = append(sr.createdMistStreams, manifestID)
 			}
-			rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifesID)
-			mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifesID)
+			if sr.lapi != nil {
+				sid, err := sr.lapi.CreateStream(manifestID)
+				if err != nil {
+					glog.Fatalf("Error creating stream using Livepeer API: %v", err)
+					// return err
+				}
+				glog.V(model.SHORT).Infof("Create Livepeer stream %s", sid)
+				manifestID = sid
+			}
+			rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifestID)
+			mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifestID)
 			glog.Infof("RTMP: %s", rtmpURL)
 			glog.Infof("MEDIA: %s", mediaURL)
 			var bar *uiprogress.Bar

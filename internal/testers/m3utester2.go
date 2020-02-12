@@ -16,6 +16,7 @@ import (
 	"github.com/livepeer/joy4/jerrors"
 	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/utils"
+	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 )
@@ -304,7 +305,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			mut.fatalEnd(fmt.Sprintf("Can't get playlist %s for %s, giving up.", surl, time.Since(startedAt)))
 			return
 		}
-		resp, err := httpClient.Get(surl)
+		resp, err := httpClient.Do(uhttp.GetRequest(surl))
 		if err != nil {
 			uerr := err.(*url.Error)
 			if uerr.Timeout() {
@@ -558,7 +559,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 			ms.fatalEnd(msg)
 			return
 		}
-		resp, err := httpClient.Get(surl)
+		resp, err := httpClient.Do(uhttp.GetRequest(surl))
 		if err != nil {
 			uerr := err.(*url.Error)
 			if uerr.Timeout() {
@@ -647,7 +648,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 	for {
 		// glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
 		glog.Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
-		resp, err := httpClient.Get(fsurl)
+		resp, err := httpClient.Do(uhttp.GetRequest(fsurl))
 		if err != nil {
 			glog.Errorf("Error downloading %s: %v", fsurl, err)
 			if try < 4 {

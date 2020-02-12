@@ -11,9 +11,10 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/apis/livepeer"
+	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
-	"github.com/livepeer/stream-tester/internal/utils"
 )
 
 // HTTPLoadTester new version of streamer
@@ -24,12 +25,13 @@ type HTTPLoadTester struct {
 	ctx       context.Context
 	cancel    func()
 	streamers []*httpStreamer
+	lapi      *livepeer.API
 }
 
 // NewHTTPLoadTester returns new HTTPLoadTester
-func NewHTTPLoadTester() model.Streamer {
+func NewHTTPLoadTester(lapi *livepeer.API) model.Streamer {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &HTTPLoadTester{ctx: ctx, cancel: cancel}
+	return &HTTPLoadTester{ctx: ctx, cancel: cancel, lapi: lapi}
 }
 
 // Done returns channel that will be closed once streaming is done
@@ -55,10 +57,6 @@ func (hlt *HTTPLoadTester) Stop() {
 func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
 	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error) {
 
-	nRtmpPort, err := strconv.Atoi(rtmpPort)
-	if err != nil {
-		return "", err
-	}
 	nMediaPort, err := strconv.Atoi(mediaPort)
 	if err != nil {
 		return "", err
@@ -66,12 +64,24 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 	showProgress := false
 	baseManifestID := strings.ReplaceAll(path.Base(sourceFileName), ".", "") + "_" + randName()
 
+	httpIngestURLTemplate := fmt.Sprintf("http://%s:%d/live/%%s", bhost, nMediaPort)
+	if hlt.lapi != nil {
+		broadcasters, err := hlt.lapi.Broadcasters()
+		if err != nil {
+			return "", err
+		}
+		if len(broadcasters) == 0 {
+			return "", fmt.Errorf("Empty list of broadcasters")
+		}
+		httpIngestURLTemplate = fmt.Sprintf("%s/live/%%s", broadcasters[0])
+	}
+
 	go func() {
 		for i := 0; i < int(repeat); i++ {
 			if repeat > 1 {
 				glog.Infof("Starting %d streaming session", i)
 			}
-			err := hlt.startStreams(baseManifestID, sourceFileName, i, bhost, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
+			err := hlt.startStreams(baseManifestID, sourceFileName, i, httpIngestURLTemplate, simStreams, showProgress, measureLatency,
 				streamDuration, groupStartBy, startDelayBetweenGroups, waitForTarget)
 			if err != nil {
 				glog.Fatal(err)
@@ -85,6 +95,8 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 		}
 		hlt.Cancel()
 		// messenger.SendMessage(sr.AnalyzeFormatted(true))
+		stats := hlt.Stats("")
+		messenger.SendMessage(stats.FormatForConsole())
 		// fmt.Printf(sr.AnalyzeFormatted(false))
 		// if !notFinal {
 		// 	hlt.Cancel()
@@ -93,14 +105,18 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 	return baseManifestID, nil
 }
 
-func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, repeatNum int, host string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
+func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, repeatNum int, httpIngestURLTemplate string, simStreams uint, showProgress,
 	measureLatency bool, stopAfter time.Duration, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
-	msg := fmt.Sprintf("Starting HTTP streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
+	pm := ""
+	if hlt.lapi != nil {
+		pm = fmt.Sprintf(" with profiles '%v'", hlt.lapi.DefaultPresets())
+	}
+	msg := fmt.Sprintf("Starting HTTP streaming %s to %s, number of streams is %d %s\n", sourceFileName, httpIngestURLTemplate, simStreams, pm)
 	messenger.SendMessage(msg)
 	fmt.Println(msg)
-	httpIngestURLTemplate := "http://%s:%d/live/%s"
+	// httpIngestURLTemplate := "http://%s:%d/live/%s"
 	var wg sync.WaitGroup
 	for i := 0; i < int(simStreams); i++ {
 		if groupStartBy > 0 && i%groupStartBy == 0 {
@@ -108,8 +124,16 @@ func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, r
 			glog.Infof("Waiting for %s before starting stream %d", startDelayBetweenGroups, i)
 			time.Sleep(startDelayBetweenGroups)
 		}
-		manifesID := fmt.Sprintf("%s_%d_%d", baseManifestID, repeatNum, i)
-		httpIngestURL := fmt.Sprintf(httpIngestURLTemplate, host, nMediaPort, manifesID)
+		manifestID := fmt.Sprintf("%s_%d_%d", baseManifestID, repeatNum, i)
+		if hlt.lapi != nil {
+			sid, err := hlt.lapi.CreateStream(manifestID)
+			if err != nil {
+				glog.Errorf("Error creating stream using Livepeer API: %v", err)
+				return err
+			}
+			manifestID = sid
+		}
+		httpIngestURL := fmt.Sprintf(httpIngestURLTemplate, manifestID)
 		glog.Infof("HTTP ingest: %s", httpIngestURL)
 		// var bar *uiprogress.Bar
 		// if showProgress {
@@ -119,7 +143,7 @@ func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, r
 		up := newHTTPtreamer(hlt.ctx, measureLatency, baseManifestID)
 		wg.Add(1)
 		go func() {
-			up.StartUpload(sourceFileName, httpIngestURL, manifesID, 0, waitForTarget, stopAfter)
+			up.StartUpload(sourceFileName, httpIngestURL, manifestID, 0, waitForTarget, stopAfter)
 			wg.Done()
 		}()
 		hlt.streamers = append(hlt.streamers, up)

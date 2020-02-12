@@ -17,7 +17,7 @@ jobs:
       run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD 
     - name: Build the Docker image
       # run: docker build . --file Dockerfile --tag livepeer/streamtester:$(date +%s)
-      run: docker build . --file Dockerfile --tag livepeer/streamtester:latest
+      run: docker build . --file Dockerfile --tag livepeer/streamtester:latest --build-arg version=$(git describe --dirty)
     - name: Get tag name
       id: get_version
       run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}

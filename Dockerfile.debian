@@ -1,6 +1,6 @@
-FROM golang:1-alpine as builder
+FROM golang:1-stretch as builder
 
-RUN apk add --no-cache git
+# RUN apk add --no-cache git
 
 WORKDIR /root
 RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs.mp4
@@ -28,10 +28,12 @@ RUN echo $version
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version'" cmd/streamtester/streamtester.go
 
 
-FROM alpine
-RUN apk add --no-cache ca-certificates
+FROM debian:stretch-slim
 
 WORKDIR /root
+# RUN apt update && apt install -y  ca-certificates jq libgnutls30 && apt clean
+RUN apt update && apt install -y ca-certificates && apt clean
+
 COPY --from=builder /root/official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs.mp4
 COPY --from=builder /root/official_test_source_2s_keys_24pfs_3min.mp4 official_test_source_2s_keys_24pfs_3min.mp4
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4

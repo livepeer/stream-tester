@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 )
 
 const httpTimeout = 2 * time.Second
@@ -85,7 +86,7 @@ func NewMist(host, login, password, livepeerToken string) *API {
 // Login authenicates to the Mist server
 func (mapi *API) Login() {
 	// u := mapi.apiURL + "?" + url.QueryEscape()
-	resp, err := httpClient.Get(mapi.apiURL)
+	resp, err := httpClient.Do(uhttp.GetRequest(mapi.apiURL))
 	if err != nil {
 		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
 	}
@@ -124,7 +125,7 @@ func (mapi *API) Login() {
 	// return hex.EncodeToString(expectedMAC)
 
 	u := mapi.apiURL + "?minimal=1&command=" + url.QueryEscape(fmt.Sprintf(`{"authorize":{"username":"%s","password":"%s"}}`, mapi.login, hashRes))
-	resp, err = httpClient.Get(u)
+	resp, err = httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
 		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", u, err)
 	}
@@ -179,7 +180,10 @@ func (mapi *API) post(commandi interface{}) []byte {
 	params := url.Values{}
 	params.Add("command", command)
 	body := strings.NewReader(params.Encode())
-	resp, err := httpClient.Post(mapi.apiURL, "application/json", body)
+	// req := uhttp.RequireRequest(mapi.apiURL, "application/json", body)
+	req := uhttp.RequireRequest("POST", mapi.apiURL, body)
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		glog.Fatalf("Error creating new Mist stream %v", err)
 	}

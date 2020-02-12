@@ -159,9 +159,9 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 	glog.Infof("Get request: %+v", ssr)
 	if !ssr.DoNotClearStats || ss.streamer == nil {
 		if ssr.HTTPIngest {
-			ss.streamer = testers.NewHTTPLoadTester()
+			ss.streamer = testers.NewHTTPLoadTester(nil)
 		} else {
-			ss.streamer = testers.NewStreamer(ss.wowzaMode, ss.mistMode, nil)
+			ss.streamer = testers.NewStreamer(ss.wowzaMode, ss.mistMode, nil, nil)
 		}
 	}
 	var streamDuration time.Duration

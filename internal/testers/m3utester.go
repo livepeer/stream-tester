@@ -19,6 +19,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/utils"
+	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/model"
 )
 
@@ -508,7 +509,7 @@ func (mt *m3utester) stats() downloadStats {
 	}
 	mt.mu.RLock()
 	for i, d := range mt.downloads {
-		glog.Infof("==> for media stream %d succ %d fail %d", i, d.stats.success, d.stats.fail)
+		glog.V(model.DEBUG).Infof("==> for media stream %s succ %d fail %d", i, d.stats.success, d.stats.fail)
 		stats.bytes += d.stats.bytes
 		stats.success += d.stats.success
 		stats.fail += d.stats.fail
@@ -588,7 +589,7 @@ func (mt *m3utester) downloadLoop() {
 				continue
 			}
 		*/
-		resp, err := httpClient.Get(surl)
+		resp, err := httpClient.Do(uhttp.GetRequest(surl))
 		if err != nil {
 			glog.Infof("===== get error getting master playlist %s: %v", surl, err)
 			time.Sleep(2 * time.Second)
@@ -806,7 +807,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 	try := 0
 	for {
 		glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
-		resp, err := httpClient.Get(fsurl)
+		resp, err := httpClient.Do(uhttp.GetRequest(fsurl))
 		if err != nil {
 			glog.Errorf("Error downloading %s: %v", fsurl, err)
 			if try < 4 {
@@ -989,7 +990,7 @@ func (md *mediaDownloader) downloadLoop() {
 			return
 		default:
 		}
-		resp, err := httpClient.Get(surl)
+		resp, err := httpClient.Do(uhttp.GetRequest(surl))
 		if err != nil {
 			glog.Error(err)
 			time.Sleep(1 * time.Second)

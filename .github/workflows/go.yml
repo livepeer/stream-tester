@@ -70,7 +70,7 @@ jobs:
 
     - name: Build
       run: |
-        go build -v cmd/streamtester/streamtester.go
+        make
 
     - name: Compress Posix
       if: matrix.os != 'windows-latest'

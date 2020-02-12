@@ -15,8 +15,10 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/format"
+	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"
+	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
 	mistapi "github.com/livepeer/stream-tester/mist"
 	"github.com/livepeer/stream-tester/model"
@@ -63,6 +65,8 @@ func main() {
 	failHard := flag.Bool("fail-hard", false, "Panic if can't parse downloaded segments")
 	mistCreds := flag.String("mist-creds", "", "login:password of the Mist server")
 	apiToken := flag.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
+	lapiFlag := flag.Bool("lapi", false, "Use Livepeer API to create streams. api-token should be specified")
+	presets := flag.String("presets", "", "Comma separate list of transcoding profiels to use along with Livepeer API")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -72,9 +76,14 @@ func main() {
 	)
 	flag.Parse()
 
+	hostName, _ := os.Hostname()
+	fmt.Println("Stream tester version: " + model.Version)
+	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
+	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
+
 	if *version {
-		fmt.Println("Stream tester version: 0.8")
-		fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
+		// fmt.Println("Stream tester version: " + model.Version)
+		// fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 		return
 	}
 	if *latencyThreshold > 0 {
@@ -171,16 +180,41 @@ func main() {
 		// mapi.CreateStream("dark1", "P720p30fps16x9")
 		// mapi.DeleteStreams("dark1")
 	}
-	// panic("fuc")
+	var lapi *livepeer.API
+	if *lapiFlag {
+		if *apiToken == "" {
+			glog.Fatalf("-api-token should be specified")
+		}
+		if !*httpIngest {
+			glog.Fatal("Using Livepeer API currently only implemented for HTTP ingest")
+			// API webhook doesn't authenicate RTMP streams
+		}
+		if *presets == "" {
+			glog.Fatal("Presets should be specified")
+		}
+		presetsParts := strings.Split(*presets, ",")
+		model.ProfilesNum = len(presetsParts)
+		lapi = livepeer.NewLivepeer(*apiToken, "chi.livepeer-ac.live", presetsParts) // hardcode AC server for now
+		lapi.Init()
+		// lapi.CreateStream("st01", "P144p30fps16x9")
+		bds, err := lapi.Broadcasters()
+		if err != nil {
+			panic(err)
+		}
+		glog.Infof("Got broadcasters to use: %v", bds)
+		if len(bds) == 0 {
+			glog.Fatal("Got empty list of broadcasterf from Livepeer API")
+		}
+	}
 	// fmt.Printf("Args: %+v\n", flag.Args())
-	glog.Infof("Starting stream tester, file %s number of streams is %d, repeat %d times no bar %v", fn, *sim, *repeat, *noBar)
+	glog.Infof("Starting stream tester %s, file %s number of streams is %d, repeat %d times no bar %v", model.Version, fn, *sim, *repeat, *noBar)
 
 	defer glog.Infof("Exiting")
 	var sr model.Streamer
 	if !*httpIngest {
-		sr = testers.NewStreamer(*wowza, *mist, mapi)
+		sr = testers.NewStreamer(*wowza, *mist, mapi, lapi)
 	} else {
-		sr = testers.NewHTTPLoadTester()
+		sr = testers.NewHTTPLoadTester(lapi)
 	}
 	_, err = sr.StartStreams(fn, *bhost, *rtmp, mHost, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
 	if err != nil {

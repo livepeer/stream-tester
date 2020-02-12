@@ -16,6 +16,11 @@ const (
 	INSANE   = 12
 )
 
+// Version version
+// content of this constant will be set at build time,
+// using -ldflags, using output of the `git describe` command.
+var Version = "undefined"
+
 // ProfilesNum number of transcoding profiles
 var ProfilesNum = 2
 

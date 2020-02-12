@@ -183,14 +183,21 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			out <- hlsSeg
 			prevPTS = lastPacket.Time
 		} else {
-			hlsSeg := &hlsSegment{
-				// err:      rerr,
-				seqNo:    seqNo,
-				pts:      prevPTS,
-				duration: curDur,
-				data:     buf.Bytes(),
+			sent := -1
+			if rerr == nil || rerr == io.EOF && curDur > 250*time.Millisecond {
+				// Do not send last segment if it is too small.
+				// Currently transcoding on Nvidia returns bad segment
+				// if source segment is too short
+				hlsSeg := &hlsSegment{
+					// err:      rerr,
+					seqNo:    seqNo,
+					pts:      prevPTS,
+					duration: curDur,
+					data:     buf.Bytes(),
+				}
+				out <- hlsSeg
+				sent = 0
 			}
-			out <- hlsSeg
 
 			if rerr == io.EOF {
 				// hlsSeg := &hlsSegment{
@@ -200,7 +207,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 				// out <- hlsSeg
 				hlsSeg := &hlsSegment{
 					err:   io.EOF,
-					seqNo: seqNo + 1,
+					seqNo: seqNo + 1 + sent,
 					pts:   prevPTS + curDur,
 				}
 				out <- hlsSeg

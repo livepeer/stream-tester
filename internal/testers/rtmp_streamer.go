@@ -13,9 +13,9 @@ import (
 	"github.com/livepeer/joy4/av/avutil"
 	"github.com/livepeer/joy4/av/pktque"
 	"github.com/livepeer/joy4/format/rtmp"
+	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
-	"github.com/livepeer/stream-tester/internal/utils"
 )
 
 var segLen = 2 * time.Second
@@ -273,7 +273,7 @@ outloop:
 		}
 		glog.V(model.DEBUG).Infof("=== REOPENING file!")
 		// re-open same file and stream it again
-		rs.counter.timeShift = rs.counter.lastPacketTime
+		rs.counter.timeShift = rs.counter.lastPacketTime + 30*time.Millisecond
 		rs.file, err = avutil.Open(fn)
 		if err != nil {
 			glog.Fatal(err)
