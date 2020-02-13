@@ -2,7 +2,6 @@ package testers
 
 import (
 	"bytes"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -30,7 +29,16 @@ const HTTPTimeout = 16 * time.Second
 
 var httpClient = &http.Client{
 	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
-	Transport: &http2.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: false}},
+	// Transport: &http2.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: false}},
+	// Transport: &http2.Transport{AllowHTTP: true},
+	Timeout: HTTPTimeout,
+}
+
+var http2Client = &http.Client{
+	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
+	// Transport: &http2.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: false}},
+	// Transport: &http2.Transport{AllowHTTP: true},
+	Transport: &http2.Transport{},
 	Timeout:   HTTPTimeout,
 }
 

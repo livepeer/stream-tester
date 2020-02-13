@@ -67,6 +67,7 @@ func main() {
 	apiToken := flag.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	lapiFlag := flag.Bool("lapi", false, "Use Livepeer API to create streams. api-token should be specified")
 	presets := flag.String("presets", "", "Comma separate list of transcoding profiels to use along with Livepeer API")
+	skipTime := flag.Duration("skip-time", 0, "Skips first x(s|m)")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -214,7 +215,7 @@ func main() {
 	if !*httpIngest {
 		sr = testers.NewStreamer(*wowza, *mist, mapi, lapi)
 	} else {
-		sr = testers.NewHTTPLoadTester(lapi)
+		sr = testers.NewHTTPLoadTester(lapi, *skipTime)
 	}
 	_, err = sr.StartStreams(fn, *bhost, *rtmp, mHost, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
 	if err != nil {

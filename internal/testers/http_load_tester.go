@@ -26,12 +26,13 @@ type HTTPLoadTester struct {
 	cancel    func()
 	streamers []*httpStreamer
 	lapi      *livepeer.API
+	skipFirst time.Duration
 }
 
 // NewHTTPLoadTester returns new HTTPLoadTester
-func NewHTTPLoadTester(lapi *livepeer.API) model.Streamer {
+func NewHTTPLoadTester(lapi *livepeer.API, skipFirst time.Duration) model.Streamer {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &HTTPLoadTester{ctx: ctx, cancel: cancel, lapi: lapi}
+	return &HTTPLoadTester{ctx: ctx, cancel: cancel, lapi: lapi, skipFirst: skipFirst}
 }
 
 // Done returns channel that will be closed once streaming is done
@@ -143,7 +144,7 @@ func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, r
 		up := newHTTPtreamer(hlt.ctx, measureLatency, baseManifestID)
 		wg.Add(1)
 		go func() {
-			up.StartUpload(sourceFileName, httpIngestURL, manifestID, 0, waitForTarget, stopAfter)
+			up.StartUpload(sourceFileName, httpIngestURL, manifestID, 0, waitForTarget, stopAfter, hlt.skipFirst)
 			wg.Done()
 		}()
 		hlt.streamers = append(hlt.streamers, up)

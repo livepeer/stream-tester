@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -121,7 +122,7 @@ func pushHLSSegmentsLoop(dir string, pl *m3u8.MediaPlaylist, stopAfter time.Dura
 }
 
 // StartUpload starts HTTP segments. Blocks until end.
-func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToStream int, waitForTarget, stopAfter time.Duration) {
+func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToStream int, waitForTarget, stopAfter, skipFirst time.Duration) {
 	segmentsIn := make(chan *hlsSegment)
 	var err error
 	ext := path.Ext(fn)
@@ -172,8 +173,12 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	}
 	req.Header.Set("Accept", "multipart/mixed")
 	req.Header.Set("Content-Duration", strconv.FormatInt(seg.duration.Milliseconds(), 10))
+	hc := httpClient
+	if strings.HasPrefix(urlToUp, "https:") {
+		hc = http2Client
+	}
 	postStarted := time.Now()
-	resp, err := httpClient.Do(req)
+	resp, err := hc.Do(req)
 	postTook := time.Since(postStarted)
 	var timedout bool
 	var status string
