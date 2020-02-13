@@ -3,6 +3,7 @@ package mist
 
 import (
 	"crypto/md5"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -14,13 +15,15 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
+	"golang.org/x/net/http2"
 )
 
 const httpTimeout = 2 * time.Second
 
 var httpClient = &http.Client{
 	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
-	Timeout: httpTimeout,
+	Transport: &http2.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: false}},
+	Timeout:   httpTimeout,
 }
 
 type (

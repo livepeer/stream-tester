@@ -173,6 +173,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			inFile.Demuxer = inf
 			// rs.counter.currentSegments = 0
 			inFile.Streams()
+			glog.V(model.VVERBOSE).Infof("Wrapping segments seqNo=%d pts=%s dur=%s", seqNo, prevPTS, curDur)
 			hlsSeg := &hlsSegment{
 				// err:      rerr,
 				seqNo:    seqNo,

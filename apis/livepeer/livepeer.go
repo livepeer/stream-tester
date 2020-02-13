@@ -3,6 +3,7 @@ package livepeer
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -12,13 +13,15 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/model"
+	"golang.org/x/net/http2"
 )
 
 const httpTimeout = 2 * time.Second
 
 var httpClient = &http.Client{
 	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
-	Timeout: httpTimeout,
+	Transport: &http2.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: false}},
+	Timeout:   httpTimeout,
 }
 
 const (

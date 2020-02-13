@@ -2,6 +2,7 @@ package testers
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -21,6 +22,7 @@ import (
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/model"
+	"golang.org/x/net/http2"
 )
 
 // HTTPTimeout http timeout downloading manifests/segments
@@ -28,7 +30,8 @@ const HTTPTimeout = 16 * time.Second
 
 var httpClient = &http.Client{
 	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
-	Timeout: HTTPTimeout,
+	Transport: &http2.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: false}},
+	Timeout:   HTTPTimeout,
 }
 
 var wowzaSessionRE *regexp.Regexp = regexp.MustCompile(`_(w\d+)_`)
