@@ -36,13 +36,13 @@ type hlsSegment struct {
 	data     []byte
 }
 
-func startSegmenting(ctx context.Context, fileName string, stopAtFileEnd bool, stopAfter time.Duration, out chan<- *hlsSegment) error {
+func startSegmenting(ctx context.Context, fileName string, stopAtFileEnd bool, stopAfter, skipFirst time.Duration, out chan<- *hlsSegment) error {
 	glog.Infof("Starting segmenting file %s", fileName)
 	inFile, err := avutil.Open(fileName)
 	if err != nil {
 		glog.Fatal(err)
 	}
-	go segmentingLoop(ctx, fileName, inFile, stopAtFileEnd, stopAfter, out)
+	go segmentingLoop(ctx, fileName, inFile, stopAtFileEnd, stopAfter, skipFirst, out)
 
 	return err
 }
@@ -67,13 +67,39 @@ func createInMemoryTSMuxer() (av.Muxer, *bytes.Buffer) {
 	return ts.NewMuxer(buf), buf
 }
 
-func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bool, stopAfter time.Duration, out chan<- *hlsSegment) {
+// Walltime make packets reading speed as same as walltime, effect like ffmpeg -re option.
+type Walltime struct {
+	firsttime time.Time
+	skipFirst time.Duration
+}
+
+// ModifyPacket public filter's interface
+func (wt *Walltime) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoidx int, audioidx int) (drop bool, err error) {
+	if pkt.Idx == 0 {
+		if wt.firsttime.IsZero() {
+			wt.firsttime = time.Now()
+			if wt.skipFirst > 0 {
+				wt.firsttime = wt.firsttime.Add(-wt.skipFirst)
+			}
+		}
+		pkttime := wt.firsttime.Add(pkt.Time)
+		delta := pkttime.Sub(time.Now())
+		if delta > 0 {
+			if wt.skipFirst == 0 || wt.skipFirst <= pkt.Time {
+				time.Sleep(delta)
+			}
+		}
+	}
+	return
+}
+
+func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bool, stopAfter, skipFirst time.Duration, out chan<- *hlsSegment) {
 	var err error
 	var streams []av.CodecData
 	var videoidx, audioidx int8
 
 	ts := &timeShifter{}
-	filters := pktque.Filters{ts, &pktque.FixTime{MakeIncrement: true}, &pktque.Walltime{}}
+	filters := pktque.Filters{ts, &pktque.FixTime{MakeIncrement: true}, &Walltime{skipFirst: skipFirst}}
 	inFile := &pktque.FilterDemuxer{Demuxer: inFileReal, Filter: filters}
 	if streams, err = inFile.Streams(); err != nil {
 		msg := fmt.Sprintf("Can't get info about file: '%+v', isNoAudio %v isNoVideo %v", err, errors.Is(err, jerrors.ErrNoAudioInfoFound), errors.Is(err, jerrors.ErrNoVideoInfoFound))
@@ -173,22 +199,12 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			inFile.Demuxer = inf
 			// rs.counter.currentSegments = 0
 			inFile.Streams()
-			glog.V(model.VVERBOSE).Infof("Wrapping segments seqNo=%d pts=%s dur=%s", seqNo, prevPTS, curDur)
-			hlsSeg := &hlsSegment{
-				// err:      rerr,
-				seqNo:    seqNo,
-				pts:      prevPTS,
-				duration: curDur,
-				data:     buf.Bytes(),
+			send := true
+			if curDur <= 250*time.Millisecond {
+				send = false
 			}
-			out <- hlsSeg
-			prevPTS = lastPacket.Time
-		} else {
-			sent := -1
-			if rerr == nil || rerr == io.EOF && curDur > 250*time.Millisecond {
-				// Do not send last segment if it is too small.
-				// Currently transcoding on Nvidia returns bad segment
-				// if source segment is too short
+			glog.V(model.VVERBOSE).Infof("Wrapping segments seqNo=%d pts=%s dur=%s sending=%v", seqNo, prevPTS, curDur, send)
+			if send {
 				hlsSeg := &hlsSegment{
 					// err:      rerr,
 					seqNo:    seqNo,
@@ -197,7 +213,27 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 					data:     buf.Bytes(),
 				}
 				out <- hlsSeg
-				sent = 0
+				prevPTS = lastPacket.Time
+			} else {
+				seqNo--
+			}
+		} else {
+			sent := -1
+			if rerr == nil || rerr == io.EOF && curDur > 250*time.Millisecond {
+				// Do not send last segment if it is too small.
+				// Currently transcoding on Nvidia returns bad segment
+				// if source segment is too short
+				if skipFirst == 0 || skipFirst < prevPTS {
+					hlsSeg := &hlsSegment{
+						// err:      rerr,
+						seqNo:    seqNo,
+						pts:      prevPTS,
+						duration: curDur,
+						data:     buf.Bytes(),
+					}
+					out <- hlsSeg
+					sent = 0
+				}
 			}
 
 			if rerr == io.EOF {

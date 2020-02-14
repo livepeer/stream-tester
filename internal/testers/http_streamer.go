@@ -129,7 +129,7 @@ func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToSt
 	if ext == ".m3u8" {
 		err = pushHLSSegments(hs.ctx, fn, stopAfter, segmentsIn)
 	} else {
-		err = startSegmenting(hs.ctx, fn, true, stopAfter, segmentsIn)
+		err = startSegmenting(hs.ctx, fn, true, stopAfter, skipFirst, segmentsIn)
 	}
 	if err != nil {
 		glog.Infof("Error starting segmenter: %v", err)
@@ -164,7 +164,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	}
 	hs.mu.Unlock()
 	urlToUp := fmt.Sprintf("%s/%d.ts", httpURL, seg.seqNo)
-	glog.V(model.SHORT).Infof("Got segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
+	glog.V(model.SHORT).Infof("Got source segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
 	var body io.Reader
 	body = bytes.NewReader(seg.data)
 	req, err := uhttp.NewRequest("POST", urlToUp, body)
@@ -199,7 +199,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		return
 		// panic(err)
 	}
-	glog.V(model.VERBOSE).Infof("Got manifest=%s seqNo=%d resp status=%s reading body started", manifestID, seg.seqNo, resp.Status)
+	glog.V(model.VERBOSE).Infof("Got transcoded manifest=%s seqNo=%d resp status=%s reading body started", manifestID, seg.seqNo, resp.Status)
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
