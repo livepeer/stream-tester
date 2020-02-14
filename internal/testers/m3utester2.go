@@ -439,7 +439,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 		case <-ms.done:
 			return
 		case dres := <-ms.downloadResults:
-			// glog.Infof("== ms loop downloaded status %s res %s name %s seqNo %d len %d", dres.status, dres.resolution, dres.name, dres.seqNo, dres.bytes)
+			desc := fmt.Sprintf("== ms loop downloaded status %s res %s name %s seqNo %d len %d", dres.status, dres.resolution, dres.name, dres.seqNo, dres.bytes)
 			if dres.status != "200 OK" {
 				continue
 			}
@@ -501,7 +501,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					ns := results[i+1]
 					tillNext = ns.startTime - r.startTime
 					if tillNext > 0 && !isTimeEqualM(r.duration, tillNext) {
-						problem = fmt.Sprintf(" ===> possible gap - to big time difference %s (d2 i: %d, now %d)", tillNext-r.duration, i, time.Now().UnixNano())
+						problem = fmt.Sprintf(" ===> possible gap - to big time difference %s (d2 i: %d, now %d) (because of %s)", tillNext-r.duration, i, time.Now().UnixNano(), desc)
 						print = true
 					}
 				}
@@ -664,6 +664,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 			if try < 4 {
 				try++
 				resp.Body.Close()
+				time.Sleep(50 * time.Millisecond)
 				continue
 			}
 			res <- &downloadResult{status: err.Error(), try: try}
