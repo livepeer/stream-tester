@@ -433,13 +433,14 @@ func (p downloadResultsByAtFirstTime) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
 func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResults chan *latencyResult) {
 	results := make(downloadResultsByAppTime, 0, 128)
-	var lastPrintTime time.Time
+	var lastPrintTime, lastMessageSentAt time.Time
+
 	for {
 		select {
 		case <-ms.done:
 			return
 		case dres := <-ms.downloadResults:
-			desc := fmt.Sprintf("== ms loop downloaded status %s res %s name %s seqNo %d len %d", dres.status, dres.resolution, dres.name, dres.seqNo, dres.bytes)
+			// desc := fmt.Sprintf("== ms loop downloaded status %s res %s name %s seqNo %d len %d", dres.status, dres.resolution, dres.name, dres.seqNo, dres.bytes)
 			if dres.status != "200 OK" {
 				continue
 			}
@@ -501,7 +502,8 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					ns := results[i+1]
 					tillNext = ns.startTime - r.startTime
 					if tillNext > 0 && !isTimeEqualM(r.duration, tillNext) {
-						problem = fmt.Sprintf(" ===> possible gap - to big time difference %s (d2 i: %d, now %d) (because of %s)", tillNext-r.duration, i, time.Now().UnixNano(), desc)
+						// problem = fmt.Sprintf(" ===> possible gap - to big time difference %s (d2 i: %d, now %d) (because of %s)", tillNext-r.duration, i, time.Now().UnixNano(), desc)
+						problem = fmt.Sprintf(" ===> possible gap - to big time difference %s", tillNext-r.duration)
 						print = true
 					}
 				}
@@ -527,7 +529,12 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					ms.fatalEnd(fatalProblem)
 					return
 				}
-				messenger.SendMessageDebounced(fatalProblem)
+				if time.Since(lastMessageSentAt) > 60*time.Second {
+					messenger.SendMessage(fatalProblem)
+					lastMessageSentAt = time.Now()
+
+				}
+				// messenger.SendMessageDebounced(fatalProblem)
 			}
 		}
 	}
