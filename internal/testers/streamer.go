@@ -237,6 +237,7 @@ func findSkippedSegmentsNumber(rtmp *rtmpStreamer, mt *m3utester) {
 	}
 }
 
+/*
 func (sr *streamer) StatsFormatted() string {
 	r := ""
 	for _, md := range sr.downloaders {
@@ -244,7 +245,9 @@ func (sr *streamer) StatsFormatted() string {
 	}
 	return r
 }
+*/
 
+/*
 func (sr *streamer) DownStatsFormatted() string {
 	res := ""
 	for i, dl := range sr.downloaders {
@@ -255,11 +258,16 @@ func (sr *streamer) DownStatsFormatted() string {
 	}
 	return res
 }
+*/
 
+/*
 func (sr *streamer) AnalyzeFormatted(short bool) string {
-	return sr.analyzeFormatted(short, true)
+	return ""
+	// return sr.analyzeFormatted(short, true)
 }
+*/
 
+/*
 func (sr *streamer) analyzeFormatted(short, streamEnded bool) string {
 	res := ""
 	for i, dl := range sr.downloaders {
@@ -272,6 +280,7 @@ func (sr *streamer) analyzeFormatted(short, streamEnded bool) string {
 	res += "Latencies: " + stats.TranscodedLatencies.String() + "\n"
 	return res
 }
+*/
 
 func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 	stats := &model.Stats{
@@ -308,7 +317,7 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 		stats.FailedToDownloadSegments += ds.fail
 		stats.BytesDownloaded += ds.bytes
 		stats.Retries += ds.retries
-		stats.Gaps += ds.gaps
+		// stats.Gaps += ds.gaps
 		stats.DownloadedKeyFrames += ds.keyframes
 		if mt.segmentsMatcher != nil {
 			for _, md := range mt.downloads {

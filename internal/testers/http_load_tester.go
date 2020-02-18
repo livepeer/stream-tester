@@ -155,6 +155,7 @@ func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, r
 	return nil
 }
 
+/*
 // StatsFormatted ...
 func (hlt *HTTPLoadTester) StatsFormatted() string {
 	return ""
@@ -177,6 +178,7 @@ func (hlt *HTTPLoadTester) AnalyzeFormatted(short bool) string {
 	return ""
 	// return sr.analyzeFormatted(short, true)
 }
+*/
 
 // Stats ...
 func (hlt *HTTPLoadTester) Stats(basedManifestID string) *model.Stats {

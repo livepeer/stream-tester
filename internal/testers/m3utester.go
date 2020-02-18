@@ -66,7 +66,7 @@ type m3utester struct {
 	savePlayList     *m3u8.MasterPlaylist
 	savePlayListName string
 	saveDirName      string
-	gaps             int
+	// gaps             int
 }
 
 type fullDownloadResultsMap map[string]*fullDownloadResults
@@ -197,11 +197,12 @@ func (mt *m3utester) Start(u string) {
 	}
 	go mt.downloadLoop()
 	go mt.workerLoop()
-	if mt.infiniteMode {
-		go mt.anaylysePrintingLoop()
-	}
+	// if mt.infiniteMode {
+	// 	go mt.anaylysePrintingLoop()
+	// }
 }
 
+/*
 func (mt *m3utester) anaylysePrintingLoop() string {
 	for {
 		time.Sleep(30 * time.Second)
@@ -213,6 +214,7 @@ func (mt *m3utester) anaylysePrintingLoop() string {
 		}
 	}
 }
+*/
 
 func sortByResolution(results map[string]*fullDownloadResults) []string {
 	r := make([]string, 0, len(results))
@@ -303,6 +305,7 @@ func absTimeTiffT(t1, t2 time.Time) time.Duration {
 	return diff
 }
 
+/*
 func analyzeDownloads(downloadResults fullDownloadResultsMap, short, streamEnded bool) (string, int) {
 	res := ""
 	resolutions := downloadResults.getResolutions()
@@ -501,6 +504,7 @@ func (mt *m3utester) AnalyzeFormatted(short bool) string {
 	mt.dm.Unlock()
 	return res
 }
+*/
 
 // GetFIrstSegmentTime return timestamp of first frame of first segment.
 // Second returned value is true if already found.
@@ -534,12 +538,13 @@ func (mt *m3utester) stats() downloadStats {
 	}
 	mt.mu.RUnlock()
 	mt.dm.Lock()
-	_, gaps := analyzeDownloads(mt.downloadResults, true, false)
-	stats.gaps = gaps
+	// _, gaps := analyzeDownloads(mt.downloadResults, true, false)
+	// stats.gaps = gaps
 	mt.dm.Unlock()
 	return stats
 }
 
+/*
 func (mt *m3utester) StatsFormatted() string {
 	mt.mu.RLock()
 	keys := getSortedKeys(mt.downloads)
@@ -552,6 +557,7 @@ func (mt *m3utester) StatsFormatted() string {
 	mt.mu.RUnlock()
 	return r
 }
+*/
 
 func (mt *m3utester) workerLoop() {
 	for {
@@ -579,7 +585,7 @@ func (mt *m3utester) workerLoop() {
 
 func (mt *m3utester) downloadLoop() {
 	surl := mt.initialURL.String()
-	loops := 0
+	// loops := 0
 	// var gotPlaylistWaitingForEnd bool
 	var gotPlaylist bool
 	if mt.infiniteMode {
@@ -683,20 +689,22 @@ func (mt *m3utester) downloadLoop() {
 		// }
 		// glog.Info(string(b))
 		time.Sleep(2 * time.Second)
-		loops++
-		if loops%2 == 0 {
-			if glog.V(model.DEBUG) {
-				fmt.Println(mt.StatsFormatted())
+		/*
+			loops++
+			if loops%2 == 0 {
+				if glog.V(model.DEBUG) {
+					fmt.Println(mt.StatsFormatted())
+				}
 			}
-		}
+		*/
 	}
 }
 
 type downloadStats struct {
-	success   int
-	fail      int
-	retries   int
-	gaps      int
+	success int
+	fail    int
+	retries int
+	// gaps      int
 	keyframes int
 	bytes     int64
 	errors    map[string]int
@@ -1135,6 +1143,7 @@ func countSegments(mpl *m3u8.MediaPlaylist) int {
 	return res
 }
 
+/*
 func getSortedKeys(data map[string]*mediaDownloader) []string {
 	res := make(sort.StringSlice, 0, len(data))
 	for k := range data {
@@ -1143,6 +1152,7 @@ func getSortedKeys(data map[string]*mediaDownloader) []string {
 	res.Sort()
 	return res
 }
+*/
 
 type sortedTimes []time.Duration
 

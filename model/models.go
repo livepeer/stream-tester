@@ -45,7 +45,7 @@ type Streamer interface {
 	StartStreams(sourceFileName, bhost, rtmpPort, mhost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
 		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error)
 	Stats(basedManifestID string) *Stats
-	StatsFormatted() string
+	// StatsFormatted() string
 	// DownStatsFormatted() string
 	// AnalyzeFormatted(short bool) string
 	Done() <-chan struct{}
@@ -88,7 +88,6 @@ type Stats struct {
 	RawTranscodedLatencies         []time.Duration   `json:"raw_transcoded_latencies"`
 	RawTranscodeLatenciesPerStream [][]time.Duration `json:"raw_transcode_latencies_per_stream"`
 	WowzaMode                      bool              `json:"wowza_mode"`
-	Gaps                           int               `json:"gaps"`
 	StartTime                      time.Time         `json:"start_time"`
 	Errors                         map[string]int    `json:"errors"`
 }
