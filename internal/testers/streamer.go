@@ -1,6 +1,7 @@
 package testers
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"path"
@@ -146,6 +147,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 		rtmpURLTemplate = "rtmp://%s:%d/live/%s"
 		mediaURLTemplate = "http://%s:%d/hls/%s/index.m3u8"
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
 	started := make(chan interface{})
@@ -180,6 +182,18 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 					bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
 				*/
 			}
+			/*
+				status, err := broadcaster.Status(fmt.Sprintf("http://%s:7935/status", bhost))
+				if err != nil {
+					glog.Fatal(err)
+				}
+				glog.Infof("Got this status: %+v", status)
+			*/
+			if false {
+				// SaveNewStreams(ctx, bhost)
+				SaveNewStreams(ctx, "localhost", "10.140.19.178", "10.140.21.136")
+			}
+
 			done := make(chan struct{})
 			var sentTimesMap *utils.SyncedTimesMap
 			var segmentsMatcher *segmentsMatcher
@@ -207,6 +221,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 	glog.Info("Streams started, waiting.")
 	wg.Wait()
 	glog.Info("RTMP upload done.")
+	cancel()
 	if sr.mapi != nil && len(sr.createdMistStreams) > 0 {
 		sr.mapi.DeleteStreams(sr.createdMistStreams...)
 		sr.createdMistStreams = nil
