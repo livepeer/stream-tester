@@ -529,7 +529,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					ms.fatalEnd(fatalProblem)
 					return
 				}
-				if time.Since(lastMessageSentAt) > 60*time.Second {
+				if time.Since(lastMessageSentAt) > 5*60*time.Second {
 					messenger.SendMessage(fatalProblem)
 					lastMessageSentAt = time.Now()
 
