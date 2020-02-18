@@ -20,7 +20,6 @@ COPY cmd cmd
 COPY internal internal
 COPY model model
 COPY messenger messenger
-COPY mist mist
 COPY apis apis
 
 RUN echo $version
