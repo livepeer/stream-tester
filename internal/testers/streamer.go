@@ -19,6 +19,8 @@ import (
 	"github.com/livepeer/stream-tester/model"
 )
 
+const saveDownloaded = false
+
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
@@ -108,7 +110,7 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 				glog.Infof("Starting %d streaming session", i)
 			}
 			err := sr.startStreams(baseManfistID, sourceFileName, i, bhost, ohost, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
-				segments, groupStartBy, startDelayBetweenGroups, waitForTarget)
+				streamDuration, groupStartBy, startDelayBetweenGroups, waitForTarget)
 			if err != nil {
 				glog.Fatal(err)
 				return
@@ -127,7 +129,7 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 }
 
 func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum int, bhost, mhost string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
-	measureLatency bool, totalSegments int, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
+	measureLatency bool, streamDuration time.Duration, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, bhost, nRtmpPort, simStreams)
 	msg := fmt.Sprintf("Starting streaming %s (repeat %d) to %s:%d, number of streams is %d, reading back from %s:%d\n", baseManfistID, repeatNum, bhost, nRtmpPort, simStreams,
@@ -174,7 +176,9 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			glog.Infof("MEDIA: %s", mediaURL)
 			var bar *uiprogress.Bar
 			if showProgress {
-				bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
+				/*
+					bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
+				*/
 			}
 			done := make(chan struct{})
 			var sentTimesMap *utils.SyncedTimesMap
@@ -186,11 +190,11 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			up := newRtmpStreamer(rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, done, sr.wowzaMode, segmentsMatcher)
 			wg.Add(1)
 			go func() {
-				up.StartUpload(sourceFileName, rtmpURL, totalSegments, waitForTarget)
+				up.StartUpload(sourceFileName, rtmpURL, streamDuration, waitForTarget)
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)
-			down := newM3UTester(done, sentTimesMap, sr.wowzaMode, sr.mistMode, false, false, segmentsMatcher)
+			down := newM3UTester(done, sentTimesMap, sr.wowzaMode, sr.mistMode, false, saveDownloaded, segmentsMatcher)
 			go findSkippedSegmentsNumber(up, down)
 			sr.downloaders = append(sr.downloaders, down)
 			down.Start(mediaURL)
@@ -218,6 +222,9 @@ func findSkippedSegmentsNumber(rtmp *rtmpStreamer, mt *m3utester) {
 			// tm == 5
 			// [2.5, 5,  7.5]
 			for i, segTime := range rtmp.counter.segmentsStartTimes {
+				if segTime > tm {
+					break
+				}
 				if segTime >= tm {
 					rtmp.skippedSegments = i + 1
 					glog.V(model.VERBOSE).Infof("Found that %d segments was skipped, first segment time is %s, in rtmp %s",
@@ -294,6 +301,7 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 			stats.RTMPActiveStreams++
 			stats.Finished = false
 		}
+		stats.SentKeyFrames += rs.counter.keyFrames
 		mt := sr.downloaders[i]
 		ds := mt.stats()
 		stats.DownloadedSegments += ds.success
@@ -301,6 +309,7 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 		stats.BytesDownloaded += ds.bytes
 		stats.Retries += ds.retries
 		stats.Gaps += ds.gaps
+		stats.DownloadedKeyFrames += ds.keyframes
 		if mt.segmentsMatcher != nil {
 			for _, md := range mt.downloads {
 				md.mu.Lock()
@@ -317,6 +326,40 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 				md.mu.Unlock()
 			}
 		}
+		// find skipped keyframes number
+		for _, dl := range mt.downloads {
+			dl.mu.Lock()
+			if dl.source {
+				stats.DownloadedSourceSegments += dl.stats.success
+			} else {
+				stats.DownloadedTranscodedSegments += dl.stats.success
+			}
+			if dl.source && dl.firstSegmentParsed {
+				glog.V(model.VERBOSE).Infof("===?> first time %s key ptss %+v start times %+v", dl.firstSegmentTime, rs.counter.keyFramesPTSs, rs.counter.segmentsStartTimes)
+				// glog.Infof("==> keyFramesPTSs: %+v", rs.counter.keyFramesPTSs)
+				for ki, pts := range rs.counter.keyFramesPTSs {
+					if pts >= dl.firstSegmentTime || isTimeEqualM(pts, dl.firstSegmentTime) {
+						glog.V(model.VERBOSE).Infof("===> ki %d pts %s fst %s before skipping %d", ki, pts, dl.firstSegmentTime, stats.SentKeyFrames)
+						stats.SentKeyFrames -= ki
+						break
+					}
+				}
+				lastGotKeyframe := dl.lastKeyFramesPTSs[len(dl.lastKeyFramesPTSs)-1]
+				var toSkip int
+				for i := len(rs.counter.lastKeyFramesPTSs) - 1; i >= 0; i-- {
+					lskf := rs.counter.lastKeyFramesPTSs[i]
+					if lskf-lastGotKeyframe > 100*time.Millisecond {
+						toSkip++
+					} else {
+						break
+					}
+				}
+				glog.V(model.VERBOSE).Infof("==> lastGotKeyframe %s toSkip %d last sent key frames %+v last got key frames %+v", lastGotKeyframe, toSkip,
+					rs.counter.lastKeyFramesPTSs, dl.lastKeyFramesPTSs)
+				stats.SentKeyFrames -= toSkip
+			}
+			dl.mu.Unlock()
+		}
 	}
 	// glog.Infof("=== source latencies: %+v", sourceLatencies)
 	// glog.Infof("=== transcoded latencies: %+v", transcodedLatencies)
@@ -328,6 +371,10 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 	stats.TranscodedLatencies = model.Latencies{Avg: avg, P50: p50, P95: p95, P99: p99}
 	if stats.SentSegments > 0 {
 		stats.SuccessRate = float64(stats.DownloadedSegments) / ((float64(model.ProfilesNum) + 1) * float64(stats.SentSegments)) * 100
+	}
+	if stats.SentKeyFrames > 0 {
+		// stats.SuccessRate2 = float64(stats.DownloadedKeyFrames) / ((float64(model.ProfilesNum) + 1) * float64(stats.SentKeyFrames)) * 100
+		stats.SuccessRate2 = float64(stats.DownloadedKeyFrames) / float64(stats.SentKeyFrames) * (float64(stats.DownloadedTranscodedSegments+stats.DownloadedSourceSegments) / float64(stats.DownloadedSourceSegments*(model.ProfilesNum+1))) * 100
 	}
 	stats.ShouldHaveDownloadedSegments = (model.ProfilesNum + 1) * stats.SentSegments
 	stats.ProfilesNum = model.ProfilesNum

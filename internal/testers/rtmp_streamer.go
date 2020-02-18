@@ -139,7 +139,7 @@ func (rs *rtmpStreamer) Stop() {
 }
 
 // StartUpload starts RTMP stream. Blocks until end.
-func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, segmentsToStream int, waitForTarget time.Duration) {
+func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, streamDuration, waitForTarget time.Duration) {
 	var err error
 	var conn *rtmp.Conn
 	rs.file, err = avutil.Open(fn)
@@ -212,6 +212,7 @@ func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, segmentsToStream int, wa
 outloop:
 	for {
 		lastSegments := 0
+		var lastPacketTime time.Duration
 		packetIdx := 0
 		for {
 			select {
@@ -232,42 +233,50 @@ outloop:
 				} else if rs.wowzaMode {
 					// in Wowza mode can't really loop, just stopping at EOF
 					glog.V(model.DEBUG).Info("==== RTMP streamer file ended.")
-					glog.Info("==== RTMP streamer file ended.")
 					break outloop
 				}
-				if segmentsToStream > 0 && rs.counter.segments-rs.skippedSegments >= segmentsToStream {
+				if lastPacketTime >= streamDuration || streamDuration == 0 {
 					break outloop
 				}
+				/*
+					if segmentsToStream > 0 && rs.counter.segments-rs.skippedSegments >= segmentsToStream {
+						break outloop
+					}
+				*/
 				break
 			}
+			lastPacketTime = pkt.Time
 			if pkt.Idx != audioidx && pkt.Idx != videoidx {
 				continue
 			}
-			// glog.Infof("Writing packet %d pkt.Idx %d pkt.Time %s Composition Time %s", packetIdx, pkt.Idx, pkt.Time, pkt.CompositionTime)
-			start := time.Now()
-			if rs.segmentsMatcher != nil {
-				rs.segmentsMatcher.frameSent(pkt, pkt.Idx == videoidx)
+			// glog.Infof("Writing packet %d pkt.Idx %d pkt.Time %s Composition Time %s stream duration %s", packetIdx, pkt.Idx, pkt.Time, pkt.CompositionTime, streamDuration)
+			if streamDuration > 0 && pkt.IsKeyFrame && pkt.Idx == videoidx && pkt.Time >= streamDuration {
+				conn.WritePacket(pkt)
+				glog.Info("Done streaming\n")
+				break outloop
 			}
+			start := time.Now()
 			if err = conn.WritePacket(pkt); err != nil {
 				onError(err)
 				return
 			}
 			took := time.Since(start)
+			if rs.segmentsMatcher != nil {
+				rs.segmentsMatcher.frameSent(pkt, pkt.Idx == videoidx)
+			}
 			if took > 1000*time.Millisecond {
-				glog.Infof("packet %d writing took %s rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", packetIdx, took,
-					rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
+				glog.V(model.SHORT).Infof("packet %d writing took %s PTS %s rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d stream duration: %d", packetIdx, took,
+					pkt.Time, rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, streamDuration)
+			}
+			if pkt.IsKeyFrame {
+				glog.V(model.VERBOSE).Infof("sent keyframe PTS %s rs.counter.segments: %d idx %d is video %v", pkt.Time, rs.counter.segments, pkt.Idx, pkt.Idx == videoidx)
 			}
 			if rs.counter.segments > lastSegments {
-				glog.V(model.VERBOSE).Infof("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
+				glog.V(model.VERBOSE).Infof("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d PTS %s stream duration: %s",
+					rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, pkt.Time, streamDuration)
 				// glog.Infof("packet %d rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", packetIdx, rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
 				// fmt.Printf("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d\n\n", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
 				lastSegments = rs.counter.segments
-			}
-			if segmentsToStream > 0 && rs.counter.segments-rs.skippedSegments > segmentsToStream {
-				glog.Info("Done streaming\n")
-				// fmt.Println("=====!!! DONE streaming")
-				rs.counter.segments--
-				break outloop
 			}
 			packetIdx++
 		}
@@ -279,36 +288,14 @@ outloop:
 			glog.Fatal(err)
 		}
 		demuxer.Demuxer = rs.file
-		// rs.counter.currentSegments = 0
 		demuxer.Streams()
 	}
 
-	/*
-		if err = avutil.CopyPackets(conn, demuxer); err != nil {
-			if err != io.EOF {
-				onError(err)
-				return
-			}
-		}
-	*/
 	glog.V(model.DEBUG).Info("Writing trailer")
 	if err = conn.WriteTrailer(); err != nil {
 		onError(err)
 		return
 	}
-
-	/*
-		err = avutil.CopyFile(conn, demuxer)
-		if err != nil {
-			glog.Error(err)
-			rs.connectionLost = true
-			rs.file.Close()
-			conn.Close()
-			time.Sleep(4 * time.Second)
-			close(rs.done)
-			return
-		}
-	*/
 
 	rs.file.Close()
 	// if rs.hasBar {

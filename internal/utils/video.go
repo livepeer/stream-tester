@@ -57,9 +57,18 @@ func GetVideoStartTime(segment []byte) (time.Duration, error) {
 
 // GetVideoStartTimeAndDur ...
 func GetVideoStartTimeAndDur(segment []byte) (time.Duration, time.Duration, error) {
+	d1, d2, _, _, err := GetVideoStartTimeDurFrames(segment)
+	return d1, d2, err
+}
+
+// GetVideoStartTimeDurFrames ...
+func GetVideoStartTimeDurFrames(segment []byte) (time.Duration, time.Duration, int, []time.Duration, error) {
+	var skeyframes []time.Duration
 	r := bytes.NewReader(segment)
 	demuxer := ts.NewDemuxer(r)
 	var videoIdx int8
+	var keyFrames int
+	var lastKeyFramePTS time.Duration = -1
 	if strms, err := demuxer.Streams(); err == nil {
 		// glog.V(model.VERBOSE).Infof("=======--- streams: %+v", strms)
 		// glog.Infof("=======--- streams: %+v", strms)
@@ -74,7 +83,7 @@ func GetVideoStartTimeAndDur(segment []byte) (time.Duration, time.Duration, erro
 		}
 	} else {
 		glog.Error("Error reading streams ", err)
-		return 0, 0, err
+		return 0, 0, 0, nil, err
 	}
 	// glog.Infof("== Video index is %d", videoIdx)
 
@@ -86,11 +95,18 @@ func GetVideoStartTimeAndDur(segment []byte) (time.Duration, time.Duration, erro
 				break
 			}
 			glog.Error("Error reading packet", err)
-			return 0, 0, err
+			return 0, 0, 0, nil, err
 		}
 		// glog.Infof("Packet idx %d key %v time %s\n", pkt.Idx, pkt.IsKeyFrame, pkt.Time)
 		// glog.Infof("=====--- first video paket idx %d, video idx %d, time %s is key %v is video %v", pkt.Idx, videoIdx, pkt.Time, pkt.IsKeyFrame, pkt.Idx == videoIdx)
 		if pkt.Idx == videoIdx {
+			if pkt.IsKeyFrame {
+				if lastKeyFramePTS == -1 || pkt.Time != lastKeyFramePTS {
+					keyFrames++
+					lastKeyFramePTS = pkt.Time
+					skeyframes = append(skeyframes, pkt.Time)
+				}
+			}
 			// glog.V(model.VERBOSE).Infof("=====--- first video paket idx %d, video idx %d, time %s", pkt.Idx, videoIdx, pkt.Time)
 			// pktHash := md5.Sum(pkt.Data)
 			// glog.Infof("=== downloaded hash of %s is %x", pkt.Time, pktHash)
@@ -101,5 +117,5 @@ func GetVideoStartTimeAndDur(segment []byte) (time.Duration, time.Duration, erro
 		}
 		lastTime = pkt.Time
 	}
-	return firstTime, lastTime - firstTime, nil
+	return firstTime, lastTime - firstTime, keyFrames, skeyframes, nil
 }

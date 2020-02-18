@@ -6,8 +6,8 @@ import (
 	"github.com/golang/glog"
 	"github.com/gosuri/uiprogress"
 	"github.com/livepeer/joy4/av"
-	"github.com/livepeer/stream-tester/model"
 	"github.com/livepeer/stream-tester/internal/utils"
+	"github.com/livepeer/stream-tester/model"
 )
 
 type printKeyFrame struct {
@@ -44,6 +44,9 @@ type segmentsCounter struct {
 	currentSegments         int
 	segments                int
 	segmentsStartTimes      []time.Duration
+	keyFrames               int
+	keyFramesPTSs           []time.Duration
+	lastKeyFramesPTSs       []time.Duration
 	lastKeyUsedKeyTime      time.Duration
 	bar                     *uiprogress.Bar
 	recordSegmentsDurations bool
@@ -70,6 +73,14 @@ func newSegmentsCounter(segLen time.Duration, bar *uiprogress.Bar, recordSegment
 func (sc *segmentsCounter) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoidx int, audioidx int) (drop bool, err error) {
 	pkt.Time += sc.timeShift
 	if pkt.Idx == int8(videoidx) && pkt.IsKeyFrame {
+		sc.keyFrames++
+		if len(sc.keyFramesPTSs) < 16 {
+			sc.keyFramesPTSs = append(sc.keyFramesPTSs, pkt.Time)
+		}
+		sc.lastKeyFramesPTSs = append(sc.lastKeyFramesPTSs, pkt.Time)
+		if len(sc.lastKeyFramesPTSs) > 16 {
+			sc.lastKeyFramesPTSs = sc.lastKeyFramesPTSs[1:]
+		}
 		// pktHash := md5.Sum(pkt.Data)
 		// glog.Infof("=== hash of %s is %x", pkt.Time, pktHash)
 		// This matches segmenter algorithm used in ffmpeg
@@ -92,8 +103,8 @@ func (sc *segmentsCounter) ModifyPacket(pkt *av.Packet, streams []av.CodecData, 
 			if sc.recordSegmentsDurations {
 				sc.segmentsDurations = append(sc.segmentsDurations, pkt.Time-sc.lastKeyUsedKeyTime)
 			}
-			glog.V(model.VERBOSE).Infof("====== Number of segments: %d current segments: %d time %s last time %s diff %s data size %d time shift: %s\n",
-				sc.segments, sc.currentSegments, pkt.Time, sc.lastKeyUsedKeyTime, pkt.Time-sc.lastKeyUsedKeyTime, len(pkt.Data), sc.timeShift)
+			glog.V(model.VERBOSE).Infof("====== Number of segments: %d current segments: %d keyframes: %d time %s last time %s diff %s data size %d time shift: %s\n",
+				sc.segments, sc.currentSegments, sc.keyFrames, pkt.Time, sc.lastKeyUsedKeyTime, pkt.Time-sc.lastKeyUsedKeyTime, len(pkt.Data), sc.timeShift)
 			sc.lastKeyUsedKeyTime = pkt.Time
 		}
 	}

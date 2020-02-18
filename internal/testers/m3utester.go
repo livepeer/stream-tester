@@ -3,7 +3,6 @@ package testers
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -98,6 +97,7 @@ type downloadResult struct {
 	seqNo              uint64
 	mySeqNo            uint64
 	resolution         string
+	keyFrames          int
 }
 
 func (r *downloadResult) String() string {
@@ -193,6 +193,7 @@ func (mt *m3utester) Start(u string) {
 				os.Mkdir(mt.saveDirName, 0755)
 			}
 		}
+		glog.Infof("Save dir name: '%s', save playlist name %s", mt.saveDirName, mt.savePlayListName)
 	}
 	go mt.downloadLoop()
 	go mt.workerLoop()
@@ -524,6 +525,9 @@ func (mt *m3utester) stats() downloadStats {
 		stats.bytes += d.stats.bytes
 		stats.success += d.stats.success
 		stats.fail += d.stats.fail
+		if d.source {
+			stats.keyframes = d.stats.keyframes
+		}
 		for e, en := range d.stats.errors {
 			stats.errors[e] = stats.errors[e] + en
 		}
@@ -624,8 +628,10 @@ func (mt *m3utester) downloadLoop() {
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		glog.V(model.VERBOSE).Infof("Got playlist with %d variants (%s):", len(mpl.Variants), surl)
-		glog.V(model.VERBOSE).Info(mpl)
+		glog.V(model.VVERBOSE).Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), surl)
+		glog.V(model.VVERBOSE).Info(mpl)
+		// glog.Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), surl)
+		// glog.Info(mpl)
 		if !mt.wowzaMode || len(mpl.Variants) > model.ProfilesNum {
 			if mt.infiniteMode {
 				if !gotPlaylist {
@@ -687,12 +693,13 @@ func (mt *m3utester) downloadLoop() {
 }
 
 type downloadStats struct {
-	success int
-	fail    int
-	retries int
-	gaps    int
-	bytes   int64
-	errors  map[string]int
+	success   int
+	fail      int
+	retries   int
+	gaps      int
+	keyframes int
+	bytes     int64
+	errors    map[string]int
 }
 
 type downloadTask struct {
@@ -735,6 +742,7 @@ type mediaDownloader struct {
 	livepeerNameSchema bool
 	fullResultsCh      chan fullDownloadResult
 	segmentsMatcher    *segmentsMatcher
+	lastKeyFramesPTSs  sortedTimes
 }
 
 func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan fullDownloadResult,
@@ -772,13 +780,24 @@ func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTi
 		if strings.Contains(name, baseSaveDir) {
 			md.savePlayListName = name
 		} else {
+			base, _ := path.Split(md.savePlayListName)
 			md.savePlayListName = path.Join(baseSaveDir, name)
+			if base != "" {
+				md.saveDir = path.Join(baseSaveDir, base)
+			}
 		}
+		glog.V(model.DEBUG).Infof("Media stream %s (%s) save dir %s palylist name %s", name, resolution, md.saveDir, md.savePlayListName)
 		up := strings.Split(u, "/")
 		upl := len(up)
 		if upl > 2 && up[upl-3] == "stream" {
 			md.livepeerNameSchema = true
 			// dirName = strings.Split(up[upl-1], ".")[0] + "/"
+		}
+		base, _ := path.Split(md.savePlayListName)
+		if base != "" {
+			if _, err := os.Stat(base); os.IsNotExist(err) {
+				os.Mkdir(base, 0755)
+			}
 		}
 		// if dirName != "" {
 		// 	if _, err := os.Stat(dirName); os.IsNotExist(err) {
@@ -850,7 +869,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			res <- downloadResult{status: resp.Status, try: try}
 			return
 		}
-		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(b)
+		fsttim, dur, keyFrames, skeyFrames, verr := utils.GetVideoStartTimeDurFrames(b)
 		if verr != nil {
 			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
 			glog.Error(msg)
@@ -860,23 +879,36 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 				glog.Infof("Wrote bad segment to '%s'", fname)
 				panic(err)
 			}
-		}
-		glog.V(model.DEBUG).Infof("Download %s result: %s len %d timeStart %s segment duration %s", fsurl, resp.Status, len(b), fsttim, dur)
-		if !md.firstSegmentParsed && task.seqNo == 0 {
-			fst, err := utils.GetVideoStartTime(b)
-			if err != nil {
-				glog.Fatal(err)
+		} else {
+			// add keys
+			md.mu.Lock()
+			for _, tm := range skeyFrames {
+				md.lastKeyFramesPTSs = append(md.lastKeyFramesPTSs, tm)
 			}
+			sort.Sort(md.lastKeyFramesPTSs)
+			if len(md.lastKeyFramesPTSs) > 32 {
+				md.lastKeyFramesPTSs = md.lastKeyFramesPTSs[len(md.lastKeyFramesPTSs)-32:]
+			}
+			md.mu.Unlock()
+		}
+		glog.V(model.DEBUG).Infof("Download %s result: %s len %d timeStart %s segment duration %s keyframes %d (%+v)",
+			fsurl, resp.Status, len(b), fsttim, dur, keyFrames, skeyFrames)
+		if !md.firstSegmentParsed && task.seqNo == 0 {
+			// fst, err := utils.GetVideoStartTime(b)
+			// if err != nil {
+			// 	glog.Fatal(err)
+			// }
+			md.firstSegmentTime = fsttim
 			md.firstSegmentParsed = true
-			md.firstSegmentTime = fst
 		}
 		if md.segmentsMatcher != nil {
-			fsttim, dur, err := utils.GetVideoStartTimeAndDur(b)
-			if err != nil {
-				if err != io.EOF {
-					glog.Fatal(err)
-				}
-			} else {
+			// fsttim, dur, err := utils.GetVideoStartTimeAndDur(b)
+			// if err != nil {
+			// 	if err != io.EOF {
+			// 		glog.Fatal(err)
+			// 	}
+			// } else {
+			if verr == nil {
 				latency, speedRatio, merr := md.segmentsMatcher.matchSegment(fsttim, dur, now)
 				src := "    source"
 				if !md.source {
@@ -892,6 +924,9 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 					md.latenciesPerStream[task.seqNo] = latency
 					glog.V(model.VVERBOSE).Infof("lat: %+v", md.latenciesPerStream)
 					md.mu.Unlock()
+				}
+				if merr != nil {
+					panic(merr)
 				}
 				/*
 					var st time.Time
@@ -952,9 +987,10 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			if err != nil {
 				glog.Fatal(err)
 			}
+			glog.V(model.DEBUG).Infof("Segment %s saved to %s", seg.URI, path.Join(md.saveDir, fn))
 		}
 		res <- downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url, seqNo: task.seqNo,
-			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime}
+			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime, keyFrames: keyFrames}
 		return
 	}
 }
@@ -967,18 +1003,21 @@ func (md *mediaDownloader) workerLoop() {
 		case <-md.done:
 			return
 		case res := <-resultsCahn:
-			// md.mu.Lock()
+			md.mu.Lock()
 			glog.V(model.VERBOSE).Infof("Got result %+v", res)
+			glog.V(model.DEBUG).Infof("Got download result seqNo=%d start time=%s dur=%s keys=%d res=%s name=%s", res.seqNo,
+				res.startTime, res.duration, res.keyFrames, md.resolution, res.name)
 			md.stats.retries += res.try
 			if res.status == "200 OK" {
 				md.stats.success++
+				md.stats.keyframes += res.keyFrames
 				md.stats.bytes += int64(res.bytes)
 				md.fullResultsCh <- fullDownloadResult{downloadResult: res, mediaPlaylistName: md.name, resolution: md.resolution}
 			} else {
 				md.stats.fail++
 				md.stats.errors[res.status] = md.stats.errors[res.status] + 1
 			}
-			// md.mu.Unlock()
+			md.mu.Unlock()
 		case task := <-md.downTasks:
 			// if seen.Contains(task.url) {
 			// 	continue
@@ -1104,3 +1143,11 @@ func getSortedKeys(data map[string]*mediaDownloader) []string {
 	res.Sort()
 	return res
 }
+
+type sortedTimes []time.Duration
+
+func (p sortedTimes) Len() int { return len(p) }
+func (p sortedTimes) Less(i, j int) bool {
+	return p[i] < p[j]
+}
+func (p sortedTimes) Swap(i, j int) { p[i], p[j] = p[j], p[i] }

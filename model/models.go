@@ -69,11 +69,16 @@ type Stats struct {
 	TotalSegmentsToSend            int               `json:"total_segments_to_send"`
 	SentSegments                   int               `json:"sent_segments"`
 	DownloadedSegments             int               `json:"downloaded_segments"`
+	DownloadedSourceSegments       int               `json:"downloaded_source_segments"`
+	DownloadedTranscodedSegments   int               `json:"downloaded_transcoded_segments"`
 	ShouldHaveDownloadedSegments   int               `json:"should_have_downloaded_segments"`
 	FailedToDownloadSegments       int               `json:"failed_to_download_segments"`
 	BytesDownloaded                int64             `json:"bytes_downloaded"`
 	Retries                        int               `json:"retries"`
 	SuccessRate                    float64           `json:"success_rate"` // DownloadedSegments/profilesNum*SentSegments
+	SentKeyFrames                  int               `json:"sent_key_frames"`
+	DownloadedKeyFrames            int               `json:"downloaded_key_frames"`
+	SuccessRate2                   float64           `json:"success_rate2"` // DownloadedKeyFrames/profilesNum*SentKeyFrames
 	ConnectionLost                 int               `json:"connection_lost"`
 	Finished                       bool              `json:"finished"`
 	ProfilesNum                    int               `json:"profiles_num"`
@@ -128,8 +133,14 @@ Success rate:                                     %9.5f%%
 Lost connection to broadcaster:               %7d
 Source latencies:                             %s
 Transcoded latencies:                         %s
+Sent key frames:                              %7d
+Downloaded key frames:                        %7d
+Downloaded source segments:                   %7d
+Downloaded transcoded segments:               %7d
+Success rate 2:                                   %9.5f%%
 Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams, time.Now().Sub(st.StartTime), st.TotalSegmentsToSend, st.SentSegments, st.DownloadedSegments,
-		st.ShouldHaveDownloadedSegments, st.Retries, st.SuccessRate, st.ConnectionLost, st.SourceLatencies.String(), st.TranscodedLatencies.String(), st.BytesDownloaded)
+		st.ShouldHaveDownloadedSegments, st.Retries, st.SuccessRate, st.ConnectionLost, st.SourceLatencies.String(), st.TranscodedLatencies.String(),
+		st.SentKeyFrames, st.DownloadedKeyFrames, st.DownloadedSourceSegments, st.DownloadedTranscodedSegments, st.SuccessRate2, st.BytesDownloaded)
 	if len(st.Errors) > 0 {
 		r = fmt.Sprintf("%s\nErrors: %+v\n", r, st.Errors)
 	}

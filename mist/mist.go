@@ -61,10 +61,10 @@ type (
 		Processes []*process `json:"processes,omitempty"`
 	}
 
-	// authReq struct {
-	// 	Login    string `json:"login,omitempty"`
-	// 	Password string `json:"password,omitempty"`
-	// }
+	authReq struct {
+		Username string `json:"username,omitempty"`
+		Password string `json:"password,omitempty"`
+	}
 
 	addStreamReq struct {
 		Minimal   int                `json:"minimal,omitempty"`
@@ -72,6 +72,7 @@ type (
 	}
 
 	deleteStreamReq struct {
+		Authorize    *authReq `json:"authorize,omitempty"`
 		Minimal      int      `json:"minimal,omitempty"`
 		Deletestream []string `json:"deletestream,omitempty"`
 	}
@@ -163,6 +164,10 @@ func (mapi *API) CreateStream(name, profile string) {
 func (mapi *API) DeleteStreams(names ...string) {
 	glog.Infof("Deleting Mist streams '%v'", names)
 	reqs := &deleteStreamReq{
+		Authorize: &authReq{
+			Username: mapi.login,
+			Password: mapi.challengeRepsonse,
+		},
 		Minimal:      1,
 		Deletestream: make([]string, 0),
 	}
@@ -187,16 +192,28 @@ func (mapi *API) post(commandi interface{}) []byte {
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		glog.Fatalf("Error creating new Mist stream %v", err)
+		glog.Fatalf("Error sending Mist command %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		glog.Fatalf("Status error creating Mist stream status %d", resp.StatusCode)
+		glog.Fatalf("Status error sending Mist command status %d", resp.StatusCode)
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		glog.Fatalf("Error creating Mist stream %v", err)
+		glog.Fatalf("Error sending Mist command %v", err)
 	}
-	glog.Info(string(b))
+	glog.Info("Mist response: " + string(b))
+
+	/*
+		auth := &authResp{}
+		err = json.Unmarshal(b, auth)
+		if err != nil {
+			return b
+		}
+		glog.Infof("challenge: %s, status: %s", auth.Authorize.Challenge, auth.Authorize.Status)
+		if auth.Authorize.Status == "CHALL" {
+			// need to re-authenticate
+		}
+	*/
 	return b
 }
