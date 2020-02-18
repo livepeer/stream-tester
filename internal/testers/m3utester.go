@@ -591,6 +591,7 @@ func (mt *m3utester) downloadLoop() {
 	if mt.infiniteMode {
 		glog.Infof("Waiting for playlist %s", surl)
 	}
+	mistMediaStreams := make(map[string]string) // maps clean urls to urls with session
 
 	for {
 		select {
@@ -655,7 +656,12 @@ func (mt *m3utester) downloadLoop() {
 					variant.URI = wowzaSessionRE.ReplaceAllString(variant.URI, "_")
 				}
 				if mt.mistMode {
-					variant.URI = mistSessionRE.ReplaceAllString(variant.URI, "")
+					vURIClean := mistSessionRE.ReplaceAllString(variant.URI, "")
+					if firstURI, has := mistMediaStreams[vURIClean]; has {
+						variant.URI = firstURI
+					} else {
+						mistMediaStreams[vURIClean] = variant.URI
+					}
 				}
 				pvrui, err := url.Parse(variant.URI)
 				if err != nil {
