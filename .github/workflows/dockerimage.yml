@@ -28,3 +28,6 @@ jobs:
         docker push livepeer/streamtester:${{ steps.get_version.outputs.VERSION }}
     - name: Push Docker Container to Registry
       run: docker push livepeer/streamtester:latest
+
+    - name: Notify that new build has been uploaded
+      run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
