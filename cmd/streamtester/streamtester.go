@@ -16,11 +16,11 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/stream-tester/apis/livepeer"
+	mistapi "github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
-	mistapi "github.com/livepeer/stream-tester/mist"
 	"github.com/livepeer/stream-tester/model"
 )
 
