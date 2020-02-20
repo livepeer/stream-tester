@@ -195,6 +195,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.mu.Lock()
 		hs.dstats.triedToSend++
 		hs.dstats.failedToSend++
+		hs.dstats.errors[err.Error()] = hs.dstats.errors[err.Error()] + 1
 		hs.mu.Unlock()
 		return
 		// panic(err)
@@ -246,7 +247,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 			}
 			body, merr := ioutil.ReadAll(p)
 			if merr != nil {
-				glog.Errorf("Error reading body manifest=%d seqNo=%d err=%v", manifestID, seg.seqNo, merr)
+				glog.Errorf("Error reading body manifest=%s seqNo=%d err=%v", manifestID, seg.seqNo, merr)
 				err = merr
 				break
 			}
@@ -273,6 +274,12 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.mu.Lock()
 		hs.dstats.triedToSend++
 		hs.dstats.downloadFailures++
+		if strings.Contains(err.Error(), "connection reset by peer") {
+			errt := "connection reset downloading transcoded data"
+			hs.dstats.errors[errt] = hs.dstats.errors[errt] + 1
+		} else {
+			hs.dstats.errors[err.Error()] = hs.dstats.errors[err.Error()] + 1
+		}
 		hs.mu.Unlock()
 		return
 	}
