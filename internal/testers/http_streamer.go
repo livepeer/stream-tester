@@ -197,6 +197,9 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.dstats.failedToSend++
 		if timedout {
 			hs.dstats.errors["Timed out"] = hs.dstats.errors["Timed out"] + 1
+		} else if strings.Contains(err.Error(), "write: connection reset by peer") {
+			emsg := "connection reset sending source segment"
+			hs.dstats.errors[emsg] = hs.dstats.errors[emsg] + 1
 		} else {
 			hs.dstats.errors[err.Error()] = hs.dstats.errors[err.Error()] + 1
 		}
@@ -231,6 +234,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		panic(err)
 		return
 	}
+	timedout = false
 	var segments [][]byte
 	var urls []string
 	if "multipart/mixed" == mediaType {
@@ -278,10 +282,17 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		httpErr := fmt.Sprintf(`Error reading http request body for manifest=%s seqNo=%d err=%s`, manifestID, seg.seqNo, err.Error())
 		glog.Error(httpErr)
 		// http.Error(w, httpErr, http.StatusInternalServerError)
+		if err != nil {
+			uerr := err.(*url.Error)
+			timedout = uerr.Timeout()
+		}
 		hs.mu.Lock()
 		hs.dstats.triedToSend++
 		hs.dstats.downloadFailures++
-		if strings.Contains(err.Error(), "connection reset by peer") {
+		if timedout {
+			errt := "timed out downloading transcoded data"
+			hs.dstats.errors[errt] = hs.dstats.errors[errt] + 1
+		} else if strings.Contains(err.Error(), "connection reset by peer") {
 			errt := "connection reset downloading transcoded data"
 			hs.dstats.errors[errt] = hs.dstats.errors[errt] + 1
 		} else {
