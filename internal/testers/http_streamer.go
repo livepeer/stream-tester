@@ -195,7 +195,11 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.mu.Lock()
 		hs.dstats.triedToSend++
 		hs.dstats.failedToSend++
-		hs.dstats.errors[err.Error()] = hs.dstats.errors[err.Error()] + 1
+		if timedout {
+			hs.dstats.errors["Timed out"] = hs.dstats.errors["Timed out"] + 1
+		} else {
+			hs.dstats.errors[err.Error()] = hs.dstats.errors[err.Error()] + 1
+		}
 		hs.mu.Unlock()
 		return
 		// panic(err)
