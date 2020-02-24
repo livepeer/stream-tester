@@ -119,7 +119,8 @@ func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, r
 	if hlt.lapi != nil {
 		pm = fmt.Sprintf(" with profiles '%v'", hlt.lapi.DefaultPresets())
 	}
-	msg := fmt.Sprintf("Starting HTTP streaming %s to %v, number of streams is %d %s\n", sourceFileName, httpIngestURLTemplates, simStreams, pm)
+	msg := fmt.Sprintf("Starting (%s) HTTP streaming %s to %v, number of streams is %d %s\n",
+		model.Version, sourceFileName, httpIngestURLTemplates, simStreams, pm)
 	messenger.SendMessage(msg)
 	fmt.Println(msg)
 	// httpIngestURLTemplate := "http://%s:%d/live/%s"
