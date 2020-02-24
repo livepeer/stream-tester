@@ -203,6 +203,9 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		} else if strings.Contains(err.Error(), "write: connection reset by peer") {
 			emsg := "connection reset sending source segment to " + host
 			hs.dstats.errors[emsg] = hs.dstats.errors[emsg] + 1
+		} else if strings.Contains(err.Error(), "http2: stream closed") {
+			emsg := "http2: stream closed posting to " + host
+			hs.dstats.errors[emsg] = hs.dstats.errors[emsg] + 1
 		} else {
 			hs.dstats.errors[err.Error()] = hs.dstats.errors[err.Error()] + 1
 		}
