@@ -253,9 +253,12 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 			}
 			if mediaType == "application/vnd+livepeer.uri" {
 				urls = append(urls, string(body))
-
 			} else {
-				glog.Infof("Read back segment for manifest=%s seqNo=%d profile=%d len=%d bytes", manifestID, seg.seqNo, len(segments), len(body))
+				var v glog.Level = model.DEBUG
+				if len(body) < 5 {
+					v = 0
+				}
+				glog.V(v).Infof("Read back segment for manifest=%s seqNo=%d profile=%d len=%d bytes", manifestID, seg.seqNo, len(segments), len(body))
 				segments = append(segments, body)
 			}
 		}

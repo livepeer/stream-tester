@@ -65,7 +65,8 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 	showProgress := false
 	baseManifestID := strings.ReplaceAll(path.Base(sourceFileName), ".", "") + "_" + randName()
 
-	httpIngestURLTemplate := fmt.Sprintf("http://%s:%d/live/%%s", bhost, nMediaPort)
+	// httpIngestURLTemplate := fmt.Sprintf("http://%s:%d/live/%%s", bhost, nMediaPort)
+	httpIngestURLTemplates := []string{fmt.Sprintf("http://%s:%d/live/%%s", bhost, nMediaPort)}
 	if hlt.lapi != nil {
 		broadcasters, err := hlt.lapi.Broadcasters()
 		if err != nil {
@@ -74,7 +75,11 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 		if len(broadcasters) == 0 {
 			return "", fmt.Errorf("Empty list of broadcasters")
 		}
-		httpIngestURLTemplate = fmt.Sprintf("%s/live/%%s", broadcasters[0])
+		httpIngestURLTemplates = make([]string, 0, len(broadcasters))
+		// httpIngestURLTemplate = fmt.Sprintf("%s/live/%%s", broadcasters[0])
+		for _, b := range broadcasters {
+			httpIngestURLTemplates = append(httpIngestURLTemplates, fmt.Sprintf("%s/live/%%s", b))
+		}
 	}
 
 	go func() {
@@ -82,7 +87,7 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 			if repeat > 1 {
 				glog.Infof("Starting %d streaming session", i)
 			}
-			err := hlt.startStreams(baseManifestID, sourceFileName, i, httpIngestURLTemplate, simStreams, showProgress, measureLatency,
+			err := hlt.startStreams(baseManifestID, sourceFileName, i, httpIngestURLTemplates, simStreams, showProgress, measureLatency,
 				streamDuration, groupStartBy, startDelayBetweenGroups, waitForTarget)
 			if err != nil {
 				glog.Fatal(err)
@@ -106,7 +111,7 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 	return baseManifestID, nil
 }
 
-func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, repeatNum int, httpIngestURLTemplate string, simStreams uint, showProgress,
+func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, repeatNum int, httpIngestURLTemplates []string, simStreams uint, showProgress,
 	measureLatency bool, stopAfter time.Duration, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, host, nRtmpPort, simStreams)
@@ -114,7 +119,7 @@ func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, r
 	if hlt.lapi != nil {
 		pm = fmt.Sprintf(" with profiles '%v'", hlt.lapi.DefaultPresets())
 	}
-	msg := fmt.Sprintf("Starting HTTP streaming %s to %s, number of streams is %d %s\n", sourceFileName, httpIngestURLTemplate, simStreams, pm)
+	msg := fmt.Sprintf("Starting HTTP streaming %s to %v, number of streams is %d %s\n", sourceFileName, httpIngestURLTemplates, simStreams, pm)
 	messenger.SendMessage(msg)
 	fmt.Println(msg)
 	// httpIngestURLTemplate := "http://%s:%d/live/%s"
@@ -134,6 +139,7 @@ func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, r
 			}
 			manifestID = sid
 		}
+		httpIngestURLTemplate := httpIngestURLTemplates[i%len(httpIngestURLTemplates)]
 		httpIngestURL := fmt.Sprintf(httpIngestURLTemplate, manifestID)
 		glog.Infof("HTTP ingest: %s", httpIngestURL)
 		// var bar *uiprogress.Bar
