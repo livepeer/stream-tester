@@ -168,9 +168,9 @@ func (st *Stats) FormatErrorsForConsole() string {
 	}
 	ss.Sort()
 	for _, k := range ss {
-		r = append(r, fmt.Sprintf(" . %s: %d", k, st.Errors[k]))
+		r = append(r, fmt.Sprintf("  %s: %d", strings.TrimSpace(k), st.Errors[k]))
 	}
-	return strings.Join(r, "\n")
+	return "Errors:\n" + strings.Join(r, "\n")
 }
 
 func (ls *Latencies) String() string {

@@ -74,7 +74,7 @@ func main() {
 			}
 			glog.Fatal(err)
 		}
-		if pkt.IsKeyFrame || false {
+		if pkt.IsKeyFrame && pkt.Idx == videoidx || false {
 			fmt.Printf("Packet Is Keyframe %v Is Audio %v Is Video %v PTS %s CompTime %s\n",
 				pkt.IsKeyFrame, pkt.Idx == audioidx, pkt.Idx == videoidx, pkt.Time, pkt.CompositionTime)
 		}

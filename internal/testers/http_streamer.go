@@ -167,6 +167,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	host := purl.Hostname()
 	urlToUp := fmt.Sprintf("%s/%d.ts", httpURL, seg.seqNo)
 	glog.V(model.SHORT).Infof("Got source segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
+	glog.Infof("Got source segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
 	var body io.Reader
 	body = bytes.NewReader(seg.data)
 	req, err := uhttp.NewRequest("POST", urlToUp, body)
