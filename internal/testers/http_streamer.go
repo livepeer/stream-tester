@@ -163,6 +163,8 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.dstats.started = time.Now()
 	}
 	hs.mu.Unlock()
+	purl, _ := url.Parse(httpURL)
+	host := purl.Hostname()
 	urlToUp := fmt.Sprintf("%s/%d.ts", httpURL, seg.seqNo)
 	glog.V(model.SHORT).Infof("Got source segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
 	var body io.Reader
@@ -196,9 +198,10 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.dstats.triedToSend++
 		hs.dstats.failedToSend++
 		if timedout {
-			hs.dstats.errors["Timed out"] = hs.dstats.errors["Timed out"] + 1
+			emsg := "Timed out " + host
+			hs.dstats.errors[emsg] = hs.dstats.errors[emsg] + 1
 		} else if strings.Contains(err.Error(), "write: connection reset by peer") {
-			emsg := "connection reset sending source segment"
+			emsg := "connection reset sending source segment to " + host
 			hs.dstats.errors[emsg] = hs.dstats.errors[emsg] + 1
 		} else {
 			hs.dstats.errors[err.Error()] = hs.dstats.errors[err.Error()] + 1
@@ -215,7 +218,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.dstats.triedToSend++
 		hs.dstats.transcodeFailures++
 		hs.dstats.errors[string(b)] = hs.dstats.errors[string(b)] + 1
-		statusStr := fmt.Sprintf("Pushing segment status error %d", resp.StatusCode)
+		statusStr := fmt.Sprintf("Pushing segment status error %d (%s)", resp.StatusCode, host)
 		hs.dstats.errors[statusStr] = hs.dstats.errors[statusStr] + 1
 		hs.dstats.errors[string(b)] = hs.dstats.errors[string(b)] + 1
 		hs.mu.Unlock()
@@ -290,10 +293,10 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.dstats.triedToSend++
 		hs.dstats.downloadFailures++
 		if timedout {
-			errt := "timed out downloading transcoded data"
+			errt := "timed out downloading transcoded data " + host
 			hs.dstats.errors[errt] = hs.dstats.errors[errt] + 1
 		} else if strings.Contains(err.Error(), "connection reset by peer") {
-			errt := "connection reset downloading transcoded data"
+			errt := "connection reset downloading transcoded data from " + host
 			hs.dstats.errors[errt] = hs.dstats.errors[errt] + 1
 		} else {
 			hs.dstats.errors[err.Error()] = hs.dstats.errors[err.Error()] + 1
