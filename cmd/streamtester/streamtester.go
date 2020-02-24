@@ -248,6 +248,7 @@ func main() {
 	fmt.Println("========= Stats: =========")
 	stats := sr.Stats("")
 	fmt.Println(stats.FormatForConsole())
+	fmt.Println(stats.FormatErrorsForConsole())
 	// fmt.Println(sr.AnalyzeFormatted(false))
 	if *latencyThreshold > 0 && stats.TranscodedLatencies.P95 > 0 {
 		// check latencies, report failure or success

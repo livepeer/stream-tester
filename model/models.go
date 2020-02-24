@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -141,7 +142,8 @@ Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams,
 		st.ShouldHaveDownloadedSegments, st.Retries, st.SuccessRate, st.ConnectionLost, st.SourceLatencies.String(), st.TranscodedLatencies.String(),
 		st.SentKeyFrames, st.DownloadedKeyFrames, st.DownloadedSourceSegments, st.DownloadedTranscodedSegments, st.SuccessRate2, st.BytesDownloaded)
 	if len(st.Errors) > 0 {
-		r = fmt.Sprintf("%s\nErrors: %+v\n", r, st.Errors)
+		r += "\n"
+		// r = fmt.Sprintf("%s\nErrors: %+v\n", r, st.Errors)
 	}
 	/* disable temporarily
 	if len(st.RawTranscodeLatenciesPerStream) > 0 {
@@ -152,6 +154,23 @@ Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams,
 	}
 	*/
 	return r
+}
+
+// FormatErrorsForConsole prints only .Errors
+func (st *Stats) FormatErrorsForConsole() string {
+	if len(st.Errors) == 0 {
+		return ""
+	}
+	r := make([]string, 0, len(st.Errors))
+	ss := make(sort.StringSlice, 0, len(st.Errors))
+	for k := range st.Errors {
+		ss = append(ss, k)
+	}
+	ss.Sort()
+	for _, k := range ss {
+		r = append(r, fmt.Sprintf(" . %s: %d", k, st.Errors[k]))
+	}
+	return strings.Join(r, "\n")
 }
 
 func (ls *Latencies) String() string {

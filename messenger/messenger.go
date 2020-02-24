@@ -46,6 +46,9 @@ func SendFatalMessage(msg string) {
 
 // SendMessage send message to Discord channel
 func SendMessage(msg string) {
+	if msg == "" {
+		return
+	}
 	glog.Info(msg)
 	sendMessage(msg)
 }
