@@ -136,6 +136,7 @@ func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToSt
 		panic(err)
 	}
 	var seg *hlsSegment
+	lastSeg := time.Now()
 outloop:
 	for {
 		select {
@@ -150,6 +151,8 @@ outloop:
 			}
 			break
 		}
+		glog.Infof("Got segment out of segmenter mainfest=%s seqNo=%d pts=%s dur=%s since last=%s", manifestID, seg.seqNo, seg.pts, seg.duration, time.Since(lastSeg))
+		lastSeg = time.Now()
 		go hs.pushSegment(httpURL, manifestID, seg)
 	}
 	hs.mu.Lock()
@@ -167,7 +170,6 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	host := purl.Hostname()
 	urlToUp := fmt.Sprintf("%s/%d.ts", httpURL, seg.seqNo)
 	glog.V(model.SHORT).Infof("Got source segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
-	glog.Infof("Got source segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
 	var body io.Reader
 	body = bytes.NewReader(seg.data)
 	req, err := uhttp.NewRequest("POST", urlToUp, body)
@@ -203,6 +205,9 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 			hs.dstats.errors[emsg] = hs.dstats.errors[emsg] + 1
 		} else if strings.Contains(err.Error(), "write: connection reset by peer") {
 			emsg := "connection reset sending source segment to " + host
+			hs.dstats.errors[emsg] = hs.dstats.errors[emsg] + 1
+		} else if strings.Contains(err.Error(), "read: connection reset by peer") {
+			emsg := "connection reset reading status from " + host
 			hs.dstats.errors[emsg] = hs.dstats.errors[emsg] + 1
 		} else if strings.Contains(err.Error(), "http2: stream closed") {
 			emsg := "http2: stream closed posting to " + host
