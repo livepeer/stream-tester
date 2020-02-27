@@ -203,7 +203,9 @@ func (t *Tester) Run(ctx context.Context, NumProfiles uint) (*Result, error) {
 			case <-c.C:
 				stats, err = t.stats()
 				if err != nil {
-					return &Result{}, fmt.Errorf("get stats failed: %v", err)
+					// return &Result{}, fmt.Errorf("get stats failed: %v", err)
+					messenger.SendMessage(fmt.Sprintf("get stats failed: %v", err))
+					continue
 				}
 				glog.V(model.VERBOSE).Infof("Running %d streams: %s", numStreams, stats.FormatForConsole())
 
