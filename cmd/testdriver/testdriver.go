@@ -34,7 +34,7 @@ func main() {
 	fileArg := fs.String("file", "", "File to stream")
 	stime := fs.String("time", "", "Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option.")
 
-	startDelay := fs.Duration("start-delay", 1*time.Second, "time delay before start")
+	startDelay := fs.Duration("start-delay", 15*time.Second, "time delay before start")
 
 	statsInterval := fs.Duration("stats-interval", 10*time.Second, "time interval between checking stats")
 
@@ -136,8 +136,9 @@ func main() {
 		}
 	*/
 
-	t := time.NewTicker(*startDelay)
-	<-t.C
+	if model.Production {
+		time.Sleep(*startDelay)
+	}
 
 	// FIXME: add random generated string to use as unique identifier
 	messenger.SendMessage(
