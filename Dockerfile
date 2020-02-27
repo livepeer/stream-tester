@@ -24,7 +24,8 @@ COPY apis apis
 
 RUN echo $version
 
-RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version'" cmd/streamtester/streamtester.go
+RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.Production=true'" cmd/streamtester/streamtester.go
+RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.Production=true'" cmd/testdriver/testdriver.go
 
 
 FROM alpine
@@ -36,6 +37,7 @@ COPY --from=builder /root/official_test_source_2s_keys_24pfs_3min.mp4 official_t
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4
 COPY --from=builder /root/streamtester streamtester
+COPY --from=builder /root/testdriver testdriver
 
 # docker build -t livepeer/streamtester:latest .
 # docker build -t livepeer/streamtester:latest --build-arg version=$(git describe --dirty) .

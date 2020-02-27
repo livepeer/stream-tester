@@ -81,6 +81,7 @@ func main() {
 	fmt.Println("Stream tester version: " + model.Version)
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
+	fmt.Printf("Production: %v\n", model.Production)
 
 	if *version {
 		// fmt.Println("Stream tester version: " + model.Version)
@@ -99,8 +100,9 @@ func main() {
 		runtime.Goexit()
 		return
 	}
+	var lapi *livepeer.API
 	if *fServer {
-		s := server.NewStreamerServer(*wowza, *mist)
+		s := server.NewStreamerServer(*wowza, *mist, *apiToken)
 		s.StartWebServer(*serverAddr)
 		return
 	}
@@ -181,7 +183,6 @@ func main() {
 		// mapi.CreateStream("dark1", "P720p30fps16x9")
 		// mapi.DeleteStreams("dark1")
 	}
-	var lapi *livepeer.API
 	if *lapiFlag {
 		if *apiToken == "" {
 			glog.Fatalf("-api-token should be specified")
@@ -195,7 +196,7 @@ func main() {
 		}
 		presetsParts := strings.Split(*presets, ",")
 		model.ProfilesNum = len(presetsParts)
-		lapi = livepeer.NewLivepeer(*apiToken, "chi.livepeer-ac.live", presetsParts) // hardcode AC server for now
+		lapi = livepeer.NewLivepeer(*apiToken, livepeer.ACServer, presetsParts) // hardcode AC server for now
 		lapi.Init()
 		// lapi.CreateStream("st01", "P144p30fps16x9")
 		bds, err := lapi.Broadcasters()
@@ -264,7 +265,7 @@ func main() {
 		fmt.Println(msg)
 	}
 	if *noExit {
-		s := server.NewStreamerServer(*wowza, *mist)
+		s := server.NewStreamerServer(*wowza, *mist, "")
 		s.StartWebServer(*serverAddr)
 	}
 	// messenger.SendMessage(sr.AnalyzeFormatted(true))

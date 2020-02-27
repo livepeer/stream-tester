@@ -17,6 +17,18 @@ const (
 	INSANE   = 12
 )
 
+// IProduction is set to true in the proceess of building Docker container
+var IProduction = ""
+
+// Production is set to true in the Docker container
+var Production = false
+
+func init() {
+	if IProduction == "true" {
+		Production = true
+	}
+}
+
 // Version version
 // content of this constant will be set at build time,
 // using -ldflags, using output of the `git describe` command.
@@ -109,6 +121,8 @@ type StartStreamsReq struct {
 	DoNotClearStats bool   `json:"do_not_clear_stats"`
 	MeasureLatency  bool   `json:"measure_latency"`
 	HTTPIngest      bool   `json:"http_ingest"`
+	Lapi            bool   `json:"lapi"`    // Use Livepeer API to create stream
+	Presets         string `json:"presets"` // Transcoding profiles to use with Livepeer API
 }
 
 // StartStreamsRes start streams response

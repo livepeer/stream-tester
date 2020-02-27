@@ -156,7 +156,9 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			if groupStartBy > 0 && i%groupStartBy == 0 {
 				startDelayBetweenGroups = 2*time.Second + time.Duration(rand.Intn(4000))*time.Millisecond
 				glog.Infof("Waiting for %s before starting stream %d", startDelayBetweenGroups, i)
-				time.Sleep(startDelayBetweenGroups)
+				if model.Production {
+					time.Sleep(startDelayBetweenGroups)
+				}
 			}
 			manifestID := fmt.Sprintf("%s_%d_%d", baseManfistID, repeatNum, i)
 			if sr.mapi != nil {

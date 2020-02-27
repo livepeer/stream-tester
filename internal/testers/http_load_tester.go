@@ -102,8 +102,8 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 		hlt.Cancel()
 		// messenger.SendMessage(sr.AnalyzeFormatted(true))
 		stats := hlt.Stats("")
-		messenger.SendMessage("```\n" + stats.FormatForConsole() + "```")
-		messenger.SendMessage("```\n" + stats.FormatErrorsForConsole() + "```")
+		messenger.SendCodeMessage(stats.FormatForConsole())
+		messenger.SendCodeMessage(stats.FormatErrorsForConsole())
 		// fmt.Printf(sr.AnalyzeFormatted(false))
 		// if !notFinal {
 		// 	hlt.Cancel()

@@ -3,10 +3,19 @@ SHELL=/bin/bash
 all: streamtester
 
 ldflags := -X 'github.com/livepeer/stream-tester/model.Version=$(shell git describe --dirty)'
+# ldflags := -X 'github.com/livepeer/stream-tester/model.Version=$(shell git describe --dirty)' -X 'github.com/livepeer/stream-tester/model.IProduction=true'
 
 .PHONY: streamtester
 streamtester:
 	go build -ldflags="$(ldflags)" cmd/streamtester/streamtester.go
+
+.PHONY: testdriver
+testdriver:
+	go build -ldflags="$(ldflags)" cmd/testdriver/testdriver.go
+
+.PHONY: lapi
+lapi:
+	go build -ldflags="$(ldflags)" cmd/lapi/lapi.go
 
 .PHONY: docker
 docker:

@@ -53,6 +53,15 @@ func SendMessage(msg string) {
 	sendMessage(msg)
 }
 
+// SendCodeMessage send message to Discord channel, wrapping it as three ticks
+func SendCodeMessage(msg string) {
+	if msg == "" {
+		return
+	}
+	glog.Info(msg)
+	sendMessage("```\n" + msg + "```")
+}
+
 // SendMessageDebounced send message to Discord channel
 func SendMessageDebounced(msg string) {
 	glog.Info(msg)

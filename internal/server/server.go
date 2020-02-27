@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/model"
 )
@@ -22,14 +24,16 @@ type StreamerServer struct {
 	lock      sync.RWMutex
 	wowzaMode bool
 	mistMode  bool
+	lapiToken string
 }
 
 // NewStreamerServer creates new StreamerServer
-func NewStreamerServer(wowzaMode, mistMode bool) *StreamerServer {
+func NewStreamerServer(wowzaMode, mistMode bool, lapiToken string) *StreamerServer {
 	return &StreamerServer{
 		// streamer:  testers.NewStreamer(wowzaMode),
 		wowzaMode: wowzaMode,
 		mistMode:  mistMode,
+		lapiToken: lapiToken,
 	}
 }
 
@@ -159,7 +163,14 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 	glog.Infof("Get request: %+v", ssr)
 	if !ssr.DoNotClearStats || ss.streamer == nil {
 		if ssr.HTTPIngest {
-			ss.streamer = testers.NewHTTPLoadTester(nil, 0)
+			var lapi *livepeer.API
+			if ssr.Lapi {
+				presetsParts := strings.Split(ssr.Presets, ",")
+				model.ProfilesNum = len(presetsParts)
+				lapi = livepeer.NewLivepeer(ss.lapiToken, livepeer.ACServer, presetsParts) // hardcode AC server for now
+				lapi.Init()
+			}
+			ss.streamer = testers.NewHTTPLoadTester(lapi, 0)
 		} else {
 			ss.streamer = testers.NewStreamer(ss.wowzaMode, ss.mistMode, nil, nil)
 		}
