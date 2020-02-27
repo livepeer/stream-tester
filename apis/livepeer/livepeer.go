@@ -14,7 +14,7 @@ import (
 	"github.com/livepeer/stream-tester/model"
 )
 
-const httpTimeout = 2 * time.Second
+const httpTimeout = 4 * time.Second
 
 var httpClient = &http.Client{
 	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},

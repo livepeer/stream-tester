@@ -151,7 +151,7 @@ outloop:
 			}
 			break
 		}
-		glog.Infof("Got segment out of segmenter mainfest=%s seqNo=%d pts=%s dur=%s since last=%s", manifestID, seg.seqNo, seg.pts, seg.duration, time.Since(lastSeg))
+		glog.V(model.DEBUG).Infof("Got segment out of segmenter mainfest=%s seqNo=%d pts=%s dur=%s since last=%s", manifestID, seg.seqNo, seg.pts, seg.duration, time.Since(lastSeg))
 		lastSeg = time.Now()
 		go hs.pushSegment(httpURL, manifestID, seg)
 	}
