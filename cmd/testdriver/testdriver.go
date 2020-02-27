@@ -33,6 +33,7 @@ func main() {
 	httpIngest := fs.Bool("http-ingest", false, "use HTTP ingest")
 	fileArg := fs.String("file", "", "File to stream")
 	stime := fs.String("time", "", "Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option.")
+	presets := fs.String("presets", "", "Comma separate list of transcoding profiels to use along with Livepeer API")
 
 	startDelay := fs.Duration("start-delay", 15*time.Second, "time delay before start")
 
@@ -81,7 +82,8 @@ func main() {
 		MeasureLatency: true,
 		Time:           *stime,
 		Lapi:           true,
-		Presets:        "P240p30fps16x9,P360p30fps16x9,P576p30fps16x9,P720p30fps16x9",
+		Presets:        *presets,
+		// Presets:        "P240p30fps16x9,P360p30fps16x9,P576p30fps16x9,P720p30fps16x9",
 	}
 	testDriver := testdriver.NewTester(
 		httpClient,
