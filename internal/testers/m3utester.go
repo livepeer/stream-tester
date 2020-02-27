@@ -969,7 +969,9 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			seg.Duration = task.duration
 			seg.Title = task.title
 			// md.savePlayList.AppendSegment(seg)
+			md.mu.Lock()
 			md.savePlayList.InsertSegment(task.seqNo, seg)
+			md.mu.Unlock()
 
 			// glog.Infof("url: %s", task.url)
 			upts := strings.Split(fsurl, "/")
@@ -980,10 +982,17 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			if !md.livepeerNameSchema {
 				// ind = 0
 				// fn = upts[0]
+				for i, n := range upts {
+					if n == md.saveDir {
+						fn = strings.Join(upts[i+1:], "/")
+						break
+					}
+				}
 			} else {
 				// fn := fmt.Sprintf("%s-%05d.ts", upts[ind], task.seqNo)
 				fn = fmt.Sprintf("%s-%s", upts[ind], fn)
 			}
+			glog.V(model.INSANE).Infof("Saving segment url=%s fsurl=%s saveDir=%s fn=%s livepeerNameSchema=%v", task.url, fsurl, md.saveDir, fn, md.livepeerNameSchema)
 			// playListFileName := md.name
 			// if md.wowzaMode {
 			// 	dn := upts[len(upts)-2]
@@ -997,7 +1006,9 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			if err != nil {
 				glog.Fatal(err)
 			}
+			md.mu.Lock()
 			err = ioutil.WriteFile(md.savePlayListName, md.savePlayList.Encode().Bytes(), 0644)
+			md.mu.Unlock()
 			if err != nil {
 				glog.Fatal(err)
 			}
