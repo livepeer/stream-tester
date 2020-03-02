@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/livepeer/stream-tester/internal/testdriver"
@@ -70,6 +71,10 @@ func main() {
 
 	httpClient := &http.Client{
 		Timeout: 3 * time.Second,
+	}
+	if *presets != "" {
+		pp := strings.Split(*presets, ",")
+		*numProfiles = uint(len(pp))
 	}
 	sc := &model.StartStreamsReq{
 		FileName:       *fileArg,

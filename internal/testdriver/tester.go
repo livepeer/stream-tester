@@ -211,7 +211,9 @@ func (t *Tester) Run(ctx context.Context, NumProfiles uint) (*Result, error) {
 					messenger.SendMessage(fmt.Sprintf("get stats failed: %v", err))
 					continue
 				}
-				glog.V(model.VERBOSE).Infof("Running %d streams: %s", numStreams, stats.FormatForConsole())
+				emsg := fmt.Sprintf("Running %d streams: %s", numStreams, stats.FormatForConsole())
+				glog.V(model.VERBOSE).Infoln(emsg)
+				messenger.SendMessage(emsg)
 
 				if stats.Finished {
 					break loop
