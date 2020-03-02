@@ -225,6 +225,8 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 	glog.Info("RTMP upload done.")
 	cancel()
 	if sr.mapi != nil && len(sr.createdMistStreams) > 0 {
+		glog.Infof("Waiting 8 seconds before delete stream from the Mist server")
+		time.Sleep(8 * time.Second)
 		sr.mapi.DeleteStreams(sr.createdMistStreams...)
 		sr.createdMistStreams = nil
 	}
@@ -353,7 +355,10 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 			}
 		}
 		// find skipped keyframes number
-		for _, dl := range mt.downloads {
+		skipSourceSegments := 0
+		var sourceTimes []time.Duration
+		for _, dlkey := range mt.downloadsKeys {
+			dl := mt.downloads[dlkey]
 			dl.mu.Lock()
 			if dl.source {
 				stats.DownloadedSourceSegments += dl.stats.success
@@ -383,8 +388,25 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 				glog.V(model.VERBOSE).Infof("==> lastGotKeyframe %s toSkip %d last sent key frames %+v last got key frames %+v", lastGotKeyframe, toSkip,
 					rs.counter.lastKeyFramesPTSs, dl.lastKeyFramesPTSs)
 				stats.SentKeyFrames -= toSkip
+				sourceTimes = dl.firstSegmentTimes
 			}
+			if !dl.source && dl.firstSegmentParsed && sr.mistMode {
+				glog.V(model.VERBOSE).Infof("===?> transcoded first time %s start times %+v", dl.firstSegmentTime, sourceTimes)
+				for i, st := range sourceTimes {
+					if absTimeTiff(st, dl.firstSegmentTime) < 2000*time.Millisecond {
+						skipSourceSegments = i
+						break
+					}
+				}
+				glog.Infof("=====> skipping %d source segments", skipSourceSegments)
+			}
+			glog.Infof("Downloaded segments for source=%v stream is %d:", dl.source, len(dl.downloadedSegments))
+			glog.Infoln("\n" + strings.Join(dl.downloadedSegments, "\n"))
 			dl.mu.Unlock()
+		}
+		stats.DownloadedSourceSegments -= skipSourceSegments
+		if sr.mistMode && stats.DownloadedSourceSegments > 0 {
+			stats.DownloadedSourceSegments--
 		}
 	}
 	// glog.Infof("=== source latencies: %+v", sourceLatencies)
@@ -398,7 +420,7 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 	if stats.SentSegments > 0 {
 		stats.SuccessRate = float64(stats.DownloadedSegments) / ((float64(model.ProfilesNum) + 1) * float64(stats.SentSegments)) * 100
 	}
-	if stats.SentKeyFrames > 0 {
+	if stats.SentKeyFrames > 0 && stats.DownloadedSourceSegments > 0 {
 		// stats.SuccessRate2 = float64(stats.DownloadedKeyFrames) / ((float64(model.ProfilesNum) + 1) * float64(stats.SentKeyFrames)) * 100
 		stats.SuccessRate2 = float64(stats.DownloadedKeyFrames) / float64(stats.SentKeyFrames) * (float64(stats.DownloadedTranscodedSegments+stats.DownloadedSourceSegments) / float64(stats.DownloadedSourceSegments*(model.ProfilesNum+1))) * 100
 	}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
+	mistapi "github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/model"
 )
@@ -23,17 +24,24 @@ type StreamerServer struct {
 	streamer  model.Streamer
 	lock      sync.RWMutex
 	wowzaMode bool
-	mistMode  bool
 	lapiToken string
+	mistCreds []string
 }
 
 // NewStreamerServer creates new StreamerServer
-func NewStreamerServer(wowzaMode, mistMode bool, lapiToken string) *StreamerServer {
+func NewStreamerServer(wowzaMode bool, lapiToken, mistCreds string) *StreamerServer {
+	var mcreds []string
+	if mistCreds != "" {
+		mcreds = strings.Split(mistCreds, ":")
+		if len(mcreds) != 2 {
+			glog.Fatal("Mist server's credentials should be in form 'login:password'")
+		}
+	}
 	return &StreamerServer{
 		// streamer:  testers.NewStreamer(wowzaMode),
 		wowzaMode: wowzaMode,
-		mistMode:  mistMode,
 		lapiToken: lapiToken,
+		mistCreds: mcreds,
 	}
 }
 
@@ -100,6 +108,7 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	// glog.Infof("Lat avg %d p50 %d p95 %d p99 %d  avg %s p50 %s p95 %s p99 %s", stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95,
 	// 	stats.SourceLatencies.P99, stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95, stats.SourceLatencies.P99)
+	glog.Infof("stats: %+v", stats)
 	b, err := json.Marshal(stats)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -172,7 +181,12 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 			}
 			ss.streamer = testers.NewHTTPLoadTester(lapi, 0)
 		} else {
-			ss.streamer = testers.NewStreamer(ss.wowzaMode, ss.mistMode, nil, nil)
+			var mapi *mistapi.API
+			if ssr.Mist {
+				mapi = mistapi.NewMist(ssr.Host, ss.mistCreds[0], ss.mistCreds[1], ss.lapiToken)
+				mapi.Login()
+			}
+			ss.streamer = testers.NewStreamer(ss.wowzaMode, ssr.Mist, mapi, nil)
 		}
 	}
 	var streamDuration time.Duration

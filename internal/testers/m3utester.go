@@ -49,6 +49,7 @@ var mistSessionRE *regexp.Regexp = regexp.MustCompile(`(\?sessId=\d+)`)
 type m3utester struct {
 	initialURL       *url.URL
 	downloads        map[string]*mediaDownloader
+	downloadsKeys    []string // first should be source
 	mu               sync.RWMutex
 	started          bool
 	finished         bool
@@ -686,6 +687,10 @@ func (mt *m3utester) downloadLoop() {
 					if mt.save {
 						mt.savePlayList.Append(variant.URI, md.savePlayList, variant.VariantParams)
 					}
+					if len(mt.downloadsKeys) > 0 && md.source {
+						panic(fmt.Sprintf("Source stream should be first, instead found %s", mt.downloadsKeys[0]))
+					}
+					mt.downloadsKeys = append(mt.downloadsKeys, mediaURL)
 				}
 				mt.mu.Unlock()
 			}
@@ -743,6 +748,7 @@ type mediaDownloader struct {
 	mu                 sync.Mutex
 	firstSegmentParsed bool
 	firstSegmentTime   time.Duration
+	firstSegmentTimes  sortedTimes     // PTSs of first segments
 	done               <-chan struct{} // signals to stop
 	sentTimesMap       *utils.SyncedTimesMap
 	latencies          []time.Duration // latencies stored as segments get downloaded
@@ -757,6 +763,7 @@ type mediaDownloader struct {
 	fullResultsCh      chan fullDownloadResult
 	segmentsMatcher    *segmentsMatcher
 	lastKeyFramesPTSs  sortedTimes
+	downloadedSegments []string // for debugging
 }
 
 func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan fullDownloadResult,
@@ -915,6 +922,12 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			md.firstSegmentTime = fsttim
 			md.firstSegmentParsed = true
 		}
+		if len(md.firstSegmentTimes) < 32 {
+			md.mu.Lock()
+			md.firstSegmentTimes = append(md.firstSegmentTimes, fsttim)
+			sort.Sort(md.firstSegmentTimes)
+			md.mu.Unlock()
+		}
 		if md.segmentsMatcher != nil {
 			// fsttim, dur, err := utils.GetVideoStartTimeAndDur(b)
 			// if err != nil {
@@ -1038,6 +1051,7 @@ func (md *mediaDownloader) workerLoop() {
 				md.stats.keyframes += res.keyFrames
 				md.stats.bytes += int64(res.bytes)
 				md.fullResultsCh <- fullDownloadResult{downloadResult: res, mediaPlaylistName: md.name, resolution: md.resolution}
+				md.downloadedSegments = append(md.downloadedSegments, res.name)
 			} else {
 				md.stats.fail++
 				md.stats.errors[res.status] = md.stats.errors[res.status] + 1

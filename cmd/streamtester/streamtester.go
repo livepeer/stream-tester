@@ -102,7 +102,7 @@ func main() {
 	}
 	var lapi *livepeer.API
 	if *fServer {
-		s := server.NewStreamerServer(*wowza, *mist, *apiToken)
+		s := server.NewStreamerServer(*wowza, *apiToken, *mistCreds)
 		s.StartWebServer(*serverAddr)
 		return
 	}
@@ -265,7 +265,7 @@ func main() {
 		fmt.Println(msg)
 	}
 	if *noExit {
-		s := server.NewStreamerServer(*wowza, *mist, "")
+		s := server.NewStreamerServer(*wowza, "", "")
 		s.StartWebServer(*serverAddr)
 	}
 	// messenger.SendMessage(sr.AnalyzeFormatted(true))

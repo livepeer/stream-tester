@@ -122,6 +122,7 @@ type StartStreamsReq struct {
 	MeasureLatency  bool   `json:"measure_latency"`
 	HTTPIngest      bool   `json:"http_ingest"`
 	Lapi            bool   `json:"lapi"`    // Use Livepeer API to create stream
+	Mist            bool   `json:"mist"`    // Streaming into the Mist server
 	Presets         string `json:"presets"` // Transcoding profiles to use with Livepeer API
 }
 

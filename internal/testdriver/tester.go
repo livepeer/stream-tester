@@ -146,10 +146,14 @@ func (t *Tester) stats() (*model.Stats, error) {
 		glog.Errorf("ReadAll failed: %v", err)
 		return stats, err
 	}
+	if resp.StatusCode != http.StatusOK {
+		glog.Errorf("Unmarshal failed: err=%v body=%s", err, string(body))
+		return stats, fmt.Errorf("Status error getting stats: code=%s msg=%s", resp.Status, string(body))
+	}
 
 	err = json.Unmarshal(body, stats)
 	if err != nil {
-		glog.Errorf("Unmarshal failed: %v", err)
+		glog.Errorf("Unmarshal failed: err=%v body=%s", err, string(body))
 		return stats, err
 	}
 

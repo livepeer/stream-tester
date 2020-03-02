@@ -28,12 +28,12 @@ func main() {
 	streamTesterPort := fs.Uint("tester-port", 7934, "stream-tester http port")
 	ingestHost := fs.String("ingest-host", "localost", "hostname of the tested broadcaster")
 	rtmpPort := fs.Uint("rtmp-port", 1935, "rtmp port")
-	// mediaHost := fs.String("media-host", "broadcaster", "media hostname")
 	mediaPort := fs.Uint("media-port", 8935, "media port")
 	httpIngest := fs.Bool("http-ingest", false, "use HTTP ingest")
 	fileArg := fs.String("file", "", "File to stream")
 	stime := fs.String("time", "", "Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option.")
 	presets := fs.String("presets", "", "Comma separate list of transcoding profiels to use along with Livepeer API")
+	mist := fs.Bool("mist", false, "use Mist mode")
 
 	startDelay := fs.Duration("start-delay", 15*time.Second, "time delay before start")
 
@@ -82,6 +82,7 @@ func main() {
 		MeasureLatency: true,
 		Time:           *stime,
 		Lapi:           true,
+		Mist:           *mist,
 		Presets:        *presets,
 		// Presets:        "P240p30fps16x9,P360p30fps16x9,P576p30fps16x9,P720p30fps16x9",
 	}
