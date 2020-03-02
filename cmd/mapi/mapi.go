@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -76,7 +77,24 @@ func main() {
 				return fmt.Errorf("Mist's credentials should be provided")
 			}
 			return ls(*host, *mistCreds)
-			// return transcodeSegment(*token, *presets, args[0])
+		},
+	}
+
+	rm := &ffcli.Command{
+		Name:       "rm",
+		ShortUsage: "mapi rm [stream_name]",
+		ShortHelp:  "Remove streams from the Mist server.",
+		Exec: func(_ context.Context, args []string) error {
+			if *host == "" {
+				return fmt.Errorf("Mist's host name should be provided")
+			}
+			if *mistCreds == "" {
+				return fmt.Errorf("Mist's credentials should be provided")
+			}
+			if len(args) == 0 {
+				return fmt.Errorf("Stream name should be provided")
+			}
+			return rm(*host, *mistCreds, args[0])
 		},
 	}
 
@@ -102,7 +120,7 @@ func main() {
 	root := &ffcli.Command{
 		ShortUsage:  "mapi [flags] <subcommand>",
 		FlagSet:     rootFlagSet,
-		Subcommands: []*ffcli.Command{create, ls, pullPicarto},
+		Subcommands: []*ffcli.Command{create, ls, rm, pullPicarto},
 	}
 
 	// if err := root.ParseAndRun(context.Background(), os.Args[1:]); err != nil {
@@ -152,6 +170,26 @@ func ls(host, creds string) error {
 		fmt.Printf("Active streams: %+v", activeStreams)
 	}
 
+	return nil
+}
+
+func rm(host, creds, streamName string) error {
+	if len(streamName) < 2 {
+		return errors.New("Stream name too short")
+	}
+	credsp := strings.Split(creds, ":")
+
+	mapi := mist.NewMist(host, credsp[0], credsp[1], "")
+	mapi.Login()
+	streams, _, err := mapi.Streams()
+	if err != nil {
+		panic(err)
+	}
+	for sn := range streams {
+		if strings.HasPrefix(sn, streamName) {
+			mapi.DeleteStreams(sn)
+		}
+	}
 	return nil
 }
 
