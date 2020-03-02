@@ -763,7 +763,7 @@ type mediaDownloader struct {
 	fullResultsCh      chan fullDownloadResult
 	segmentsMatcher    *segmentsMatcher
 	lastKeyFramesPTSs  sortedTimes
-	downloadedSegments []string // for debugging
+	// downloadedSegments []string // for debugging
 }
 
 func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan fullDownloadResult,
@@ -1051,7 +1051,7 @@ func (md *mediaDownloader) workerLoop() {
 				md.stats.keyframes += res.keyFrames
 				md.stats.bytes += int64(res.bytes)
 				md.fullResultsCh <- fullDownloadResult{downloadResult: res, mediaPlaylistName: md.name, resolution: md.resolution}
-				md.downloadedSegments = append(md.downloadedSegments, res.name)
+				// md.downloadedSegments = append(md.downloadedSegments, res.name)
 			} else {
 				md.stats.fail++
 				md.stats.errors[res.status] = md.stats.errors[res.status] + 1

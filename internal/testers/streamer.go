@@ -178,6 +178,9 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifestID)
 			glog.Infof("RTMP: %s", rtmpURL)
 			glog.Infof("MEDIA: %s", mediaURL)
+			if sr.mistMode {
+				messenger.SendMessage(mediaURL)
+			}
 			var bar *uiprogress.Bar
 			if showProgress {
 				/*
@@ -400,8 +403,8 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 				}
 				glog.Infof("=====> skipping %d source segments", skipSourceSegments)
 			}
-			glog.Infof("Downloaded segments for source=%v stream is %d:", dl.source, len(dl.downloadedSegments))
-			glog.Infoln("\n" + strings.Join(dl.downloadedSegments, "\n"))
+			// glog.Infof("Downloaded segments for source=%v stream is %d:", dl.source, len(dl.downloadedSegments))
+			// glog.Infoln("\n" + strings.Join(dl.downloadedSegments, "\n"))
 			dl.mu.Unlock()
 		}
 		stats.DownloadedSourceSegments -= skipSourceSegments
