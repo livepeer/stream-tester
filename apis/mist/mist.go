@@ -31,6 +31,7 @@ type (
 	API struct {
 		host              string
 		apiURL            string
+		apiURLVerbose     string
 		login             string
 		password          string
 		livepeerToken     string
@@ -45,20 +46,21 @@ type (
 
 	authResp struct {
 		Authorize authorize `json:"authorize,omitempty"`
-		Streams   map[string]*stream
+		Streams   map[string]*Stream
 	}
 
-	process struct {
+	Process struct {
 		AccessToken   string `json:"access_token,omitempty"`
 		Process       string `json:"process,omitempty"`
 		TargetProfile string `json:"target_profile,omitempty"`
+		HumanName     string `json:"x-LSP-name,omitempty"`
 	}
 
-	stream struct {
+	Stream struct {
 		Name      string     `json:"name,omitempty"`
 		Online    int        `json:"online,omitempty"`
 		Source    string     `json:"source,omitempty"`
-		Processes []*process `json:"processes,omitempty"`
+		Processes []*Process `json:"processes,omitempty"`
 	}
 
 	authReq struct {
@@ -67,8 +69,8 @@ type (
 	}
 
 	addStreamReq struct {
-		Minimal   int                `json:"minimal,omitempty"`
-		Addstream map[string]*stream `json:"addstream,omitempty"`
+		Minimal   int                `json:"minimal"`
+		Addstream map[string]*Stream `json:"addstream,omitempty"`
 	}
 
 	deleteStreamReq struct {
@@ -76,12 +78,24 @@ type (
 		Minimal      int      `json:"minimal,omitempty"`
 		Deletestream []string `json:"deletestream,omitempty"`
 	}
+
+	MistResp struct {
+		Authorize     *authorize         `json:"authorize,omitempty"`
+		ActiveStreams []string           `json:"active_streams,omitempty"`
+		Streams       map[string]*Stream `json:"streams,omitempty"`
+	}
 )
 
 // NewMist creates new MistAPI object
 func NewMist(host, login, password, livepeerToken string) *API {
 	url := fmt.Sprintf("http://%s:4242/api2", host)
-	return &API{host: host, login: login, password: password, apiURL: url,
+	urlv := fmt.Sprintf("http://%s:4242/api", host)
+	return &API{
+		host:          host,
+		login:         login,
+		password:      password,
+		apiURL:        url,
+		apiURLVerbose: urlv,
 		livepeerToken: livepeerToken,
 	}
 }
@@ -110,6 +124,9 @@ func (mapi *API) Login() {
 	}
 	glog.Infof("challenge: %s, status: %s", auth.Authorize.Challenge, auth.Authorize.Status)
 	if auth.Authorize.Status != "CHALL" {
+		if auth.Authorize.Status == "OK" {
+			return
+		}
 		glog.Fatalf("Unexpected status: %s", auth.Authorize.Status)
 	}
 
@@ -127,7 +144,7 @@ func (mapi *API) Login() {
 	// expectedMAC := mac.Sum(nil)
 	// return hex.EncodeToString(expectedMAC)
 
-	u := mapi.apiURL + "?minimal=1&command=" + url.QueryEscape(fmt.Sprintf(`{"authorize":{"username":"%s","password":"%s"}}`, mapi.login, hashRes))
+	u := mapi.apiURL + "?minimal=0&command=" + url.QueryEscape(fmt.Sprintf(`{"authorize":{"username":"%s","password":"%s"}}`, mapi.login, hashRes))
 	resp, err = httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
 		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", u, err)
@@ -150,14 +167,14 @@ func (mapi *API) CreateStream(name, profile string) {
 	glog.Infof("Creating Mist stream '%s' with profile '%s'", name, profile)
 	reqs := &addStreamReq{
 		Minimal:   1,
-		Addstream: make(map[string]*stream),
+		Addstream: make(map[string]*Stream),
 	}
-	reqs.Addstream[name] = &stream{
+	reqs.Addstream[name] = &Stream{
 		Name:      name,
 		Source:    "push://",
-		Processes: []*process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfile: profile}},
+		Processes: []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfile: profile}},
 	}
-	mapi.post(reqs)
+	mapi.post(reqs, false)
 }
 
 // DeleteStreams removes streams from Mist server
@@ -174,10 +191,36 @@ func (mapi *API) DeleteStreams(names ...string) {
 	for _, s := range names {
 		reqs.Deletestream = append(reqs.Deletestream, s)
 	}
-	mapi.post(reqs)
+	mapi.post(reqs, false)
 }
 
-func (mapi *API) post(commandi interface{}) []byte {
+// Streams gets list of all streams
+func (mapi *API) Streams() (map[string]*Stream, []string, error) {
+	u := mapi.apiURLVerbose + "?minimal=0&command=" + url.QueryEscape(fmt.Sprintf(`{"active_streams":1,"authorize":{"username":"%s","password":"%s"}}`, mapi.login, mapi.challengeRepsonse))
+	resp, err := httpClient.Do(uhttp.GetRequest(u))
+	if err != nil {
+		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", u, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		glog.Fatalf("===== status error contacting Mist server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
+	}
+	// glog.Info(string(b))
+	mr := &MistResp{}
+	err = json.Unmarshal(b, mr)
+	if err != nil {
+		return nil, nil, err
+	}
+	return mr.Streams, mr.ActiveStreams, nil
+}
+
+func (mapi *API) post(commandi interface{}, verbose bool) []byte {
 	cmdb, err := json.Marshal(commandi)
 	if err != nil {
 		panic(err)
@@ -188,7 +231,11 @@ func (mapi *API) post(commandi interface{}) []byte {
 	params.Add("command", command)
 	body := strings.NewReader(params.Encode())
 	// req := uhttp.RequireRequest(mapi.apiURL, "application/json", body)
-	req := uhttp.RequireRequest("POST", mapi.apiURL, body)
+	uri := mapi.apiURL
+	if verbose {
+		uri = mapi.apiURLVerbose
+	}
+	req := uhttp.RequireRequest("POST", uri, body)
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -216,4 +263,12 @@ func (mapi *API) post(commandi interface{}) []byte {
 		}
 	*/
 	return b
+}
+
+func (st *Stream) String() string {
+	r := fmt.Sprintf("Name: %s\nOnline: %d\nSource: %s\n", st.Name, st.Online, st.Source)
+	for _, pro := range st.Processes {
+		r += fmt.Sprintf("  Process %s type %s profile %s token %s\n", pro.HumanName, pro.Process, pro.TargetProfile, pro.AccessToken)
+	}
+	return r
 }
