@@ -17,6 +17,10 @@ testdriver:
 lapi:
 	go build -ldflags="$(ldflags)" cmd/lapi/lapi.go
 
+.PHONY: mapi
+mapi:
+	go build -ldflags="$(ldflags)" cmd/mapi/mapi.go
+
 .PHONY: docker
 docker:
 	docker build -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .

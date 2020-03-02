@@ -73,12 +73,14 @@ jobs:
         make
         make testdriver
         make lapi
+        make mapi
 
     - name: Compress Posix
       if: matrix.os != 'windows-latest'
       run: |
         gzip -9 -S .${{runner.os}}.gz streamtester
         gzip -9 -S .${{runner.os}}.gz lapi
+        gzip -9 -S .${{runner.os}}.gz mapi
         
     - name: Compress Windows
       if: matrix.os == 'windows-latest'

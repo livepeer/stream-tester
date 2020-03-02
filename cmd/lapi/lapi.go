@@ -14,13 +14,16 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
+	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
+	"github.com/livepeer/stream-tester/model"
 	"github.com/peterbourgon/ff/v2/ffcli"
 	"golang.org/x/net/http2"
 )
@@ -85,6 +88,10 @@ func main() {
 	if err := root.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
+	hostName, _ := os.Hostname()
+	fmt.Println("lapi version: " + model.Version)
+	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
+	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
 	// flag.Parse()
 
 	if err := root.Run(context.Background()); err != nil {
