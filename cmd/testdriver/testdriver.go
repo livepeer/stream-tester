@@ -70,7 +70,7 @@ func main() {
 	messenger.Init(*discordURL, *discordUserName, *discordUsersToNotify)
 
 	httpClient := &http.Client{
-		Timeout: 3 * time.Second,
+		Timeout: 8 * time.Second,
 	}
 	if *presets != "" {
 		pp := strings.Split(*presets, ",")
