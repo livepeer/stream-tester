@@ -527,6 +527,7 @@ func (mt *m3utester) stats() downloadStats {
 	mt.mu.RLock()
 	for i, d := range mt.downloads {
 		glog.V(model.DEBUG).Infof("==> for media stream %s succ %d fail %d", i, d.stats.success, d.stats.fail)
+		d.mu.Lock()
 		stats.bytes += d.stats.bytes
 		stats.success += d.stats.success
 		stats.fail += d.stats.fail
@@ -536,12 +537,13 @@ func (mt *m3utester) stats() downloadStats {
 		for e, en := range d.stats.errors {
 			stats.errors[e] = stats.errors[e] + en
 		}
+		d.mu.Unlock()
 	}
 	mt.mu.RUnlock()
-	mt.dm.Lock()
+	// mt.dm.Lock()
 	// _, gaps := analyzeDownloads(mt.downloadResults, true, false)
 	// stats.gaps = gaps
-	mt.dm.Unlock()
+	// mt.dm.Unlock()
 	return stats
 }
 

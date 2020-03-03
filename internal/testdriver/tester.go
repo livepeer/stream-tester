@@ -213,7 +213,7 @@ func (t *Tester) Run(ctx context.Context, NumProfiles uint) (*Result, error) {
 					// return &Result{}, fmt.Errorf("get stats failed: %v", err)
 					if err == model.ErroNotFound {
 						messenger.SendFatalMessage(fmt.Sprintf("Stream %s not found, something wrong, exiting.", t.baseManifestID))
-						break loop
+						return &Result{numStreams, NumProfiles, stats}, nil
 					}
 					messenger.SendMessage(fmt.Sprintf("get stats failed: %v", err))
 					continue
