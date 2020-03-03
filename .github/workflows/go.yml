@@ -80,6 +80,7 @@ jobs:
       run: |
         gzip -9 -S .${{runner.os}}.gz streamtester
         gzip -9 -S .${{runner.os}}.gz lapi
+        gzip -9 -S .${{runner.os}}.gz testdriver
         gzip -9 -S .${{runner.os}}.gz mapi
         
     - name: Compress Windows
@@ -95,6 +96,8 @@ jobs:
         files: |
             streamtester.${{runner.os}}.gz
             lapi.${{runner.os}}.gz
+            mapi.${{runner.os}}.gz
+            testdriver.${{runner.os}}.gz
           # body_path: ${{ github.workflow }}-CHANGELOG.txt
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
