@@ -101,7 +101,7 @@ func main() {
 		*numStreamsStep,
 		sc,
 		func(s string, r *testdriver.Result) {
-			messenger.SendMessage(fmt.Sprintf("%s rtmp host: %s:%d / media port: %d using streamtester host: %s:%d - now testing %d concurrent streams with %d profiles",
+			messenger.SendMessage(fmt.Sprintf("%s rtmp host: %s:%d / media port: %d using streamtester host: %s:%d - now testing **%d** concurrent streams with %d profiles",
 				s, *ingestHost, *rtmpPort, *mediaPort, *streamTesterHost, *streamTesterPort, r.NumStreams, r.NumProfiles))
 		},
 	)

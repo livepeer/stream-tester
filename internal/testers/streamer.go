@@ -185,6 +185,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			glog.Infof("RTMP: %s", rtmpURL)
 			glog.Infof("MEDIA: %s", mediaURL)
 			if sr.mistMode {
+				time.Sleep(50 * time.Millisecond)
 				messenger.SendMessage(mediaURL)
 			}
 			var bar *uiprogress.Bar
@@ -368,6 +369,7 @@ func (sr *streamer) Stats(basedManifestID string) (*model.Stats, error) {
 				md.mu.Unlock()
 			}
 		}
+		mt.mu.RLock()
 		// find skipped keyframes number
 		skipSourceSegments := 0
 		var sourceTimes []time.Duration
@@ -418,6 +420,7 @@ func (sr *streamer) Stats(basedManifestID string) (*model.Stats, error) {
 			// glog.Infoln("\n" + strings.Join(dl.downloadedSegments, "\n"))
 			dl.mu.Unlock()
 		}
+		mt.mu.RUnlock()
 		stats.DownloadedSourceSegments -= skipSourceSegments
 		if sr.mistMode && stats.DownloadedSourceSegments > 0 {
 			stats.DownloadedSourceSegments--
