@@ -86,6 +86,7 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+	glog.Infof("requested %s", r.URL)
 	w.Header().Set("Content-Type", "application/json")
 	returnRawLatencies := false
 	var baseManifestID string
@@ -107,6 +108,7 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		stats.RawTranscodedLatencies = nil
 		stats.RawTranscodeLatenciesPerStream = nil
 	}
+	glog.Infof("baseManifestID=%s", baseManifestID)
 	if baseManifestID != "" && err == model.ErroNotFound {
 		w.WriteHeader(http.StatusNotFound)
 		return
