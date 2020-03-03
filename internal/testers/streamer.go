@@ -426,6 +426,9 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 	if stats.SentKeyFrames > 0 && stats.DownloadedSourceSegments > 0 {
 		// stats.SuccessRate2 = float64(stats.DownloadedKeyFrames) / ((float64(model.ProfilesNum) + 1) * float64(stats.SentKeyFrames)) * 100
 		stats.SuccessRate2 = float64(stats.DownloadedKeyFrames) / float64(stats.SentKeyFrames) * (float64(stats.DownloadedTranscodedSegments+stats.DownloadedSourceSegments) / float64(stats.DownloadedSourceSegments*(model.ProfilesNum+1))) * 100
+		if sr.mistMode {
+			stats.SuccessRate = stats.SuccessRate2
+		}
 	}
 	stats.ShouldHaveDownloadedSegments = (model.ProfilesNum + 1) * stats.SentSegments
 	stats.ProfilesNum = model.ProfilesNum
