@@ -101,20 +101,23 @@ func NewMist(host, login, password, livepeerToken string) *API {
 }
 
 // Login authenicates to the Mist server
-func (mapi *API) Login() {
+func (mapi *API) Login() error {
 	// u := mapi.apiURL + "?" + url.QueryEscape()
 	resp, err := httpClient.Do(uhttp.GetRequest(mapi.apiURL))
 	if err != nil {
-		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
+		glog.Errorf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
+		return err
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
-		glog.Fatalf("===== status error contacting Mist server (%s) status %d body: %s", mapi.apiURL, resp.StatusCode, string(b))
+		glog.Errorf("===== status error contacting Mist server (%s) status %d body: %s", mapi.apiURL, resp.StatusCode, string(b))
+		return fmt.Errorf("Status error %s", resp.Status)
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
+		glog.Errorf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
+		return err
 	}
 	glog.Info(string(b))
 	auth := &authResp{}
@@ -125,9 +128,9 @@ func (mapi *API) Login() {
 	glog.Infof("challenge: %s, status: %s", auth.Authorize.Challenge, auth.Authorize.Status)
 	if auth.Authorize.Status != "CHALL" {
 		if auth.Authorize.Status == "OK" {
-			return
+			return nil
 		}
-		glog.Fatalf("Unexpected status: %s", auth.Authorize.Status)
+		return fmt.Errorf("Unexpected status: %s", auth.Authorize.Status)
 	}
 
 	mh := md5.New()
@@ -147,23 +150,27 @@ func (mapi *API) Login() {
 	u := mapi.apiURL + "?minimal=0&command=" + url.QueryEscape(fmt.Sprintf(`{"authorize":{"username":"%s","password":"%s"}}`, mapi.login, hashRes))
 	resp, err = httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
-		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", u, err)
+		glog.Errorf("Error authenticating to Mist server (%s) error: %v", u, err)
+		return err
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
-		glog.Fatalf("===== status error contacting Mist server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		glog.Errorf("===== status error contacting Mist server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		return fmt.Errorf("Status error %s", resp.Status)
 	}
 	b, err = ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
+		glog.Errorf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
+		return err
 	}
 	glog.Info(string(b))
+	return nil
 }
 
 // CreateStream creates new stream in Mist server
-func (mapi *API) CreateStream(name, profile string) {
+func (mapi *API) CreateStream(name, profile string) error {
 	glog.Infof("Creating Mist stream '%s' with profile '%s'", name, profile)
 	reqs := &addStreamReq{
 		Minimal:   1,
@@ -174,11 +181,12 @@ func (mapi *API) CreateStream(name, profile string) {
 		Source:    "push://",
 		Processes: []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfile: profile}},
 	}
-	mapi.post(reqs, false)
+	_, err := mapi.post(reqs, false)
+	return err
 }
 
 // DeleteStreams removes streams from Mist server
-func (mapi *API) DeleteStreams(names ...string) {
+func (mapi *API) DeleteStreams(names ...string) error {
 	glog.Infof("Deleting Mist streams '%v'", names)
 	reqs := &deleteStreamReq{
 		Authorize: &authReq{
@@ -191,7 +199,8 @@ func (mapi *API) DeleteStreams(names ...string) {
 	for _, s := range names {
 		reqs.Deletestream = append(reqs.Deletestream, s)
 	}
-	mapi.post(reqs, false)
+	_, err := mapi.post(reqs, false)
+	return err
 }
 
 // Streams gets list of all streams
@@ -199,17 +208,20 @@ func (mapi *API) Streams() (map[string]*Stream, []string, error) {
 	u := mapi.apiURLVerbose + "?minimal=0&command=" + url.QueryEscape(fmt.Sprintf(`{"active_streams":1,"authorize":{"username":"%s","password":"%s"}}`, mapi.login, mapi.challengeRepsonse))
 	resp, err := httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
-		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", u, err)
+		glog.Errorf("Error authenticating to Mist server (%s) error: %v", u, err)
+		return nil, nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
-		glog.Fatalf("===== status error contacting Mist server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		glog.Errorf("===== status error contacting Mist server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		return nil, nil, fmt.Errorf("Status error %s", resp.Status)
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		glog.Fatalf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
+		glog.Errorf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
+		return nil, nil, err
 	}
 	// glog.Info(string(b))
 	mr := &MistResp{}
@@ -220,10 +232,11 @@ func (mapi *API) Streams() (map[string]*Stream, []string, error) {
 	return mr.Streams, mr.ActiveStreams, nil
 }
 
-func (mapi *API) post(commandi interface{}, verbose bool) []byte {
+func (mapi *API) post(commandi interface{}, verbose bool) ([]byte, error) {
+	var resp *http.Response
 	cmdb, err := json.Marshal(commandi)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	command := string(cmdb)
 	glog.Infof("Sending request %s", command)
@@ -237,17 +250,33 @@ func (mapi *API) post(commandi interface{}, verbose bool) []byte {
 	}
 	req := uhttp.RequireRequest("POST", uri, body)
 	req.Header.Add("Content-Type", "application/json")
-	resp, err := httpClient.Do(req)
+	try := 0
+	for try < 3 {
+		resp, err = httpClient.Do(req)
+		if err != nil {
+			glog.Infof("Error sending Mist command=%v err=%v, retrying", commandi, err)
+			try++
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			glog.Infof("Status error sending Mist command status %d, retrying", resp.StatusCode)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		break
+	}
 	if err != nil {
-		glog.Fatalf("Error sending Mist command %v", err)
+		glog.Infof("Error sending Mist command=%v err=%v", commandi, err)
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		glog.Fatalf("Status error sending Mist command status %d", resp.StatusCode)
+		return nil, fmt.Errorf("Status error sending Mist command status %d", resp.StatusCode)
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		glog.Fatalf("Error sending Mist command %v", err)
+		return nil, fmt.Errorf("Error sending Mist command %v", err)
 	}
 	glog.Info("Mist response: " + string(b))
 
@@ -262,7 +291,7 @@ func (mapi *API) post(commandi interface{}, verbose bool) []byte {
 			// need to re-authenticate
 		}
 	*/
-	return b
+	return b, nil
 }
 
 func (st *Stream) String() string {

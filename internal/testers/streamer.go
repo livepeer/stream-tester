@@ -53,7 +53,10 @@ func (sr *streamer) Done() <-chan struct{} {
 
 func (sr *streamer) Cancel() {
 	if sr.mapi != nil && len(sr.createdMistStreams) > 0 {
-		sr.mapi.DeleteStreams(sr.createdMistStreams...)
+		err := sr.mapi.DeleteStreams(sr.createdMistStreams...)
+		if err != nil {
+			messenger.SendFatalMessage(fmt.Sprintf("Error deleting streams %+v from Mist", sr.createdMistStreams))
+		}
 		sr.createdMistStreams = nil
 	}
 	close(sr.eof)
@@ -162,7 +165,10 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			}
 			manifestID := fmt.Sprintf("%s_%d_%d", baseManfistID, repeatNum, i)
 			if sr.mapi != nil {
-				sr.mapi.CreateStream(manifestID, "P720p30fps16x9")
+				err := sr.mapi.CreateStream(manifestID, "P720p30fps16x9")
+				if err != nil {
+					messenger.SendFatalMessage(fmt.Sprintf("Error creating stream %s on Mist", manifestID))
+				}
 				sr.createdMistStreams = append(sr.createdMistStreams, manifestID)
 			}
 			if sr.lapi != nil {
@@ -230,7 +236,10 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 	if sr.mapi != nil && len(sr.createdMistStreams) > 0 {
 		glog.Infof("Waiting 8 seconds before delete stream from the Mist server")
 		time.Sleep(8 * time.Second)
-		sr.mapi.DeleteStreams(sr.createdMistStreams...)
+		err := sr.mapi.DeleteStreams(sr.createdMistStreams...)
+		if err != nil {
+			messenger.SendFatalMessage(fmt.Sprintf("Error deleting streams %+v from Mist", sr.createdMistStreams))
+		}
 		sr.createdMistStreams = nil
 	}
 	return nil
