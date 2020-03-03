@@ -179,11 +179,7 @@ func (t *Tester) Run(ctx context.Context, NumProfiles uint) (*Result, error) {
 
 	stats := &model.Stats{}
 
-	started := false
-	for !started || stats.SuccessRate > t.minSuccessRate {
-
-		started = true
-
+	for {
 		t.alert("begin iteration: ", &Result{numStreams, NumProfiles, stats})
 
 		select {
@@ -235,6 +231,9 @@ func (t *Tester) Run(ctx context.Context, NumProfiles uint) (*Result, error) {
 			glog.Infoln(emsg)
 			messenger.SendCodeMessage(emsg)
 		}
+		if stats.SuccessRate < t.minSuccessRate {
+			break
+		}
 		numStreams += t.numStreamsStep
 		// wait before starting new round, allow streams in B/O to timeout
 		if model.Production {
@@ -242,7 +241,7 @@ func (t *Tester) Run(ctx context.Context, NumProfiles uint) (*Result, error) {
 		}
 	}
 	t.done = true
-	msg := fmt.Sprintf("Success degrades at %d streams with %d profiles: %v", numStreams, NumProfiles, stats.SuccessRate)
+	msg := fmt.Sprintf("Success degrades at **%d** streams with %d profiles: %v", numStreams, NumProfiles, stats.SuccessRate)
 	glog.Infoln(msg)
 	messenger.SendMessage(msg)
 	glog.Infof("Stats from running %d streams: %s", numStreams, stats.FormatForConsole())
