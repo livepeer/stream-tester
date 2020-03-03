@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -22,6 +23,9 @@ var IProduction = ""
 
 // Production is set to true in the Docker container
 var Production = false
+
+// ErroNotFound stream not found
+var ErroNotFound = errors.New("Stream not found")
 
 func init() {
 	if IProduction == "true" {
@@ -57,7 +61,7 @@ type Streamer2 interface {
 type Streamer interface {
 	StartStreams(sourceFileName, bhost, rtmpPort, mhost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
 		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error)
-	Stats(basedManifestID string) *Stats
+	Stats(basedManifestID string) (*Stats, error)
 	// StatsFormatted() string
 	// DownStatsFormatted() string
 	// AnalyzeFormatted(short bool) string

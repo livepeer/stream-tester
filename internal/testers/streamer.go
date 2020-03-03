@@ -95,7 +95,7 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 			go func() {
 				for {
 					time.Sleep(5 * time.Second)
-					st := sr.Stats("")
+					st, _ := sr.Stats("")
 					overallBar.Set(st.SentSegments)
 				}
 			}()
@@ -304,7 +304,7 @@ func (sr *streamer) analyzeFormatted(short, streamEnded bool) string {
 }
 */
 
-func (sr *streamer) Stats(basedManifestID string) *model.Stats {
+func (sr *streamer) Stats(basedManifestID string) (*model.Stats, error) {
 	stats := &model.Stats{
 		RTMPstreams:         len(sr.uploaders),
 		MediaStreams:        len(sr.downloaders),
@@ -314,10 +314,12 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 	}
 	sourceLatencies := utils.LatenciesCalculator{}
 	transcodedLatencies := utils.LatenciesCalculator{}
+	found := false
 	for i, rs := range sr.uploaders {
 		if basedManifestID != "" && rs.baseManifestID != basedManifestID {
 			continue
 		}
+		found = true
 		if stats.StartTime.IsZero() {
 			stats.StartTime = rs.started
 		} else if !rs.started.IsZero() && stats.StartTime.After(rs.started) {
@@ -412,6 +414,9 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 			stats.DownloadedSourceSegments--
 		}
 	}
+	if !found {
+		return stats, model.ErroNotFound
+	}
 	// glog.Infof("=== source latencies: %+v", sourceLatencies)
 	// glog.Infof("=== transcoded latencies: %+v", transcodedLatencies)
 	sourceLatencies.Prepare()
@@ -434,7 +439,7 @@ func (sr *streamer) Stats(basedManifestID string) *model.Stats {
 	stats.ProfilesNum = model.ProfilesNum
 	stats.RawSourceLatencies = sourceLatencies.Raw()
 	stats.RawTranscodedLatencies = transcodedLatencies.Raw()
-	return stats
+	return stats, nil
 }
 
 func randName() string {

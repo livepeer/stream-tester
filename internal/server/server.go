@@ -89,6 +89,7 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	returnRawLatencies := false
 	var baseManifestID string
+	var err error
 	if _, ok := r.URL.Query()["latencies"]; ok {
 		returnRawLatencies = true
 	}
@@ -99,12 +100,16 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 	stats := &model.Stats{}
 	if ss.streamer != nil {
-		stats = ss.streamer.Stats(baseManifestID)
+		stats, err = ss.streamer.Stats(baseManifestID)
 	}
 	if !returnRawLatencies {
 		stats.RawSourceLatencies = nil
 		stats.RawTranscodedLatencies = nil
 		stats.RawTranscodeLatenciesPerStream = nil
+	}
+	if baseManifestID != "" && err == model.ErroNotFound {
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
 	// glog.Infof("Lat avg %d p50 %d p95 %d p99 %d  avg %s p50 %s p95 %s p99 %s", stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95,
 	// 	stats.SourceLatencies.P99, stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95, stats.SourceLatencies.P99)

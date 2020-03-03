@@ -148,6 +148,9 @@ func (t *Tester) stats() (*model.Stats, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		glog.Errorf("Unmarshal failed: err=%v body=%s", err, string(body))
+		if resp.StatusCode == http.StatusNotFound {
+			return stats, model.ErroNotFound
+		}
 		return stats, fmt.Errorf("Status error getting stats: code=%s msg=%s", resp.Status, string(body))
 	}
 
@@ -208,6 +211,10 @@ func (t *Tester) Run(ctx context.Context, NumProfiles uint) (*Result, error) {
 				stats, err = t.stats()
 				if err != nil {
 					// return &Result{}, fmt.Errorf("get stats failed: %v", err)
+					if err == model.ErroNotFound {
+						messenger.SendFatalMessage(fmt.Sprintf("Stream %s not found, something wrong, exiting.", t.baseManifestID))
+						break loop
+					}
 					messenger.SendMessage(fmt.Sprintf("get stats failed: %v", err))
 					continue
 				}

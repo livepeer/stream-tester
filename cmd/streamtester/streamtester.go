@@ -226,7 +226,8 @@ func main() {
 		go func() {
 			for {
 				time.Sleep(25 * time.Second)
-				fmt.Println(sr.Stats("").FormatForConsole())
+				stats, _ := sr.Stats("")
+				fmt.Println(stats.FormatForConsole())
 				// fmt.Println(sr.DownStatsFormatted())
 			}
 		}()
@@ -247,7 +248,7 @@ func main() {
 	<-sr.Done()
 	time.Sleep(2 * time.Second)
 	fmt.Println("========= Stats: =========")
-	stats := sr.Stats("")
+	stats, _ := sr.Stats("")
 	fmt.Println(stats.FormatForConsole())
 	fmt.Println(stats.FormatErrorsForConsole())
 	// fmt.Println(sr.AnalyzeFormatted(false))

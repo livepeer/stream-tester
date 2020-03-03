@@ -101,7 +101,7 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 		}
 		hlt.Cancel()
 		// messenger.SendMessage(sr.AnalyzeFormatted(true))
-		stats := hlt.Stats("")
+		stats, _ := hlt.Stats("")
 		messenger.SendCodeMessage(stats.FormatForConsole())
 		messenger.SendCodeMessage(stats.FormatErrorsForConsole())
 		// fmt.Printf(sr.AnalyzeFormatted(false))
@@ -189,7 +189,7 @@ func (hlt *HTTPLoadTester) AnalyzeFormatted(short bool) string {
 */
 
 // Stats ...
-func (hlt *HTTPLoadTester) Stats(basedManifestID string) *model.Stats {
+func (hlt *HTTPLoadTester) Stats(basedManifestID string) (*model.Stats, error) {
 	stats := &model.Stats{
 		RTMPstreams:         len(hlt.streamers),
 		MediaStreams:        len(hlt.streamers),
@@ -198,10 +198,12 @@ func (hlt *HTTPLoadTester) Stats(basedManifestID string) *model.Stats {
 		WowzaMode:           false,
 	}
 	transcodedLatencies := utils.LatenciesCalculator{}
+	found := false
 	for _, st := range hlt.streamers {
 		if basedManifestID != "" && st.baseManifestID != basedManifestID {
 			continue
 		}
+		found = true
 		ds := st.stats()
 		if stats.StartTime.IsZero() {
 			stats.StartTime = ds.started
@@ -225,6 +227,9 @@ func (hlt *HTTPLoadTester) Stats(basedManifestID string) *model.Stats {
 			stats.Finished = false
 		}
 	}
+	if !found {
+		return stats, model.ErroNotFound
+	}
 	transcodedLatencies.Prepare()
 	avg, p50, p95, p99 := transcodedLatencies.Calc()
 	stats.TranscodedLatencies = model.Latencies{Avg: avg, P50: p50, P95: p95, P99: p99}
@@ -234,5 +239,5 @@ func (hlt *HTTPLoadTester) Stats(basedManifestID string) *model.Stats {
 	stats.ShouldHaveDownloadedSegments = model.ProfilesNum * stats.SentSegments
 	stats.ProfilesNum = model.ProfilesNum
 	stats.RawTranscodedLatencies = transcodedLatencies.Raw()
-	return stats
+	return stats, nil
 }
