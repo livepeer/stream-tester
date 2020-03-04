@@ -86,7 +86,7 @@ func (mc *MistController) mainLoop() error {
 				return fmt.Errorf("Stream uri=%s did not started transcoding", uri)
 			}
 			try++
-			time.Sleep((time.Duration(try) + 1) * 100 * time.Millisecond)
+			time.Sleep((time.Duration(try) + 1) * 500 * time.Millisecond)
 		}
 		mt := newM3UTester(mc.ctx.Done(), nil, false, true, false, false, nil, mc.ctx)
 		mc.downloaders[userName] = mt
