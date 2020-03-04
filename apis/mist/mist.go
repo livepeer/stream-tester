@@ -57,10 +57,11 @@ type (
 	}
 
 	Stream struct {
-		Name      string     `json:"name,omitempty"`
-		Online    int        `json:"online,omitempty"`
-		Source    string     `json:"source,omitempty"`
-		Processes []*Process `json:"processes,omitempty"`
+		Name        string     `json:"name,omitempty"`
+		Online      int        `json:"online,omitempty"`
+		Source      string     `json:"source,omitempty"`
+		Segmentsize string     `json:"segmentsize,omitempty"` // ms
+		Processes   []*Process `json:"processes,omitempty"`
 	}
 
 	authReq struct {
@@ -170,16 +171,17 @@ func (mapi *API) Login() error {
 }
 
 // CreateStream creates new stream in Mist server
-func (mapi *API) CreateStream(name, profile string) error {
+func (mapi *API) CreateStream(name, profile, segmentSize string) error {
 	glog.Infof("Creating Mist stream '%s' with profile '%s'", name, profile)
 	reqs := &addStreamReq{
 		Minimal:   1,
 		Addstream: make(map[string]*Stream),
 	}
 	reqs.Addstream[name] = &Stream{
-		Name:      name,
-		Source:    "push://",
-		Processes: []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfile: profile}},
+		Name:        name,
+		Source:      "push://",
+		Segmentsize: segmentSize,
+		Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfile: profile}},
 	}
 	_, err := mapi.post(reqs, false)
 	return err
@@ -296,6 +298,9 @@ func (mapi *API) post(commandi interface{}, verbose bool) ([]byte, error) {
 
 func (st *Stream) String() string {
 	r := fmt.Sprintf("Name: %s\nOnline: %d\nSource: %s\n", st.Name, st.Online, st.Source)
+	if st.Segmentsize != "" {
+		r += fmt.Sprintf("Segment size: %sms\n", st.Segmentsize)
+	}
 	for _, pro := range st.Processes {
 		r += fmt.Sprintf("  Process %s type %s profile %s token %s\n", pro.HumanName, pro.Process, pro.TargetProfile, pro.AccessToken)
 	}
