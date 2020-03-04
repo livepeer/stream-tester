@@ -132,7 +132,8 @@ func (t *Tester) stop() error {
 
 func (t *Tester) stats() (*model.Stats, error) {
 	stats := &model.Stats{}
-	url := fmt.Sprintf("http://%s:%d/stats?latencies&base_manifest_id=%s", t.host, t.port, t.baseManifestID)
+	// url := fmt.Sprintf("http://%s:%d/stats?latencies&base_manifest_id=%s", t.host, t.port, t.baseManifestID)
+	url := fmt.Sprintf("http://%s:%d/stats?base_manifest_id=%s", t.host, t.port, t.baseManifestID)
 
 	resp, err := t.httpClient.Get(url)
 	if err != nil {

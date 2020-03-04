@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -111,6 +112,9 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	glog.Infof("baseManifestID=%s", baseManifestID)
 	if baseManifestID != "" && err == model.ErroNotFound {
 		w.WriteHeader(http.StatusNotFound)
+		emsg := fmt.Sprintf("not found stats for baseManifestID=%s", baseManifestID)
+		glog.Errorln(emsg)
+		w.Write([]byte(emsg))
 		return
 	}
 	// glog.Infof("Lat avg %d p50 %d p95 %d p99 %d  avg %s p50 %s p95 %s p99 %s", stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95,
