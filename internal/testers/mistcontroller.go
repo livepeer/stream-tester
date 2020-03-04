@@ -69,8 +69,12 @@ func (mc *MistController) mainLoop() error {
 		return err
 	}
 	// start initial downloaders
-	for i := 0; i < mc.streamsNum && i < len(ps); i++ {
+	var started []string
+	for i := 0; len(started) < mc.streamsNum && i < len(ps); i++ {
 		userName := ps[i].Name
+		if utils.StringsSliceContains(started, userName) {
+			continue
+		}
 		uri := fmt.Sprintf(hlsURLTemplate, mc.mistHot, userName)
 		glog.Infof("Starting to pull from user=%s uri=%s", userName, uri)
 		var try int
@@ -92,6 +96,7 @@ func (mc *MistController) mainLoop() error {
 		mc.downloaders[userName] = mt
 		mt.Start(uri)
 		messenger.SendMessage(uri)
+		started = append(started, userName)
 		time.Sleep(50 * time.Millisecond)
 	}
 	time.Sleep(30 * time.Second)
