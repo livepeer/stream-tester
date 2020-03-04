@@ -103,6 +103,12 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	stats := &model.Stats{}
 	if ss.streamer != nil {
 		stats, err = ss.streamer.Stats(baseManifestID)
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+		emsg := "No streamer exists"
+		glog.Errorln(emsg)
+		w.Write([]byte(emsg))
+		return
 	}
 	if !returnRawLatencies {
 		stats.RawSourceLatencies = nil
