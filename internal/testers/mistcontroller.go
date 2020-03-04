@@ -99,6 +99,10 @@ func (mc *MistController) mainLoop() error {
 		started = append(started, userName)
 		time.Sleep(50 * time.Millisecond)
 	}
+	emsg := fmt.Sprintf("Started **%d** Picarto streams", len(started))
+	glog.Infoln(emsg)
+	messenger.SendMessage(emsg)
+
 	time.Sleep(30 * time.Second)
 	for {
 		activeStreams, err := mc.activeStreams()
