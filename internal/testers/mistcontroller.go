@@ -2,6 +2,7 @@ package testers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -41,6 +42,11 @@ type (
 	}
 )
 
+var (
+	// ErrZeroStreams ...
+	ErrZeroStreams = errors.New("Zero streams")
+)
+
 // NewMistController creates new MistController
 func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming bool, mapi *mist.API) *MistController {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -64,46 +70,14 @@ func (mc *MistController) Start() error {
 }
 
 func (mc *MistController) mainLoop() error {
-	ps, err := picarto.GetOnlineUsers(picartoCountry, mc.adult, mc.gaming)
+	err := mc.startStreams()
 	if err != nil {
 		return err
 	}
-	// start initial downloaders
-	var started []string
-	for i := 0; len(started) < mc.streamsNum && i < len(ps); i++ {
-		userName := ps[i].Name
-		if utils.StringsSliceContains(started, userName) {
-			continue
-		}
-		uri := fmt.Sprintf(hlsURLTemplate, mc.mistHot, userName)
-		glog.Infof("Starting to pull from user=%s uri=%s", userName, uri)
-		var try int
-		for {
-			vn, err := mc.pullFirstTime(uri)
-			if err != nil {
-				return err
-			}
-			if vn >= mc.profilesNum+1 {
-				break
-			}
-			if try > 50 {
-				return fmt.Errorf("Stream uri=%s did not started transcoding", uri)
-			}
-			try++
-			time.Sleep((time.Duration(try) + 1) * 500 * time.Millisecond)
-		}
-		mt := newM3UTester(mc.ctx.Done(), nil, false, true, false, false, nil, mc.ctx)
-		mc.downloaders[userName] = mt
-		mt.Start(uri)
-		messenger.SendMessage(uri)
-		started = append(started, userName)
-		time.Sleep(50 * time.Millisecond)
-	}
-	emsg := fmt.Sprintf("Started **%d** Picarto streams", len(started))
-	glog.Infoln(emsg)
+	emsg := fmt.Sprintf("Started **%d** Picarto streams", len(mc.downloaders))
 	messenger.SendMessage(emsg)
 
-	time.Sleep(30 * time.Second)
+	time.Sleep(120 * time.Second)
 	for {
 		activeStreams, err := mc.activeStreams()
 		if err != nil {
@@ -116,11 +90,12 @@ func (mc *MistController) mainLoop() error {
 			for sn, mt := range mc.downloaders {
 				if !utils.StringsSliceContains(activeStreams, sn) {
 					mt.Stop()
-					glog.Infof("Stopped stream name=%s because not in active streams anymore", sn)
+					messenger.SendMessage(fmt.Sprintf("Stopped stream name=%s because not in active streams anymore", sn))
 					delete(mc.downloaders, sn)
 				}
 			}
 			// need to start new streams
+			mc.startStreams()
 		}
 		var downSource, downTrans int
 		for sn, mt := range mc.downloaders {
@@ -147,6 +122,41 @@ func (mc *MistController) mainLoop() error {
 	}
 }
 
+func (mc *MistController) startStreams() error {
+	ps, err := picarto.GetOnlineUsers(picartoCountry, mc.adult, mc.gaming)
+	if err != nil {
+		return err
+	}
+	// start initial downloaders
+	var started []string
+	for i := 0; len(mc.downloaders) < mc.streamsNum && i < len(ps); i++ {
+		userName := ps[i].Name
+		if utils.StringsSliceContains(started, userName) {
+			continue
+		}
+		if _, has := mc.downloaders[userName]; has {
+			continue
+		}
+		uri, err := mc.startStream(userName)
+		if err != nil {
+			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v", userName, err))
+			continue
+		}
+
+		mt := newM3UTester(mc.ctx.Done(), nil, false, true, false, false, nil, mc.ctx)
+		mc.downloaders[userName] = mt
+		mt.Start(uri)
+		messenger.SendMessage(uri)
+		started = append(started, userName)
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(started) == 0 {
+		err = fmt.Errorf("Wasn't able to start any stream on Picarto")
+		return err
+	}
+	return nil
+}
+
 func (mc *MistController) activeStreams() ([]string, error) {
 	_, activeStreams, err := mc.mapi.Streams()
 	if err != nil {
@@ -163,6 +173,29 @@ func (mc *MistController) activeStreams() ([]string, error) {
 		}
 	}
 	return asr, nil
+}
+
+func (mc *MistController) startStream(userName string) (string, error) {
+	uri := fmt.Sprintf(hlsURLTemplate, mc.mistHot, userName)
+	glog.Infof("Starting to pull from user=%s uri=%s", userName, uri)
+	var try int
+	for {
+		vn, err := mc.pullFirstTime(uri)
+		if err != nil {
+			if err == ErrZeroStreams {
+				return "", err
+			}
+		}
+		if vn >= mc.profilesNum+1 {
+			break
+		}
+		if try > 50 {
+			return "", fmt.Errorf("Stream uri=%s did not started transcoding lasterr=%v", uri, err)
+		}
+		try++
+		time.Sleep((time.Duration(try) + 1) * 500 * time.Millisecond)
+	}
+	return uri, nil
 }
 
 func (mc *MistController) pullFirstTime(uri string) (int, error) {
@@ -193,7 +226,8 @@ func (mc *MistController) pullFirstTime(uri string) (int, error) {
 	glog.Info(mpl)
 	// glog.Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), surl)
 	if len(mpl.Variants) < 1 {
-		return 0, fmt.Errorf("Playlist for uri=%s has streams=%d", uri, len(mpl.Variants))
+		glog.Infof("Playlist for uri=%s has streams=%d", uri, len(mpl.Variants))
+		return 0, ErrZeroStreams
 	}
 	return len(mpl.Variants), nil
 }

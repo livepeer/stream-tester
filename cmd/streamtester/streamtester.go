@@ -142,6 +142,8 @@ func main() {
 		mapi.Login()
 
 		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, mapi)
+		emsg := fmt.Sprintf("Starting **%d** Picarto streams", *picartoStreams)
+		messenger.SendMessage(emsg)
 		err = mc.Start()
 		if err != nil {
 			emsg := fmt.Sprintf("Error starting Picarto testing: %v", err)
