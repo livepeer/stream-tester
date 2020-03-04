@@ -86,7 +86,7 @@ func (mc *MistController) mainLoop() error {
 			if vn >= mc.profilesNum+1 {
 				break
 			}
-			if try > 5 {
+			if try > 50 {
 				return fmt.Errorf("Stream uri=%s did not started transcoding", uri)
 			}
 			try++
