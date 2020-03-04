@@ -220,7 +220,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)
-			down := newM3UTester(done, sentTimesMap, sr.wowzaMode, sr.mistMode, false, saveDownloaded, segmentsMatcher)
+			down := newM3UTester(done, sentTimesMap, sr.wowzaMode, sr.mistMode, false, saveDownloaded, segmentsMatcher, nil)
 			go findSkippedSegmentsNumber(up, down)
 			sr.downloaders = append(sr.downloaders, down)
 			down.Start(mediaURL)

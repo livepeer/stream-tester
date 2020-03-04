@@ -7,10 +7,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
+	"github.com/livepeer/stream-tester/model"
 )
 
 const httpTimeout = 4 * time.Second
@@ -75,8 +77,17 @@ func GetOnlineUsers(country string, adult, gaming bool) ([]UserProfile, error) {
 		glog.Errorf("Error requesting Picarto online users (%s) error: %v", u, err)
 		return nil, err
 	}
-	glog.Info(string(b))
+	glog.V(model.INSANE).Info(string(b))
 	var users []UserProfile
 	err = json.Unmarshal(b, &users)
-	return users, err
+	if err != nil || country == "" {
+		return users, err
+	}
+	var rusers []UserProfile
+	for _, u := range users {
+		if strings.Contains(u.Thumbnails["web"], country) {
+			rusers = append(rusers, u)
+		}
+	}
+	return rusers, nil
 }

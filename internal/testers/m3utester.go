@@ -2,6 +2,7 @@ package testers
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -67,6 +68,7 @@ type m3utester struct {
 	savePlayList     *m3u8.MasterPlaylist
 	savePlayListName string
 	saveDirName      string
+	cancel           context.CancelFunc
 	// gaps             int
 }
 
@@ -147,7 +149,7 @@ func (p downloadResultsBySeq) findByMySeqNo(seqNo uint64) *downloadResult {
 }
 
 // newM3UTester ...
-func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, mistMode, infiniteMode, save bool, sm *segmentsMatcher) *m3utester {
+func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, mistMode, infiniteMode, save bool, sm *segmentsMatcher, ctx context.Context) *m3utester {
 	t := &m3utester{
 		downloads:       make(map[string]*mediaDownloader),
 		done:            done,
@@ -160,6 +162,11 @@ func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowz
 		downloadResults: make(map[string]*fullDownloadResults),
 		fullResultsCh:   make(chan fullDownloadResult, 16),
 	}
+	if ctx != nil {
+		ct, cancel := context.WithCancel(ctx)
+		t.done = ct.Done()
+		t.cancel = cancel
+	}
 	if save {
 		t.savePlayList = m3u8.NewMasterPlaylist()
 	}
@@ -168,6 +175,12 @@ func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowz
 
 func (mt *m3utester) IsFinished() bool {
 	return mt.finished
+}
+
+func (mt *m3utester) Stop() {
+	if mt.cancel != nil {
+		mt.cancel()
+	}
 }
 
 func (mt *m3utester) Start(u string) {
@@ -519,6 +532,19 @@ func (mt *m3utester) GetFIrstSegmentTime() (time.Duration, bool) {
 	}
 	return 0, false
 }
+func (mt *m3utester) statsSeparate() []*downloadStats {
+	mt.mu.RLock()
+	rs := make([]*downloadStats, 0, len(mt.downloads))
+	for _, key := range mt.downloadsKeys {
+		md := mt.downloads[key]
+		md.mu.Lock()
+		st := md.stats.clone()
+		rs = append(rs, st)
+		md.mu.Unlock()
+	}
+	mt.mu.RUnlock()
+	return rs
+}
 
 func (mt *m3utester) stats() downloadStats {
 	stats := downloadStats{
@@ -686,6 +712,7 @@ func (mt *m3utester) downloadLoop() {
 					mt.downloads[mediaURL] = md
 					// md.source = strings.Contains(mediaURL, "source")
 					md.source = i == 0
+					md.stats.source = md.source
 					if mt.save {
 						mt.savePlayList.Append(variant.URI, md.savePlayList, variant.VariantParams)
 					}
@@ -718,9 +745,11 @@ type downloadStats struct {
 	fail    int
 	retries int
 	// gaps      int
-	keyframes int
-	bytes     int64
-	errors    map[string]int
+	keyframes  int
+	bytes      int64
+	errors     map[string]int
+	resolution string
+	source     bool
 }
 
 type downloadTask struct {
@@ -781,7 +810,8 @@ func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTi
 		segmentsMatcher: sm,
 		downTasks:       make(chan downloadTask, 256),
 		stats: downloadStats{
-			errors: make(map[string]int),
+			errors:     make(map[string]int),
+			resolution: resolution,
 		},
 		done:               done,
 		sentTimesMap:       sentTimesMap,
@@ -1194,3 +1224,12 @@ func (p sortedTimes) Less(i, j int) bool {
 	return p[i] < p[j]
 }
 func (p sortedTimes) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+
+func (ds *downloadStats) clone() *downloadStats {
+	st := *ds
+	st.errors = make(map[string]int)
+	for k, v := range ds.errors {
+		st.errors[k] = v
+	}
+	return &st
+}

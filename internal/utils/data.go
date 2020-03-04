@@ -207,3 +207,13 @@ func (stp *SyncedTimesMap) GetTime(mark time.Duration, name string) (time.Time, 
 	stp.m.Unlock()
 	return t, h
 }
+
+// StringsSliceContains ...
+func StringsSliceContains(ss []string, st string) bool {
+	for _, s := range ss {
+		if s == st {
+			return true
+		}
+	}
+	return false
+}

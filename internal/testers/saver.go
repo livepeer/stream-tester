@@ -57,7 +57,7 @@ stopwaiting:
 		}
 	}
 	// start stream save
-	mt := newM3UTester(ctx.Done(), nil, false, false, true, true, nil)
+	mt := newM3UTester(ctx.Done(), nil, false, false, true, true, nil, ctx)
 	su := fmt.Sprintf("http://%s:8935/stream/%s.m3u8", bhost, streamToSave)
 	glog.Infof("Start saving to disk %s", su)
 	mt.Start(su)

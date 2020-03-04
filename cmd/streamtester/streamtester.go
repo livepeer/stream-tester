@@ -68,6 +68,10 @@ func main() {
 	lapiFlag := flag.Bool("lapi", false, "Use Livepeer API to create streams. api-token should be specified")
 	presets := flag.String("presets", "", "Comma separate list of transcoding profiels to use along with Livepeer API")
 	skipTime := flag.Duration("skip-time", 0, "Skips first x(s|m)")
+	picartoFlag := flag.Bool("picarto", false, "Do Picarto-pull testing")
+	adult := flag.Bool("adult", false, "Adult Picarto")
+	gaming := flag.Bool("gaming", false, "Gaming Picarto")
+	picartoStreams := flag.Uint("picarto-streams", 1, "Number of streams to pull from Picarto")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -126,6 +130,25 @@ func main() {
 	testers.IgnoreNoCodecError = *ignoreNoCodecError
 	testers.IgnoreGaps = *ignoreGaps
 	testers.IgnoreTimeDrift = *ignoreTimeDrift
+
+	if *picartoFlag {
+		var mapi *mistapi.API
+		mcreds := strings.Split(*mistCreds, ":")
+		if len(mcreds) != 2 {
+			glog.Fatal("Mist server's credentials should be in form 'login:password'")
+		}
+
+		mapi = mistapi.NewMist(*bhost, mcreds[0], mcreds[1], *apiToken)
+		mapi.Login()
+
+		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, mapi)
+		err = mc.Start()
+		if err != nil {
+			glog.Fatalf("Error starting Picarto testing: %v", err)
+		}
+		return
+	}
+
 	if *mediaURL != "" && *rtmpURL == "" {
 		msg := fmt.Sprintf(`Starting infinite pull from %s`, *mediaURL)
 		messenger.SendMessage(msg)
