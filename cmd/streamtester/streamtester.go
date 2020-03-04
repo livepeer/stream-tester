@@ -144,7 +144,10 @@ func main() {
 		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, mapi)
 		err = mc.Start()
 		if err != nil {
-			glog.Fatalf("Error starting Picarto testing: %v", err)
+			emsg := fmt.Sprintf("Error starting Picarto testing: %v", err)
+			messenger.SendFatalMessage(emsg)
+			time.Sleep(time.Second)
+			panic(emsg)
 		}
 		return
 	}
