@@ -69,6 +69,7 @@ type m3utester struct {
 	savePlayListName string
 	saveDirName      string
 	cancel           context.CancelFunc
+	shouldSkip       [][]string
 	// gaps             int
 }
 
@@ -149,7 +150,9 @@ func (p downloadResultsBySeq) findByMySeqNo(seqNo uint64) *downloadResult {
 }
 
 // newM3UTester ...
-func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, mistMode, infiniteMode, save bool, sm *segmentsMatcher, ctx context.Context) *m3utester {
+func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, mistMode, infiniteMode, save bool, sm *segmentsMatcher,
+	shouldSkip [][]string) *m3utester {
+
 	t := &m3utester{
 		downloads:       make(map[string]*mediaDownloader),
 		done:            done,
@@ -159,6 +162,7 @@ func newM3UTester(done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowz
 		infiniteMode:    infiniteMode,
 		save:            save,
 		segmentsMatcher: sm,
+		shouldSkip:      shouldSkip,
 		downloadResults: make(map[string]*fullDownloadResults),
 		fullResultsCh:   make(chan fullDownloadResult, 16),
 	}
@@ -708,7 +712,12 @@ func (mt *m3utester) downloadLoop() {
 				// variantID := strconv.Itoa(variant.Bandwidth) + variant.Resolution
 				mt.mu.Lock()
 				if _, ok := mt.downloads[mediaURL]; !ok {
-					md := newMediaDownloader(variant.URI, mediaURL, variant.Resolution, mt.done, mt.sentTimesMap, mt.wowzaMode, mt.save, mt.fullResultsCh, mt.saveDirName, mt.segmentsMatcher)
+					var shouldSkip []string
+					if len(mt.shouldSkip) > i {
+						shouldSkip = mt.shouldSkip[i]
+					}
+					md := newMediaDownloader(variant.URI, mediaURL, variant.Resolution, mt.done, mt.sentTimesMap, mt.wowzaMode, mt.save,
+						mt.fullResultsCh, mt.saveDirName, mt.segmentsMatcher, shouldSkip)
 					mt.downloads[mediaURL] = md
 					// md.source = strings.Contains(mediaURL, "source")
 					md.source = i == 0
@@ -786,6 +795,7 @@ type mediaDownloader struct {
 	latenciesPerStream []time.Duration // here index is seqNo, so if segment is failed download then value will be zero
 	source             bool
 	wowzaMode          bool
+	shouldSkip         []string
 	saveSegmentsToDisk bool
 	savePlayList       *m3u8.MediaPlaylist
 	savePlayListName   string
@@ -798,7 +808,7 @@ type mediaDownloader struct {
 }
 
 func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan fullDownloadResult,
-	baseSaveDir string, sm *segmentsMatcher) *mediaDownloader {
+	baseSaveDir string, sm *segmentsMatcher, shouldSkip []string) *mediaDownloader {
 	pu, err := url.Parse(u)
 	if err != nil {
 		glog.Fatal(err)
@@ -808,6 +818,7 @@ func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTi
 		u:               pu,
 		resolution:      resolution,
 		segmentsMatcher: sm,
+		shouldSkip:      shouldSkip,
 		downTasks:       make(chan downloadTask, 256),
 		stats: downloadStats{
 			errors:     make(map[string]int),
@@ -1171,6 +1182,14 @@ func (md *mediaDownloader) downloadLoop() {
 				}
 				if seen.Contains(segment.URI) {
 					continue
+				}
+				if len(md.shouldSkip) > 0 {
+					curi := mistSessionRE.ReplaceAllString(segment.URI, "")
+					if utils.StringsSliceContains(md.shouldSkip, curi) {
+						seen.Add(segment.URI)
+						mySeqNo++
+						continue
+					}
 				}
 				seen.Add(segment.URI)
 				mySeqNo++

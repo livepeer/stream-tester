@@ -14,6 +14,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
+	"github.com/livepeer/stream-tester/model"
 )
 
 const httpTimeout = 2 * time.Second
@@ -54,6 +55,7 @@ type (
 		Process       string `json:"process,omitempty"`
 		TargetProfile string `json:"target_profile,omitempty"`
 		HumanName     string `json:"x-LSP-name,omitempty"`
+		Leastlive     string `json:"leastlive,omitempty"`
 	}
 
 	Stream struct {
@@ -181,7 +183,7 @@ func (mapi *API) CreateStream(name, profile, segmentSize string) error {
 		Name:        name,
 		Source:      "push://",
 		Segmentsize: segmentSize,
-		Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfile: profile}},
+		Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfile: profile, Leastlive: "1"}},
 	}
 	_, err := mapi.post(reqs, false)
 	return err
@@ -225,7 +227,7 @@ func (mapi *API) Streams() (map[string]*Stream, []string, error) {
 		glog.Errorf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
 		return nil, nil, err
 	}
-	// glog.Info(string(b))
+	glog.V(model.VVERBOSE).Info(string(b))
 	mr := &MistResp{}
 	err = json.Unmarshal(b, mr)
 	if err != nil {
@@ -302,7 +304,8 @@ func (st *Stream) String() string {
 		r += fmt.Sprintf("Segment size: %sms\n", st.Segmentsize)
 	}
 	for _, pro := range st.Processes {
-		r += fmt.Sprintf("  Process %s type %s profile %s token %s\n", pro.HumanName, pro.Process, pro.TargetProfile, pro.AccessToken)
+		r += fmt.Sprintf("  Process %s type %s profile %s token %s leastlive %s\n",
+			pro.HumanName, pro.Process, pro.TargetProfile, pro.AccessToken, pro.Leastlive)
 	}
 	return r
 }

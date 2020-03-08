@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -137,13 +139,13 @@ func (mc *MistController) startStreams() error {
 		if _, has := mc.downloaders[userName]; has {
 			continue
 		}
-		uri, err := mc.startStream(userName)
+		uri, shouldSkip, err := mc.startStream(userName)
 		if err != nil {
 			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v", userName, err))
 			continue
 		}
 
-		mt := newM3UTester(mc.ctx.Done(), nil, false, true, false, false, nil, mc.ctx)
+		mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, false, false, nil, shouldSkip)
 		mc.downloaders[userName] = mt
 		mt.Start(uri)
 		messenger.SendMessage(uri)
@@ -175,40 +177,110 @@ func (mc *MistController) activeStreams() ([]string, error) {
 	return asr, nil
 }
 
-func (mc *MistController) startStream(userName string) (string, error) {
+func (mc *MistController) startStream(userName string) (string, [][]string, error) {
 	uri := fmt.Sprintf(hlsURLTemplate, mc.mistHot, userName)
 	glog.Infof("Starting to pull from user=%s uri=%s", userName, uri)
 	var try int
+	var err error
+	var mediaURIs []string
 	for {
-		vn, err := mc.pullFirstTime(uri)
+		mediaURIs, err = mc.pullFirstTime(uri)
 		if err != nil {
 			if err == ErrZeroStreams {
-				return "", err
+				return "", nil, err
 			}
 		}
-		if vn >= mc.profilesNum+1 {
+		if len(mediaURIs) >= mc.profilesNum+1 {
 			break
 		}
 		if try > 50 {
-			return "", fmt.Errorf("Stream uri=%s did not started transcoding lasterr=%v", uri, err)
+			return "", nil, fmt.Errorf("Stream uri=%s did not started transcoding lasterr=%v", uri, err)
 		}
 		try++
 		time.Sleep((time.Duration(try) + 1) * 500 * time.Millisecond)
 	}
-	return uri, nil
+	mpullres := make([]*plPullRes, len(mediaURIs))
+	mediaPulCh := make(chan *plPullRes, len(mediaURIs))
+	for i, muri := range mediaURIs {
+		go mc.pullMediaPL(muri, i, mediaPulCh)
+	}
+	for i := 0; i < len(mediaURIs); i++ {
+		res := <-mediaPulCh
+		mpullres[res.i] = res
+	}
+	for i := 0; i < len(mediaURIs); i++ {
+		if mpullres[i].err != nil {
+			return uri, nil, mpullres[i].err
+		}
+	}
+	// find first transcoded segment time
+	transTime := mistGetTimeFromSegURI(mpullres[1].pl.Segments[0].URI)
+	shouldSkip := make([][]string, len(mediaURIs))
+	found := false
+	for si, seg := range mpullres[0].pl.Segments {
+		if seg == nil {
+			// not found
+			break
+		}
+		sourceTime := mistGetTimeFromSegURI(seg.URI)
+		glog.Infof("Trans time %d source time %d i %d", transTime, sourceTime, si)
+		if absDiff(transTime, sourceTime) < 200 {
+			found = true
+			for i := 0; i < si; i++ {
+				shouldSkip[0] = append(shouldSkip[0], mistSessionRE.ReplaceAllString(mpullres[0].pl.Segments[i].URI, ""))
+			}
+			glog.Infof("Found! shoud skip %d source segments (%+v)", si, shouldSkip[0])
+			break
+		}
+	}
+	if !found {
+		// not found, do reverse
+		sourceTime := mistGetTimeFromSegURI(mpullres[0].pl.Segments[0].URI)
+		for si, seg := range mpullres[1].pl.Segments {
+			if seg == nil {
+				// not found
+				break
+			}
+			transTime := mistGetTimeFromSegURI(seg.URI)
+			glog.Infof("Source time %d trans time %d i %d", sourceTime, transTime, si)
+			if absDiff(transTime, sourceTime) < 200 {
+				for i := 0; i < si; i++ {
+					shouldSkip[1] = append(shouldSkip[1], mistSessionRE.ReplaceAllString(mpullres[1].pl.Segments[i].URI, ""))
+				}
+				glog.Infof("Found! shoud skip %d transcoded segments (%+v)", si, shouldSkip[1])
+				break
+			}
+		}
+	}
+	return uri, shouldSkip, nil
 }
 
-func (mc *MistController) pullFirstTime(uri string) (int, error) {
+func absDiff(i1, i2 int) int {
+	r := i1 - i2
+	if r < 0 {
+		return -r
+	}
+	return r
+}
+
+// takes segment's URI like this `13223899_13225899.ts?sessId=20275` and return 13223899
+func mistGetTimeFromSegURI(segURI string) int {
+	up := strings.Split(segURI, "_")
+	pts, _ := strconv.Atoi(up[0])
+	return pts
+}
+
+func (mc *MistController) pullFirstTime(uri string) ([]string, error) {
 	resp, err := httpClient.Do(uhttp.GetRequest(uri))
 	if err != nil {
 		glog.Infof("===== get error getting master playlist %s: %v", uri, err)
-		return 0, err
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		err := fmt.Errorf("===== status error getting master playlist %s: %v (%s) body: %s", uri, resp.StatusCode, resp.Status, string(b))
-		return 0, err
+		return nil, err
 	}
 	// b, err := ioutil.ReadAll(resp.Body)
 	// if err
@@ -218,16 +290,74 @@ func (mc *MistController) pullFirstTime(uri string) (int, error) {
 	resp.Body.Close()
 	if err != nil {
 		glog.Infof("===== error getting master playlist uri=%s err=%v", uri, err)
-		return 0, err
+		return nil, err
 	}
 	glog.V(model.VVERBOSE).Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), uri)
 	glog.V(model.VVERBOSE).Info(mpl)
-	glog.Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), uri)
-	glog.Info(mpl)
-	// glog.Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), surl)
+	// glog.Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), uri)
+	// glog.Info(mpl)
 	if len(mpl.Variants) < 1 {
 		glog.Infof("Playlist for uri=%s has streams=%d", uri, len(mpl.Variants))
-		return 0, ErrZeroStreams
+		return nil, ErrZeroStreams
 	}
-	return len(mpl.Variants), nil
+	masterURI, _ := url.Parse(uri)
+	r := make([]string, 0, len(mpl.Variants))
+	for _, va := range mpl.Variants {
+		pvrui, err := url.Parse(va.URI)
+		if err != nil {
+			glog.Error(err)
+			return nil, err
+		}
+		// glog.Infof("Parsed uri: %+v", pvrui, pvrui.IsAbs)
+		if !pvrui.IsAbs() {
+			pvrui = masterURI.ResolveReference(pvrui)
+		}
+		// glog.Info(pvrui)
+		r = append(r, pvrui.String())
+	}
+	return r, nil
+}
+
+type plPullRes struct {
+	pl  *m3u8.MediaPlaylist
+	err error
+	i   int
+}
+
+func (mc *MistController) pullMediaPL(uri string, i int, out chan *plPullRes) (*m3u8.MediaPlaylist, error) {
+	resp, err := httpClient.Do(uhttp.GetRequest(uri))
+	if err != nil {
+		glog.Infof("===== get error getting media playlist %s: %v", uri, err)
+		out <- &plPullRes{err: err, i: i}
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		err := fmt.Errorf("===== status error getting media playlist %s: %v (%s) body: %s", uri, resp.StatusCode, resp.Status, string(b))
+		out <- &plPullRes{err: err, i: i}
+		return nil, err
+	}
+	mpl, _ := m3u8.NewMediaPlaylist(100, 100)
+	err = mpl.DecodeFrom(resp.Body, true)
+	// err = mpl.Decode(*bytes.NewBuffer(b), true)
+	resp.Body.Close()
+	if err != nil {
+		glog.Infof("===== error getting media playlist uri=%s err=%v", uri, err)
+		out <- &plPullRes{err: err, i: i}
+		return nil, err
+	}
+	cs := countSegments(mpl)
+	glog.V(model.VVERBOSE).Infof("Got media playlist with count=%d len=%d mc=%d segmens (%s):", mpl.Count(), mpl.Len(), cs, uri)
+	glog.V(model.VVERBOSE).Info(mpl)
+	// glog.Infof("Got media playlist with count=%d len=%d mc=%d segmens (%s):", mpl.Count(), mpl.Len(), cs, uri)
+	// glog.Info(mpl)
+	if cs < 1 {
+		glog.Infof("Playlist for uri=%s has zero segments", uri)
+		out <- &plPullRes{err: ErrZeroStreams, i: i}
+		panic("no segments")
+		return nil, ErrZeroStreams
+	}
+	out <- &plPullRes{pl: mpl, i: i}
+	return mpl, nil
 }

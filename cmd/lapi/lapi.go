@@ -41,7 +41,11 @@ var http2Client = &http.Client{
 
 func main() {
 	flag.Set("logtostderr", "true")
+	vFlag := flag.Lookup("v")
+
 	rootFlagSet := flag.NewFlagSet("lapi", flag.ExitOnError)
+	verbosity := rootFlagSet.String("v", "", "Log verbosity.  {4|5|6}")
+
 	token := rootFlagSet.String("token", "", "Livepeer API's access token")
 	presets := rootFlagSet.String("presets", "P240p30fps16x9", "Transcoding profiles")
 
@@ -88,6 +92,8 @@ func main() {
 	if err := root.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
+	flag.CommandLine.Parse(nil)
+	vFlag.Value.Set(*verbosity)
 	hostName, _ := os.Hostname()
 	fmt.Println("lapi version: " + model.Version)
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())

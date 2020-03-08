@@ -36,7 +36,11 @@ var http2Client = &http.Client{
 
 func main() {
 	flag.Set("logtostderr", "true")
+	vFlag := flag.Lookup("v")
+
 	rootFlagSet := flag.NewFlagSet("mapi", flag.ExitOnError)
+	verbosity := rootFlagSet.String("v", "", "Log verbosity.  {4|5|6}")
+
 	mistCreds := rootFlagSet.String("mist-creds", "", "login:password of the Mist server")
 	token := rootFlagSet.String("token", "", "Livepeer API's access token")
 	host := rootFlagSet.String("host", "", "Mist server's host name")
@@ -150,6 +154,8 @@ func main() {
 	if err := root.Parse(os.Args[1:]); err != nil {
 		log.Fatal(err)
 	}
+	flag.CommandLine.Parse(nil)
+	vFlag.Value.Set(*verbosity)
 	// flag.Parse()
 	hostName, _ := os.Hostname()
 	fmt.Println("mapi version: " + model.Version)
