@@ -172,7 +172,7 @@ func (mc *MistController) startStreams() error {
 		mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, false, false, nil, shouldSkip)
 		mc.downloaders[userName] = mt
 		mt.Start(uri)
-		messenger.SendMessage(uri)
+		messenger.SendMessage(fmt.Sprintf("Started stream %s", uri))
 		started = append(started, userName)
 		time.Sleep(50 * time.Millisecond)
 	}
