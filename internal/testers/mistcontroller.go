@@ -164,7 +164,8 @@ func (mc *MistController) startStreams() error {
 		}
 		uri, shouldSkip, err := mc.startStream(userName)
 		if err != nil {
-			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v", userName, err))
+			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v started so far %d",
+				userName, err, len(mc.downloaders)))
 			continue
 		}
 
