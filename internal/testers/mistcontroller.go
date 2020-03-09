@@ -154,6 +154,8 @@ func (mc *MistController) startStreams() error {
 	}
 	// start initial downloaders
 	var started []string
+	var uri string
+	var shouldSkip [][]string
 	for i := 0; len(mc.downloaders) < mc.streamsNum && i < len(ps); i++ {
 		userName := ps[i].Name
 		if utils.StringsSliceContains(started, userName) {
@@ -162,10 +164,16 @@ func (mc *MistController) startStreams() error {
 		if _, has := mc.downloaders[userName]; has {
 			continue
 		}
-		uri, shouldSkip, err := mc.startStream(userName)
+		for try := 0; try < 3; try++ {
+			uri, shouldSkip, err = mc.startStream(userName)
+			if err == nil {
+				break
+			}
+			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v started so far %d try %d",
+				userName, err, len(mc.downloaders), try))
+			time.Sleep(300 * time.Millisecond)
+		}
 		if err != nil {
-			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v started so far %d",
-				userName, err, len(mc.downloaders)))
 			continue
 		}
 
