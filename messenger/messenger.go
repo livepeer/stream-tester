@@ -46,18 +46,23 @@ func sendLoop() {
 	var msgQueue []string
 	var goodAfter time.Time
 	var headers http.Header
+	var status int
 	timer := time.NewTimer(2 * time.Second)
+	var step int
 	for {
+		glog.V(model.VVERBOSE).Infof("===> sendLoop step %d queue len %d", step, len(msgQueue))
+		step++
 		select {
 		case <-timer.C:
 			if len(msgQueue) == 0 {
 				continue
 			}
 			msg := msgQueue[0]
-			headers = postMessage(msg)
-			if headers == nil {
+			status, headers = postMessage(msg)
+			if headers == nil || (status != http.StatusNoContent && status != http.StatusOK) {
 				// error possibly
-				timer.Reset(2 * time.Second)
+				// timer.Reset(2 * time.Second)
+				timer = time.NewTimer(2 * time.Second)
 				continue
 			}
 			msgQueue = msgQueue[1:]
@@ -67,14 +72,16 @@ func sendLoop() {
 				msgQueue = append(msgQueue, msg)
 				continue
 			}
-			headers = postMessage(msg)
-			if headers == nil {
+			status, headers = postMessage(msg)
+			if headers == nil || (status != http.StatusNoContent && status != http.StatusOK) {
 				// error possibly
 				msgQueue = append(msgQueue, msg)
-				if !timer.Stop() {
-					<-timer.C
-				}
-				timer.Reset(time.Second)
+				// if !timer.Stop() {
+				// 	<-timer.C
+				// }
+				// timer.Reset(2 * time.Second)
+				timer = time.NewTimer(2 * time.Second)
+				// glog.Infof("Reset for 2s done")
 				continue
 			}
 		}
@@ -86,14 +93,15 @@ func sendLoop() {
 			rlreset := headers.Get("X-Ratelimit-Reset-After")
 			frlreset, err := strconv.ParseFloat(rlreset, 64)
 			if err != nil {
+				panic(err)
 				continue
 			}
-			wait := time.Duration(frlreset*1000.0 + 100.0)
+			wait := time.Duration(frlreset*1000.0+100.0) * time.Millisecond
+			glog.V(model.VVERBOSE).Infof("Need wait %s", wait)
 			goodAfter = time.Now().Add(wait)
-			if !timer.Stop() {
-				<-timer.C
-			}
-			timer.Reset(wait)
+			// timer.Reset(wait)
+			timer = time.NewTimer(wait)
+			// glog.Infof("Reset for %s done", wait)
 			/*
 				rlreset := headers.Get("X-Ratelimit-Reset")
 				if rlreset == "" {
@@ -107,10 +115,12 @@ func sendLoop() {
 			*/
 
 		} else if len(msgQueue) > 0 {
-			if !timer.Stop() {
-				<-timer.C
-			}
-			timer.Reset(50 * time.Millisecond)
+			// glog.Infof("Queue not empty")
+			// if !timer.Stop() {
+			// 	<-timer.C
+			// }
+			// timer.Reset(50 * time.Millisecond)
+			timer = time.NewTimer(50 * time.Millisecond)
 		}
 	}
 }
@@ -174,9 +184,9 @@ func sendMessage(msg string) {
 	msgCh <- msg
 }
 
-func postMessage(msg string) http.Header {
+func postMessage(msg string) (int, http.Header) {
 	if webhookURL == "" {
-		return nil
+		return 0, nil
 	}
 	dm := &discordMessage{
 		Content:  msg,
@@ -193,16 +203,16 @@ func postMessage(msg string) http.Header {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		glog.Errorf("error posting to Discord err=%v", err)
-		return nil
+		return 0, nil
 	}
 	b, _ := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
-	glog.Infof("Discord response headers")
+	glog.V(model.INSANE).Infof("Discord response headers")
 	for k, v := range resp.Header {
-		glog.Infof("%s: %+v", k, v)
+		glog.V(model.INSANE).Infof("%s: %+v", k, v)
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		glog.Errorf("status error posting to Discord status=%s body: %s", resp.Status, string(b))
 	}
-	return resp.Header
+	return resp.StatusCode, resp.Header
 }
