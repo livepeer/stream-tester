@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"time"
 
 	"encoding/json"
@@ -23,7 +24,6 @@ var (
 	usersToNotify string
 	debounceCache *cache.Cache = cache.New(5*time.Minute, 30*time.Minute)
 	msgCh         chan string
-	msgQueue      []string
 )
 
 type discordMessage struct {
@@ -43,9 +43,76 @@ func Init(WebhookURL, UserName, UsersToNotify string) {
 }
 
 func sendLoop() {
+	var msgQueue []string
+	var goodAfter time.Time
+	var headers http.Header
+	timer := time.NewTimer(2 * time.Second)
+	timer.Stop()
 	for {
-		msg := <-msgCh
-		postMessage(msg)
+		select {
+		case <-timer.C:
+			if len(msgQueue) == 0 {
+				continue
+			}
+			msg := msgQueue[0]
+			headers = postMessage(msg)
+			if headers == nil {
+				// error possibly
+				timer.Reset(2 * time.Second)
+				continue
+			}
+			msgQueue = msgQueue[1:]
+
+		case msg := <-msgCh:
+			if len(msgQueue) > 0 || time.Now().Before(goodAfter) {
+				msgQueue = append(msgQueue, msg)
+				continue
+			}
+			headers = postMessage(msg)
+			if headers == nil {
+				// error possibly
+				msgQueue = append(msgQueue, msg)
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timer.Reset(time.Second)
+				continue
+			}
+		}
+		rlrem := headers.Get("X-Ratelimit-Remaining")
+		if rlrem == "" { // shoudn't happen
+			continue
+		}
+		if rlrem == "0" {
+			rlreset := headers.Get("X-Ratelimit-Reset-After")
+			frlreset, err := strconv.ParseFloat(rlreset, 64)
+			if err != nil {
+				continue
+			}
+			wait := time.Duration(frlreset*1000.0 + 100.0)
+			goodAfter = time.Now().Add(wait)
+			if !timer.Stop() {
+				<-timer.C
+			}
+			timer.Reset(wait)
+			/*
+				rlreset := headers.Get("X-Ratelimit-Reset")
+				if rlreset == "" {
+					continue
+				}
+				frlreset, err := strconv.ParseFloat(rlreset, 64)
+				if err != nil {
+					continue
+				}
+				nextTime := time.Unix(0, order.Created*int64(time.Millisecond))
+			*/
+
+		} else if len(msgQueue) > 0 {
+			if !timer.Stop() {
+				<-timer.C
+			}
+			timer.Reset(50 * time.Millisecond)
+		}
 	}
 }
 
