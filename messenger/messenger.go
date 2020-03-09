@@ -105,8 +105,11 @@ func sendMessage(msg string) {
 	} else {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 			glog.Errorf("status error posting to Discord status=%s body: %s", resp.Status, string(b))
+			for k, v := range resp.Header {
+				glog.Infof("%s: %+v", k, v)
+			}
 		}
 	}
 }
