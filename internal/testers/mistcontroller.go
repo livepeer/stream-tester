@@ -217,7 +217,7 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 		if len(mediaURIs) >= mc.profilesNum+1 {
 			break
 		}
-		if try > 10 {
+		if try > 7 {
 			return "", nil, fmt.Errorf("Stream uri=%s did not started transcoding lasterr=%v", uri, err)
 		}
 		try++
