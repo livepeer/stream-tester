@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/model"
 	"github.com/patrickmn/go-cache"
 )
 
@@ -21,6 +22,8 @@ var (
 	userName      string
 	usersToNotify string
 	debounceCache *cache.Cache = cache.New(5*time.Minute, 30*time.Minute)
+	msgCh         chan string
+	msgQueue      []string
 )
 
 type discordMessage struct {
@@ -33,6 +36,17 @@ func Init(WebhookURL, UserName, UsersToNotify string) {
 	webhookURL = WebhookURL
 	userName = UserName
 	usersToNotify = UsersToNotify
+	if WebhookURL != "" {
+		msgCh = make(chan string, 64)
+		go sendLoop()
+	}
+}
+
+func sendLoop() {
+	for {
+		msg := <-msgCh
+		postMessage(msg)
+	}
 }
 
 // SendFatalMessage send message to Discord channel
@@ -73,8 +87,15 @@ func SendMessageDebounced(msg string) {
 }
 
 func sendMessage(msg string) {
-	if webhookURL == "" {
+	if webhookURL == "" || msgCh == nil {
 		return
+	}
+	msgCh <- msg
+}
+
+func postMessage(msg string) http.Header {
+	if webhookURL == "" {
+		return nil
 	}
 	if len(msg) > 2000 {
 		for {
@@ -90,7 +111,7 @@ func sendMessage(msg string) {
 			}
 			time.Sleep(time.Second)
 		}
-		return
+		return nil
 	}
 	dm := &discordMessage{
 		Content:  msg,
@@ -99,18 +120,24 @@ func sendMessage(msg string) {
 	data, _ := json.Marshal(dm)
 	var body io.Reader
 	body = bytes.NewReader(data)
-	resp, err := http.Post(webhookURL, "application/json", body)
+	// resp, err := http.Post(webhookURL, "application/json", body)
+	req, _ := http.NewRequest("POST", webhookURL, body)
+	req.Header.Add("User-Agent", "stream-tester/"+model.Version)
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("X-RateLimit-Precision", "millisecond")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		glog.Errorf("error posting to Discord err=%v", err)
-	} else {
-		b, _ := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-		glog.Infof("Discord response headers")
-		for k, v := range resp.Header {
-			glog.Infof("%s: %+v", k, v)
-		}
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-			glog.Errorf("status error posting to Discord status=%s body: %s", resp.Status, string(b))
-		}
+		return nil
 	}
+	b, _ := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	glog.Infof("Discord response headers")
+	for k, v := range resp.Header {
+		glog.Infof("%s: %+v", k, v)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		glog.Errorf("status error posting to Discord status=%s body: %s", resp.Status, string(b))
+	}
+	return resp.Header
 }
