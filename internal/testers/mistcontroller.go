@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -100,6 +101,7 @@ func (mc *MistController) mainLoop() error {
 			mc.startStreams()
 		}
 		var downSource, downTrans int
+		var ds2all downStats2
 		for sn, mt := range mc.downloaders {
 			stats := mt.statsSeparate()
 			glog.Infoln(strings.Repeat("*", 100))
@@ -113,13 +115,33 @@ func (mc *MistController) mainLoop() error {
 					downTrans += st.success
 				}
 			}
+			ds2 := mt.getDownStats2()
+			ds2all.add(ds2)
+			emsg := fmt.Sprintf("Stream %s success rate2: **%f** (%d/%d)", sn,
+				ds2.successRate, ds2.downTransAll, ds2.downSource)
+			messenger.SendMessage(emsg)
+			time.Sleep(50 * time.Millisecond)
+			if picartoDebug {
+				for _, mdkey := range mt.downloadsKeys {
+					md := mt.downloads[mdkey]
+					md.mu.Lock()
+					glog.Infof("=========> down segments for %s %s len=%d", md.name, md.resolution, len(md.downloadedSegments))
+					ps := picartoSortedSegments(md.downloadedSegments)
+					sort.Sort(ps)
+					glog.Infof("\n%s", strings.Join(ps, "\n"))
+					md.mu.Unlock()
+				}
+			}
 		}
+		emsg := fmt.Sprintf("Number of streams: **%d** success rate2: **%f** (%d/%d)", len(mc.downloaders),
+			ds2all.successRate, ds2all.downTransAll, ds2all.downSource)
+		messenger.SendMessage(emsg)
 		if downSource > 0 {
-			emsg := fmt.Sprintf("Number of streams: **%d** success rate: **%f**", len(mc.downloaders), float64(downTrans)/float64(downSource)*100.0)
+			emsg := fmt.Sprintf("Number of streams: **%d** success rate: **%f** (%d/%d)", len(mc.downloaders),
+				float64(downTrans)/float64(downSource)*100.0, downTrans, downSource)
 			glog.Infoln(emsg)
 			messenger.SendMessage(emsg)
 		}
-
 		time.Sleep(120 * time.Second)
 	}
 }
@@ -361,3 +383,11 @@ func (mc *MistController) pullMediaPL(uri string, i int, out chan *plPullRes) (*
 	out <- &plPullRes{pl: mpl, i: i}
 	return mpl, nil
 }
+
+type picartoSortedSegments []string
+
+func (p picartoSortedSegments) Len() int { return len(p) }
+func (p picartoSortedSegments) Less(i, j int) bool {
+	return mistGetTimeFromSegURI(p[i]) < mistGetTimeFromSegURI(p[j])
+}
+func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }

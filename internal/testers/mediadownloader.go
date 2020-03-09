@@ -22,15 +22,15 @@ import (
 )
 
 type downloadStats struct {
-	success int
-	fail    int
-	retries int
-	// gaps      int
+	success    int
+	fail       int
+	retries    int
 	keyframes  int
 	bytes      int64
 	errors     map[string]int
 	resolution string
 	source     bool
+	// gaps      int
 }
 
 type downloadTask struct {
@@ -55,6 +55,7 @@ type mediaDownloader struct {
 	name               string // usually medial playlist relative name
 	resolution         string
 	u                  *url.URL
+	suri               string
 	stats              downloadStats
 	downTasks          chan downloadTask
 	mu                 sync.Mutex
@@ -73,13 +74,13 @@ type mediaDownloader struct {
 	savePlayListName   string
 	saveDir            string
 	livepeerNameSchema bool
-	fullResultsCh      chan fullDownloadResult
+	fullResultsCh      chan *fullDownloadResult
 	segmentsMatcher    *segmentsMatcher
 	lastKeyFramesPTSs  sortedTimes
-	// downloadedSegments []string // for debugging
+	downloadedSegments []string // for debugging
 }
 
-func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan fullDownloadResult,
+func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan *fullDownloadResult,
 	baseSaveDir string, sm *segmentsMatcher, shouldSkip []string) *mediaDownloader {
 	pu, err := url.Parse(u)
 	if err != nil {
@@ -88,6 +89,7 @@ func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTi
 	md := &mediaDownloader{
 		name:            name,
 		u:               pu,
+		suri:            u,
 		resolution:      resolution,
 		segmentsMatcher: sm,
 		shouldSkip:      shouldSkip,
@@ -184,6 +186,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			return
 		}
 		b, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
 		now := time.Now()
 		if err != nil {
 			glog.Errorf("Error downloading reading body %s: %v", fsurl, err)
@@ -194,7 +197,6 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			res <- downloadResult{status: err.Error(), try: try}
 			return
 		}
-		resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			glog.Errorf("Error status downloading segment %s result status %s", fsurl, resp.Status)
 			if try < 8 {
@@ -306,7 +308,6 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			// fn := upts[len(upts)-2] + "-" + path.Base(task.url)
 			ind := len(upts) - 2
 			fn := path.Base(task.url)
-			// if ind < 0 {
 			if !md.livepeerNameSchema {
 				// ind = 0
 				// fn = upts[0]
@@ -342,7 +343,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			}
 			glog.V(model.DEBUG).Infof("Segment %s saved to %s", seg.URI, path.Join(md.saveDir, fn))
 		}
-		res <- downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url, seqNo: task.seqNo,
+		res <- downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url, seqNo: task.seqNo, downloadCompetedAt: now,
 			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime, keyFrames: keyFrames}
 		return
 	}
@@ -362,11 +363,14 @@ func (md *mediaDownloader) workerLoop() {
 				res.startTime, res.duration, res.keyFrames, md.resolution, res.name)
 			md.stats.retries += res.try
 			if res.status == "200 OK" {
+				uriClean := mistSessionRE.ReplaceAllString(res.name, "")
 				md.stats.success++
 				md.stats.keyframes += res.keyFrames
 				md.stats.bytes += int64(res.bytes)
-				md.fullResultsCh <- fullDownloadResult{downloadResult: res, mediaPlaylistName: md.name, resolution: md.resolution}
-				// md.downloadedSegments = append(md.downloadedSegments, res.name)
+				md.fullResultsCh <- &fullDownloadResult{downloadResult: res, mediaPlaylistName: md.name, resolution: md.resolution, uri: md.suri}
+				if picartoDebug {
+					md.downloadedSegments = append(md.downloadedSegments, uriClean)
+				}
 			} else {
 				md.stats.fail++
 				md.stats.errors[res.status] = md.stats.errors[res.status] + 1

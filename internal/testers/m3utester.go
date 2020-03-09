@@ -46,6 +46,14 @@ var wowzaSessionRE *regexp.Regexp = regexp.MustCompile(`_(w\d+)_`)
 var wowzaBandwidthRE *regexp.Regexp = regexp.MustCompile(`_b(\d+)\.`)
 var mistSessionRE *regexp.Regexp = regexp.MustCompile(`(\?sessId=\d+)`)
 
+type downStats2 struct {
+	downSource   int
+	downTransAll int
+	numProfiles  int
+	downTrans    []int
+	successRate  float64
+}
+
 // m3utester tests one stream, reading all the media streams
 type m3utester struct {
 	initialURL       *url.URL
@@ -62,17 +70,21 @@ type m3utester struct {
 	done             <-chan struct{} // signals to stop
 	sentTimesMap     *utils.SyncedTimesMap
 	segmentsMatcher  *segmentsMatcher
-	downloadResults  fullDownloadResultsMap
-	fullResultsCh    chan fullDownloadResult
-	dm               sync.Mutex
+	fullResultsCh    chan *fullDownloadResult
+	succ2mu          sync.Mutex
+	downStats2       downStats2
+	downSegs         map[string]map[string]*fullDownloadResult
 	savePlayList     *m3u8.MasterPlaylist
 	savePlayListName string
 	saveDirName      string
 	cancel           context.CancelFunc
 	shouldSkip       [][]string
+	// downloadResults  fullDownloadResultsMap
+	// dm               sync.Mutex
 	// gaps             int
 }
 
+/*
 type fullDownloadResultsMap map[string]*fullDownloadResults
 
 type fullDownloadResults struct {
@@ -81,10 +93,13 @@ type fullDownloadResults struct {
 	resolution        string
 }
 
+*/
+
 type fullDownloadResult struct {
 	downloadResult
 	mediaPlaylistName string
 	resolution        string
+	uri               string
 }
 
 type downloadResult struct {
@@ -163,8 +178,9 @@ func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils
 		save:            save,
 		segmentsMatcher: sm,
 		shouldSkip:      shouldSkip,
-		downloadResults: make(map[string]*fullDownloadResults),
-		fullResultsCh:   make(chan fullDownloadResult, 16),
+		fullResultsCh:   make(chan *fullDownloadResult, 32),
+		downSegs:        make(map[string]map[string]*fullDownloadResult),
+		// downloadResults: make(map[string]*fullDownloadResults),
 	}
 	if ctx != nil {
 		ct, cancel := context.WithCancel(ctx)
@@ -234,6 +250,7 @@ func (mt *m3utester) anaylysePrintingLoop() string {
 }
 */
 
+/*
 func sortByResolution(results map[string]*fullDownloadResults) []string {
 	r := make([]string, 0, len(results))
 	return r
@@ -267,6 +284,7 @@ func (fdr fullDownloadResultsMap) byResolution(resolution string) []*fullDownloa
 	}
 	return res
 }
+*/
 
 /*
   Should consider 10.867s and 10.866s to be equal
@@ -592,20 +610,70 @@ func (mt *m3utester) StatsFormatted() string {
 }
 */
 
+func (mt *m3utester) getDownStats2() *downStats2 {
+	mt.succ2mu.Lock()
+	dr := mt.downStats2.clone()
+	mt.succ2mu.Unlock()
+	return dr
+}
+
 func (mt *m3utester) workerLoop() {
+	c := time.NewTicker(8 * time.Second)
 	for {
 		select {
 		case <-mt.done:
 			return
-		case fr := <-mt.fullResultsCh:
-			mt.dm.Lock()
-			if _, has := mt.downloadResults[fr.mediaPlaylistName]; !has {
-				mt.downloadResults[fr.mediaPlaylistName] = &fullDownloadResults{resolution: fr.resolution, mediaPlaylistName: fr.mediaPlaylistName}
+		case <-c.C:
+			if len(mt.downloadsKeys) == 0 {
+				continue
 			}
-			// turn off for now
-			// r := mt.downloadResults[fr.mediaPlaylistName]
-			// r.results = append(r.results, fr.downloadResult)
-			mt.dm.Unlock()
+			mt.succ2mu.Lock()
+			now := time.Now()
+			sourceKey := mt.downloadsKeys[0]
+			glog.V(model.INSANE).Infof("=====>>>>>>>>>>>>>>>>>>>>>>>>>")
+			glog.V(model.VVERBOSE).Infof("source key = %s, down stats2 %+v", sourceKey, mt.downStats2)
+			// glog.Infof("%+v", mt.downSegs)
+			for dk, dr := range mt.downSegs[sourceKey] {
+				if now.Sub(dr.downloadCompetedAt) > 16*time.Second {
+					mt.downStats2.downSource++
+					glog.V(model.INSANE).Infof("Checking source seg %s  pts %s down at %s", dk, dr.startTime, dr.downloadCompetedAt)
+					for i, transKey := range mt.downloadsKeys[1:] {
+						transDM := mt.downSegs[transKey]
+						found := false
+						for transSegName, transSeg := range transDM {
+							glog.V(model.INSANE).Infof("Checking %s pts %s down at %s", transSegName, transSeg.startTime, transSeg.downloadCompetedAt)
+							if absTimeTiff(dr.startTime, transSeg.startTime) < 210*time.Millisecond {
+								// match found
+								mt.downStats2.downTransAll++
+								mt.downStats2.downTrans[i]++
+								delete(transDM, transSegName)
+								found = true
+								break
+							}
+						}
+						if !found {
+							glog.V(model.VERBOSE).Infof("Not found pair for %s seg", dr.name)
+						}
+					}
+					delete(mt.downSegs[sourceKey], dk)
+					mt.downStats2.successRate = float64(mt.downStats2.downTransAll) / float64(mt.downStats2.downSource*mt.downStats2.numProfiles) * 100.0
+				}
+			}
+			// todo: cleanup too old transcoded segments
+			mt.succ2mu.Unlock()
+		case fr := <-mt.fullResultsCh:
+			mt.downSegs[fr.uri][fr.name] = fr
+			// downSegs         map[string]map[string]*downloadResult
+			/*
+				mt.dm.Lock()
+				if _, has := mt.downloadResults[fr.mediaPlaylistName]; !has {
+					mt.downloadResults[fr.mediaPlaylistName] = &fullDownloadResults{resolution: fr.resolution, mediaPlaylistName: fr.mediaPlaylistName}
+				}
+				// turn off for now
+				// r := mt.downloadResults[fr.mediaPlaylistName]
+				// r.results = append(r.results, fr.downloadResult)
+				mt.dm.Unlock()
+			*/
 			if mt.save {
 				err := ioutil.WriteFile(mt.savePlayListName, mt.savePlayList.Encode().Bytes(), 0644)
 				if err != nil {
@@ -729,6 +797,9 @@ func (mt *m3utester) downloadLoop() {
 						panic(fmt.Sprintf("Source stream should be first, instead found %s", mt.downloadsKeys[0]))
 					}
 					mt.downloadsKeys = append(mt.downloadsKeys, mediaURL)
+					mt.downSegs[mediaURL] = make(map[string]*fullDownloadResult)
+					mt.downStats2.downTrans = append(mt.downStats2.downTrans, 0)
+					mt.downStats2.numProfiles = len(mt.downloadsKeys) - 1
 				}
 				mt.mu.Unlock()
 			}
@@ -746,5 +817,26 @@ func (mt *m3utester) downloadLoop() {
 				}
 			}
 		*/
+	}
+}
+
+func (ds *downStats2) clone() *downStats2 {
+	r := *ds
+	r.downTrans = make([]int, len(ds.downTrans))
+	copy(r.downTrans, ds.downTrans)
+	return &r
+}
+
+func (ds2 *downStats2) add(other *downStats2) {
+	ds2.downSource += other.downSource
+	ds2.downTransAll += other.downTransAll
+	ds2.numProfiles = other.numProfiles
+	if ds2.downSource > 0 {
+		ds2.successRate = float64(ds2.downTransAll) / float64(ds2.downSource*ds2.numProfiles) * 100.0
+	}
+	for i, v := range other.downTrans {
+		if i < len(ds2.downTrans) {
+			ds2.downTrans[i] += v
+		}
 	}
 }
