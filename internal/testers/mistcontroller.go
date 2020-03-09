@@ -133,6 +133,7 @@ func (mc *MistController) mainLoop() error {
 				}
 			}
 		}
+		time.Sleep(50 * time.Millisecond)
 		emsg := fmt.Sprintf("Number of streams: **%d** success rate2: **%f** (%d/%d)", len(mc.downloaders),
 			ds2all.successRate, ds2all.downTransAll, ds2all.downSource)
 		messenger.SendMessage(emsg)
