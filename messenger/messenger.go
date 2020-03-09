@@ -47,7 +47,6 @@ func sendLoop() {
 	var goodAfter time.Time
 	var headers http.Header
 	timer := time.NewTimer(2 * time.Second)
-	timer.Stop()
 	for {
 		select {
 		case <-timer.C:
