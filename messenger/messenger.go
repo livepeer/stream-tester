@@ -6,6 +6,7 @@ package messenger
 import (
 	"bytes"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -98,5 +99,14 @@ func sendMessage(msg string) {
 	data, _ := json.Marshal(dm)
 	var body io.Reader
 	body = bytes.NewReader(data)
-	http.Post(webhookURL, "application/json", body)
+	resp, err := http.Post(webhookURL, "application/json", body)
+	if err != nil {
+		glog.Errorf("error posting to Discord err=%v", err)
+	} else {
+		b, _ := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			glog.Errorf("status error posting to Discord status=%s body: %s", resp.Status, string(b))
+		}
+	}
 }
