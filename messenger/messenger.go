@@ -50,7 +50,7 @@ func sendLoop() {
 	timer := time.NewTimer(2 * time.Second)
 	var step int
 	for {
-		glog.V(model.VVERBOSE).Infof("===> sendLoop step %d queue len %d", step, len(msgQueue))
+		glog.V(model.VVERBOSE).Infof("====> sendLoop step %d queue len %d", step, len(msgQueue))
 		step++
 		select {
 		case <-timer.C:

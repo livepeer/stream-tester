@@ -80,7 +80,8 @@ func (mc *MistController) mainLoop() error {
 	emsg := fmt.Sprintf("Started **%d** Picarto streams", len(mc.downloaders))
 	messenger.SendMessage(emsg)
 
-	time.Sleep(120 * time.Second)
+	// time.Sleep(120 * time.Second)
+	time.Sleep(12 * time.Second)
 	for {
 		activeStreams, err := mc.activeStreams()
 		if err != nil {
@@ -143,7 +144,7 @@ func (mc *MistController) mainLoop() error {
 			glog.Infoln(emsg)
 			messenger.SendMessage(emsg)
 		}
-		time.Sleep(120 * time.Second)
+		time.Sleep(12 * time.Second)
 	}
 }
 
