@@ -156,13 +156,6 @@ func sendMessage(msg string) {
 	if webhookURL == "" || msgCh == nil {
 		return
 	}
-	msgCh <- msg
-}
-
-func postMessage(msg string) http.Header {
-	if webhookURL == "" {
-		return nil
-	}
 	if len(msg) > 2000 {
 		for {
 			l := 1980
@@ -171,12 +164,18 @@ func postMessage(msg string) http.Header {
 			}
 			msg1 := msg[:l]
 			msg = msg[l:]
-			SendMessage(msg1)
+			sendMessage(msg1)
 			if len(msg) == 0 {
 				break
 			}
-			time.Sleep(time.Second)
 		}
+		return
+	}
+	msgCh <- msg
+}
+
+func postMessage(msg string) http.Header {
+	if webhookURL == "" {
 		return nil
 	}
 	dm := &discordMessage{
