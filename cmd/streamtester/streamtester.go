@@ -146,7 +146,7 @@ func main() {
 		messenger.SendMessage(emsg)
 		err = mc.Start()
 		if err != nil {
-			emsg := fmt.Sprintf("Error starting Picarto testing: %v", err)
+			emsg := fmt.Sprintf("Fatal error starting Picarto testing: %v", err)
 			messenger.SendFatalMessage(emsg)
 			time.Sleep(time.Second)
 			panic(emsg)
