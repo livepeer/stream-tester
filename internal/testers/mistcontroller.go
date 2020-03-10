@@ -146,7 +146,7 @@ func (mc *MistController) mainLoop() error {
 				streamsNoSegmentsAnymore = append(streamsNoSegmentsAnymore, sn)
 			}
 			ds2all.add(ds2)
-			emsg := fmt.Sprintf("Stream __%s__ success rate: **%f**%% (%d/%d) (num proflies %d)", sn,
+			emsg := fmt.Sprintf("Stream __%s__ success rate: **%f%%** (%d/%d) (num proflies %d)", sn,
 				ds2.successRate, ds2.downTransAll, ds2.downSource, ds2.numProfiles)
 			messenger.SendMessage(emsg)
 			time.Sleep(10 * time.Millisecond)
@@ -163,7 +163,7 @@ func (mc *MistController) mainLoop() error {
 			}
 		}
 		runningFor := time.Since(started)
-		emsg := mp.Sprintf("Number of streams: **%d** success rate: **%7.4f**%% (%d/%d) bytes downloaded %d/%d (transcoded is%f%% of source bandwitdh) running for %s", len(mc.downloaders),
+		emsg := mp.Sprintf("Number of streams: **%d** success rate: **%7.4f%%** (%d/%d) bytes downloaded %d/%d (transcoded is **%4.2f%%** of source bandwitdh) running for %s", len(mc.downloaders),
 			ds2all.successRate, ds2all.downTransAll, ds2all.downSource, ds2all.transAllBytes, ds2all.sourceBytes, float64(ds2all.transAllBytes)/float64(ds2all.sourceBytes)*100, runningFor)
 		messenger.SendMessage(emsg)
 		/*
