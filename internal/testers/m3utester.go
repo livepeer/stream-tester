@@ -830,6 +830,9 @@ func (mt *m3utester) downloadLoop() {
 			// glog.Infof("Processed playlist with %d variant, not checking anymore", len(mpl.Variants))
 			// return
 		}
+		if mt.picartoMode {
+			return
+		}
 		// }
 		// glog.Info(string(b))
 		time.Sleep(2 * time.Second)
