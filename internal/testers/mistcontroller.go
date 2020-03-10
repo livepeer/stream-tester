@@ -174,7 +174,11 @@ func (mc *MistController) mainLoop() error {
 				messenger.SendMessage(emsg)
 			}
 		*/
-		time.Sleep(32 * time.Second)
+		if model.Production {
+			time.Sleep(120 * time.Second)
+		} else {
+			time.Sleep(32 * time.Second)
+		}
 	}
 }
 
