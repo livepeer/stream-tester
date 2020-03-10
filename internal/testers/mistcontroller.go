@@ -222,7 +222,7 @@ streamsLoop:
 			continue
 		}
 
-		mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, false, false, nil, shouldSkip)
+		mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, true, false, false, nil, shouldSkip)
 		mc.downloaders[userName] = mt
 		mt.Start(uri)
 		messenger.SendMessage(fmt.Sprintf("Started stream %s", uri))

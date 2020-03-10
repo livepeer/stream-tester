@@ -152,7 +152,7 @@ func main() {
 			panic(emsg)
 		}
 		emsg = fmt.Sprintf("Picarto streaming ended")
-		messenger.SendMessage(emsg)
+		messenger.SendFatalMessage(emsg)
 		time.Sleep(time.Second)
 		return
 	}

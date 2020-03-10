@@ -18,6 +18,7 @@ import (
 	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
+	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 	"golang.org/x/net/http2"
 )
@@ -67,6 +68,7 @@ type m3utester struct {
 	finished         bool
 	wowzaMode        bool
 	mistMode         bool
+	picartoMode      bool
 	infiniteMode     bool
 	save             bool
 	startTime        time.Time
@@ -168,8 +170,8 @@ func (p downloadResultsBySeq) findByMySeqNo(seqNo uint64) *downloadResult {
 }
 
 // newM3UTester ...
-func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, mistMode, infiniteMode, save bool, sm *segmentsMatcher,
-	shouldSkip [][]string) *m3utester {
+func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, mistMode,
+	picartoMode, infiniteMode, save bool, sm *segmentsMatcher, shouldSkip [][]string) *m3utester {
 
 	t := &m3utester{
 		downloads:       make(map[string]*mediaDownloader),
@@ -177,6 +179,7 @@ func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils
 		sentTimesMap:    sentTimesMap,
 		wowzaMode:       wowzaMode,
 		mistMode:        mistMode,
+		picartoMode:     picartoMode,
 		infiniteMode:    infiniteMode,
 		save:            save,
 		segmentsMatcher: sm,
@@ -671,6 +674,9 @@ func (mt *m3utester) workerLoop() {
 			mt.succ2mu.Lock()
 			mt.downStats2.lastDownloadTime = fr.downloadCompetedAt
 			mt.succ2mu.Unlock()
+			if mt.picartoMode && fr.videoParseError != nil {
+				messenger.SendFatalMessage(fmt.Sprintf("Video parsing error for uri=%s err=%v", fr.uri, fr.videoParseError))
+			}
 
 			// downSegs         map[string]map[string]*downloadResult
 			/*

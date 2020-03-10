@@ -198,7 +198,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			return
 		}
 		if resp.StatusCode != http.StatusOK {
-			glog.Errorf("Error status downloading segment %s result status %s", fsurl, resp.Status)
+			glog.Errorf("Error status downloading segment %s result status code %d status %s", fsurl, resp.StatusCode, resp.Status)
 			if try < 8 {
 				try++
 				time.Sleep(time.Second)
