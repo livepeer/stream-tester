@@ -72,6 +72,7 @@ func main() {
 	adult := flag.Bool("adult", false, "Adult Picarto")
 	gaming := flag.Bool("gaming", false, "Gaming Picarto")
 	picartoStreams := flag.Uint("picarto-streams", 1, "Number of streams to pull from Picarto")
+	picartoBlackList := flag.String("picarto-black-list", "", "Picarto streams to ignore")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -141,7 +142,7 @@ func main() {
 		mapi = mistapi.NewMist(*bhost, mcreds[0], mcreds[1], *apiToken)
 		mapi.Login()
 
-		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, mapi)
+		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, mapi, *picartoBlackList)
 		emsg := fmt.Sprintf("Starting **%d** Picarto streams (ver %s)", *picartoStreams, model.Version)
 		messenger.SendMessage(emsg)
 		err = mc.Start()

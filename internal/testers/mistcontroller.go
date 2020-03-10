@@ -37,15 +37,16 @@ type (
 	// makes sure that number of streams is constant (if source Picarto stream disconnects, then adds
 	// new stream)
 	MistController struct {
-		mapi        *mist.API
-		mistHot     string
-		profilesNum int // transcoding profiles number. Should be one for now.
-		adult       bool
-		gaming      bool
-		streamsNum  int                   // number of streams to maintain
-		downloaders map[string]*m3utester // [Picarto name]
-		ctx         context.Context
-		cancel      context.CancelFunc
+		mapi               *mist.API
+		mistHot            string
+		profilesNum        int // transcoding profiles number. Should be one for now.
+		adult              bool
+		gaming             bool
+		streamsNum         int // number of streams to maintain
+		blackListedStreams []string
+		downloaders        map[string]*m3utester // [Picarto name]
+		ctx                context.Context
+		cancel             context.CancelFunc
 	}
 )
 
@@ -65,18 +66,19 @@ var (
 )
 
 // NewMistController creates new MistController
-func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming bool, mapi *mist.API) *MistController {
+func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming bool, mapi *mist.API, blackListedStreams string) *MistController {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &MistController{
-		mapi:        mapi,
-		mistHot:     mistHost,
-		adult:       adult,
-		gaming:      gaming,
-		streamsNum:  streamsNum,
-		profilesNum: profilesNum,
-		downloaders: make(map[string]*m3utester),
-		ctx:         ctx,
-		cancel:      cancel,
+		mapi:               mapi,
+		mistHot:            mistHost,
+		adult:              adult,
+		gaming:             gaming,
+		streamsNum:         streamsNum,
+		profilesNum:        profilesNum,
+		blackListedStreams: strings.Split(blackListedStreams, ","),
+		downloaders:        make(map[string]*m3utester),
+		ctx:                ctx,
+		cancel:             cancel,
 	}
 }
 
@@ -200,11 +202,8 @@ func (mc *MistController) startStreams(failedStreams *cache.Cache) error {
 streamsLoop:
 	for i := 0; len(mc.downloaders) < mc.streamsNum && i < len(ps); i++ {
 		userName := ps[i].Name
-		if userName == "Chalodraws" { // doesn't seems to have sound
-			continue
-		}
 		// userName = "Felino"
-		if utils.StringsSliceContains(started, userName) {
+		if utils.StringsSliceContains(started, userName) || utils.StringsSliceContains(mc.blackListedStreams, userName) {
 			continue
 		}
 		if _, has := failedStreams.Get(userName); has {
