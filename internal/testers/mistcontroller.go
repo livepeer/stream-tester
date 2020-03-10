@@ -94,7 +94,13 @@ func (mc *MistController) mainLoop() error {
 	if err != nil {
 		return err
 	}
-	emsg := fmt.Sprintf("Started **%d** Picarto streams", len(mc.downloaders))
+	time.Sleep(500 * time.Millisecond)
+	emsg := fmt.Sprintf("Started **%d** Picarto streams\n", len(mc.downloaders))
+	sms := make([]string, 0, len(mc.downloaders))
+	for _, d := range mc.downloaders {
+		sms = append(sms, d.initialURL.String())
+	}
+	emsg += strings.Join(sms, "\n")
 	messenger.SendMessage(emsg)
 
 	time.Sleep(120 * time.Second)
