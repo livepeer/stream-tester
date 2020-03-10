@@ -211,7 +211,7 @@ streamsLoop:
 			}
 			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v started so far %d try %d",
 				userName, err, len(mc.downloaders), try))
-			if err == ErrStreamOpenFailed || timedout(err) || err == io.EOF {
+			if err == ErrStreamOpenFailed || timedout(err) || err == io.EOF || err.Error() == "EOF" {
 				failedStreams.SetDefault(userName, true)
 				continue streamsLoop
 			}
