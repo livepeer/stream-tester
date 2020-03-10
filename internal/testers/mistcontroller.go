@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -206,7 +207,7 @@ streamsLoop:
 			}
 			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v started so far %d try %d",
 				userName, err, len(mc.downloaders), try))
-			if err == ErrStreamOpenFailed || timedout(err) {
+			if err == ErrStreamOpenFailed || timedout(err) || err == io.EOF {
 				failedStreams.SetDefault(userName, true)
 				continue streamsLoop
 			}
@@ -258,7 +259,7 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 	for {
 		mediaURIs, err = mc.pullFirstTime(uri)
 		if err != nil {
-			if err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) {
+			if err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || err == io.EOF {
 				return "", nil, err
 			}
 		}
