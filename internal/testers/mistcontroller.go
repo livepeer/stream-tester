@@ -200,6 +200,9 @@ func (mc *MistController) startStreams(failedStreams *cache.Cache) error {
 streamsLoop:
 	for i := 0; len(mc.downloaders) < mc.streamsNum && i < len(ps); i++ {
 		userName := ps[i].Name
+		if userName == "Chalodraws" { // doesn't seems to have sound
+			continue
+		}
 		// userName = "Felino"
 		if utils.StringsSliceContains(started, userName) {
 			continue
