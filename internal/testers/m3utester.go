@@ -755,6 +755,12 @@ func (mt *m3utester) downloadLoop() {
 		glog.V(model.VVERBOSE).Info(mpl)
 		// glog.Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), surl)
 		// glog.Info(mpl)
+		if mt.picartoMode && len(mpl.Variants) < 2 {
+			emsg := fmt.Sprintf("For %s got playlist with %d variants, not starting download", surl, len(mpl.Variants))
+			messenger.SendFatalMessage(emsg)
+			mt.Stop()
+			return
+		}
 		if !mt.wowzaMode || len(mpl.Variants) > model.ProfilesNum {
 			if mt.infiniteMode {
 				if !gotPlaylist {
