@@ -1,6 +1,7 @@
 package testers
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -48,6 +49,8 @@ type (
 var (
 	// ErrZeroStreams ...
 	ErrZeroStreams = errors.New("Zero streams")
+	// ErrStreamOpenFailed ...
+	ErrStreamOpenFailed = errors.New("Stream open failed")
 )
 
 // NewMistController creates new MistController
@@ -73,6 +76,7 @@ func (mc *MistController) Start() error {
 }
 
 func (mc *MistController) mainLoop() error {
+	started := time.Now()
 	err := mc.startStreams()
 	if err != nil {
 		return err
@@ -80,8 +84,8 @@ func (mc *MistController) mainLoop() error {
 	emsg := fmt.Sprintf("Started **%d** Picarto streams", len(mc.downloaders))
 	messenger.SendMessage(emsg)
 
-	// time.Sleep(120 * time.Second)
-	time.Sleep(12 * time.Second)
+	time.Sleep(120 * time.Second)
+	// time.Sleep(12 * time.Second)
 	for {
 		activeStreams, err := mc.activeStreams()
 		if err != nil {
@@ -134,17 +138,19 @@ func (mc *MistController) mainLoop() error {
 				}
 			}
 		}
-		time.Sleep(50 * time.Millisecond)
-		emsg := fmt.Sprintf("Number of streams: **%d** success rate2: **%f** (%d/%d)", len(mc.downloaders),
-			ds2all.successRate, ds2all.downTransAll, ds2all.downSource)
+		runningFor := time.Since(started)
+		emsg := fmt.Sprintf("Number of streams: **%d** success rate2: **%f** (%d/%d) bytes downloaded %d/%d (%f%%) running for %s", len(mc.downloaders),
+			ds2all.successRate, ds2all.downTransAll, ds2all.downSource, ds2all.sourceBytes, ds2all.transAllBytes, float64(ds2all.transAllBytes)/float64(ds2all.sourceBytes)*100, runningFor)
 		messenger.SendMessage(emsg)
-		if downSource > 0 {
-			emsg := fmt.Sprintf("Number of streams: **%d** success rate: **%f** (%d/%d)", len(mc.downloaders),
-				float64(downTrans)/float64(downSource)*100.0, downTrans, downSource)
-			glog.Infoln(emsg)
-			messenger.SendMessage(emsg)
-		}
-		time.Sleep(12 * time.Second)
+		/*
+			if downSource > 0 {
+				emsg := fmt.Sprintf("Number of streams: **%d** success rate: **%f** (%d/%d)", len(mc.downloaders),
+					float64(downTrans)/float64(downSource)*100.0, downTrans, downSource)
+				glog.Infoln(emsg)
+				messenger.SendMessage(emsg)
+			}
+		*/
+		time.Sleep(120 * time.Second)
 	}
 }
 
@@ -157,8 +163,10 @@ func (mc *MistController) startStreams() error {
 	var started []string
 	var uri string
 	var shouldSkip [][]string
+streamsLoop:
 	for i := 0; len(mc.downloaders) < mc.streamsNum && i < len(ps); i++ {
 		userName := ps[i].Name
+		// userName = "Felino"
 		if utils.StringsSliceContains(started, userName) {
 			continue
 		}
@@ -172,7 +180,10 @@ func (mc *MistController) startStreams() error {
 			}
 			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v started so far %d try %d",
 				userName, err, len(mc.downloaders), try))
-			time.Sleep(300 * time.Millisecond)
+			if err == ErrStreamOpenFailed {
+				continue streamsLoop
+			}
+			time.Sleep((200*time.Duration(try) + 300) * time.Millisecond)
 		}
 		if err != nil {
 			continue
@@ -219,7 +230,7 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 	for {
 		mediaURIs, err = mc.pullFirstTime(uri)
 		if err != nil {
-			if err == ErrZeroStreams {
+			if err == ErrZeroStreams || err == ErrStreamOpenFailed {
 				return "", nil, err
 			}
 		}
@@ -309,18 +320,24 @@ func (mc *MistController) pullFirstTime(uri string) ([]string, error) {
 		glog.Infof("===== get error getting master playlist %s: %v", uri, err)
 		return nil, err
 	}
+	b, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		glog.Infof("===== error getting master playlist body uri=%s err=%v", uri, err)
+		return nil, err
+	}
 	if resp.StatusCode != http.StatusOK {
-		b, _ := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
 		err := fmt.Errorf("===== status error getting master playlist %s: %v (%s) body: %s", uri, resp.StatusCode, resp.Status, string(b))
 		return nil, err
 	}
-	// b, err := ioutil.ReadAll(resp.Body)
-	// if err
+	if strings.Contains(string(b), "Stream open failed") {
+		glog.Errorf("Master playlist stream open failed uri=%s", uri)
+		return nil, ErrStreamOpenFailed
+	}
 	mpl := m3u8.NewMasterPlaylist()
-	err = mpl.DecodeFrom(resp.Body, true)
-	// err = mpl.Decode(*bytes.NewBuffer(b), true)
-	resp.Body.Close()
+	// err = mpl.DecodeFrom(resp.Body, true)
+	err = mpl.Decode(*bytes.NewBuffer(b), true)
+	// resp.Body.Close()
 	if err != nil {
 		glog.Infof("===== error getting master playlist uri=%s err=%v", uri, err)
 		return nil, err

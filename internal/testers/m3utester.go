@@ -22,7 +22,7 @@ import (
 	"golang.org/x/net/http2"
 )
 
-const picartoDebug = true
+const picartoDebug = false
 
 // HTTPTimeout http timeout downloading manifests/segments
 const HTTPTimeout = 16 * time.Second
@@ -47,11 +47,13 @@ var wowzaBandwidthRE *regexp.Regexp = regexp.MustCompile(`_b(\d+)\.`)
 var mistSessionRE *regexp.Regexp = regexp.MustCompile(`(\?sessId=\d+)`)
 
 type downStats2 struct {
-	downSource   int
-	downTransAll int
-	numProfiles  int
-	downTrans    []int
-	successRate  float64
+	downSource    int
+	downTransAll  int
+	numProfiles   int
+	sourceBytes   int64
+	transAllBytes int64
+	downTrans     []int
+	successRate   float64
 }
 
 // m3utester tests one stream, reading all the media streams
@@ -636,6 +638,7 @@ func (mt *m3utester) workerLoop() {
 			for dk, dr := range mt.downSegs[sourceKey] {
 				if now.Sub(dr.downloadCompetedAt) > 16*time.Second {
 					mt.downStats2.downSource++
+					mt.downStats2.sourceBytes += int64(dr.bytes)
 					glog.V(model.INSANE).Infof("Checking source seg %s  pts %s down at %s", dk, dr.startTime, dr.downloadCompetedAt)
 					for i, transKey := range mt.downloadsKeys[1:] {
 						transDM := mt.downSegs[transKey]
@@ -646,6 +649,7 @@ func (mt *m3utester) workerLoop() {
 								// match found
 								mt.downStats2.downTransAll++
 								mt.downStats2.downTrans[i]++
+								mt.downStats2.transAllBytes += int64(transSeg.bytes)
 								delete(transDM, transSegName)
 								found = true
 								break
@@ -758,12 +762,14 @@ func (mt *m3utester) downloadLoop() {
 				}
 				if mt.mistMode {
 					vURIClean := mistSessionRE.ReplaceAllString(variant.URI, "")
+					glog.Infof("Raw variant URI %s clean %s", variant.URI, vURIClean)
 					if firstURI, has := mistMediaStreams[vURIClean]; has {
 						variant.URI = firstURI
 					} else {
 						mistMediaStreams[vURIClean] = variant.URI
 					}
 				}
+				glog.Infof("variant URI=%s", variant.URI)
 				pvrui, err := url.Parse(variant.URI)
 				if err != nil {
 					glog.Error(err)
@@ -779,6 +785,7 @@ func (mt *m3utester) downloadLoop() {
 				// bandwitdh and
 				// variantID := strconv.Itoa(variant.Bandwidth) + variant.Resolution
 				mt.mu.Lock()
+				glog.Infof("mediaURL=%s downloads=%+v", mediaURL, mt.getDownloadsKeys())
 				if _, ok := mt.downloads[mediaURL]; !ok {
 					var shouldSkip []string
 					if len(mt.shouldSkip) > i {
@@ -794,7 +801,7 @@ func (mt *m3utester) downloadLoop() {
 						mt.savePlayList.Append(variant.URI, md.savePlayList, variant.VariantParams)
 					}
 					if len(mt.downloadsKeys) > 0 && md.source {
-						panic(fmt.Sprintf("Source stream should be first, instead found %s", mt.downloadsKeys[0]))
+						panic(fmt.Sprintf("Source stream should be first, instead found %s, mediaURL=%s", mt.downloadsKeys[0], mediaURL))
 					}
 					mt.downloadsKeys = append(mt.downloadsKeys, mediaURL)
 					mt.downSegs[mediaURL] = make(map[string]*fullDownloadResult)
@@ -820,16 +827,26 @@ func (mt *m3utester) downloadLoop() {
 	}
 }
 
-func (ds *downStats2) clone() *downStats2 {
-	r := *ds
-	r.downTrans = make([]int, len(ds.downTrans))
-	copy(r.downTrans, ds.downTrans)
+func (mt *m3utester) getDownloadsKeys() []string {
+	r := make([]string, 0, len(mt.downloads))
+	for k := range mt.downloads {
+		r = append(r, k)
+	}
+	return r
+}
+
+func (ds2 *downStats2) clone() *downStats2 {
+	r := *ds2
+	r.downTrans = make([]int, len(ds2.downTrans))
+	copy(r.downTrans, ds2.downTrans)
 	return &r
 }
 
 func (ds2 *downStats2) add(other *downStats2) {
 	ds2.downSource += other.downSource
 	ds2.downTransAll += other.downTransAll
+	ds2.sourceBytes += other.sourceBytes
+	ds2.transAllBytes += other.transAllBytes
 	ds2.numProfiles = other.numProfiles
 	if ds2.downSource > 0 {
 		ds2.successRate = float64(ds2.downTransAll) / float64(ds2.downSource*ds2.numProfiles) * 100.0
