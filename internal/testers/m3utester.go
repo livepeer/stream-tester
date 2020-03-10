@@ -675,7 +675,7 @@ func (mt *m3utester) workerLoop() {
 			mt.downStats2.lastDownloadTime = fr.downloadCompetedAt
 			mt.succ2mu.Unlock()
 			if mt.picartoMode && fr.videoParseError != nil {
-				messenger.SendFatalMessage(fmt.Sprintf("Video parsing error for uri=%s err=%v", fr.uri, fr.videoParseError))
+				messenger.SendFatalMessage(fmt.Sprintf("Video parsing error for name=%s err=%v", fr.name, fr.videoParseError))
 			}
 
 			// downSegs         map[string]map[string]*downloadResult
