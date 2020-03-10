@@ -212,10 +212,10 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
 			glog.Error(msg)
 			if model.FailHardOnBadSegments {
-				fname := fmt.Sprintf("bad_video_%s_%d.ts", md.name, task.seqNo)
-				ioutil.WriteFile(fname, b, 0644)
-				glog.Infof("Wrote bad segment to '%s'", fname)
-				panic(err)
+				fname := fmt.Sprintf("bad_video_%s_%d.ts", utils.CleanFileName(md.name), task.seqNo)
+				err = ioutil.WriteFile(fname, b, 0644)
+				glog.Infof("Wrote bad segment to '%s' (err=%v)", fname, err)
+				panic(verr)
 			}
 		} else {
 			// add keys

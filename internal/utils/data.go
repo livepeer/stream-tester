@@ -4,6 +4,7 @@ import (
 	"math"
 	"path"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -216,4 +217,11 @@ func StringsSliceContains(ss []string, st string) bool {
 		}
 	}
 	return false
+}
+
+var cleanReplacer = strings.NewReplacer(`/`, `_`, `\`, `_`, `?`, `_`, `=`, `_`, `+`, `_`)
+
+// CleanFileName removes special symbols from string
+func CleanFileName(s string) string {
+	return cleanReplacer.Replace(s)
 }

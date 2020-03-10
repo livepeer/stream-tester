@@ -47,13 +47,14 @@ var wowzaBandwidthRE *regexp.Regexp = regexp.MustCompile(`_b(\d+)\.`)
 var mistSessionRE *regexp.Regexp = regexp.MustCompile(`(\?sessId=\d+)`)
 
 type downStats2 struct {
-	downSource    int
-	downTransAll  int
-	numProfiles   int
-	sourceBytes   int64
-	transAllBytes int64
-	downTrans     []int
-	successRate   float64
+	downSource       int
+	downTransAll     int
+	numProfiles      int
+	sourceBytes      int64
+	transAllBytes    int64
+	downTrans        []int
+	successRate      float64
+	lastDownloadTime time.Time
 }
 
 // m3utester tests one stream, reading all the media streams
@@ -667,6 +668,10 @@ func (mt *m3utester) workerLoop() {
 			mt.succ2mu.Unlock()
 		case fr := <-mt.fullResultsCh:
 			mt.downSegs[fr.uri][fr.name] = fr
+			mt.succ2mu.Lock()
+			mt.downStats2.lastDownloadTime = fr.downloadCompetedAt
+			mt.succ2mu.Unlock()
+
 			// downSegs         map[string]map[string]*downloadResult
 			/*
 				mt.dm.Lock()

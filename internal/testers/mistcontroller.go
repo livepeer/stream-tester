@@ -21,6 +21,8 @@ import (
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
+	"github.com/patrickmn/go-cache"
+	"golang.org/x/text/message"
 )
 
 const (
@@ -51,6 +53,14 @@ var (
 	ErrZeroStreams = errors.New("Zero streams")
 	// ErrStreamOpenFailed ...
 	ErrStreamOpenFailed = errors.New("Stream open failed")
+
+	mp          = message.NewPrinter(message.MatchLanguage("en"))
+	mhttpClient = &http.Client{
+		// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
+		// Transport: &http2.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: false}},
+		// Transport: &http2.Transport{AllowHTTP: true},
+		Timeout: 4 * time.Second,
+	}
 )
 
 // NewMistController creates new MistController
@@ -77,7 +87,9 @@ func (mc *MistController) Start() error {
 
 func (mc *MistController) mainLoop() error {
 	started := time.Now()
-	err := mc.startStreams()
+	var streamsNoSegmentsAnymore []string
+	failedStreams := cache.New(5*time.Minute, 8*time.Minute)
+	err := mc.startStreams(failedStreams)
 	if err != nil {
 		return err
 	}
@@ -93,20 +105,28 @@ func (mc *MistController) mainLoop() error {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		if len(activeStreams) < mc.streamsNum {
+		if len(activeStreams) < mc.streamsNum || len(streamsNoSegmentsAnymore) > 0 {
 			// remove old downloaders
 			for sn, mt := range mc.downloaders {
-				if !utils.StringsSliceContains(activeStreams, sn) {
+				noSegs := utils.StringsSliceContains(streamsNoSegmentsAnymore, sn)
+				notActive := !utils.StringsSliceContains(activeStreams, sn)
+				if notActive || noSegs {
 					mt.Stop()
-					messenger.SendMessage(fmt.Sprintf("Stopped stream name=%s because not in active streams anymore", sn))
+					reason := "not in active streams anymore"
+					if noSegs {
+						reason = "no segments downloaded for 30s"
+					}
+					messenger.SendMessage(fmt.Sprintf("Stopped stream **%s** because %s", sn, reason))
 					delete(mc.downloaders, sn)
+					failedStreams.SetDefault(sn, true)
 				}
 			}
 			// need to start new streams
-			mc.startStreams()
+			mc.startStreams(failedStreams)
 		}
 		var downSource, downTrans int
 		var ds2all downStats2
+		now := time.Now()
 		for sn, mt := range mc.downloaders {
 			stats := mt.statsSeparate()
 			glog.Infoln(strings.Repeat("*", 100))
@@ -121,11 +141,14 @@ func (mc *MistController) mainLoop() error {
 				}
 			}
 			ds2 := mt.getDownStats2()
+			if !ds2.lastDownloadTime.IsZero() && now.Sub(ds2.lastDownloadTime) > 30*time.Second {
+				streamsNoSegmentsAnymore = append(streamsNoSegmentsAnymore, sn)
+			}
 			ds2all.add(ds2)
-			emsg := fmt.Sprintf("Stream %s success rate2: **%f** (%d/%d)", sn,
-				ds2.successRate, ds2.downTransAll, ds2.downSource)
+			emsg := fmt.Sprintf("Stream __%s__ success rate: **%f**%% (%d/%d) (num proflies %d)", sn,
+				ds2.successRate, ds2.downTransAll, ds2.downSource, ds2.numProfiles)
 			messenger.SendMessage(emsg)
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 			if picartoDebug {
 				for _, mdkey := range mt.downloadsKeys {
 					md := mt.downloads[mdkey]
@@ -139,8 +162,8 @@ func (mc *MistController) mainLoop() error {
 			}
 		}
 		runningFor := time.Since(started)
-		emsg := fmt.Sprintf("Number of streams: **%d** success rate2: **%f** (%d/%d) bytes downloaded %d/%d (%f%%) running for %s", len(mc.downloaders),
-			ds2all.successRate, ds2all.downTransAll, ds2all.downSource, ds2all.sourceBytes, ds2all.transAllBytes, float64(ds2all.transAllBytes)/float64(ds2all.sourceBytes)*100, runningFor)
+		emsg := mp.Sprintf("Number of streams: **%d** success rate: **%7.4f**%% (%d/%d) bytes downloaded %d/%d (transcoded is%f%% of source bandwitdh) running for %s", len(mc.downloaders),
+			ds2all.successRate, ds2all.downTransAll, ds2all.downSource, ds2all.transAllBytes, ds2all.sourceBytes, float64(ds2all.transAllBytes)/float64(ds2all.sourceBytes)*100, runningFor)
 		messenger.SendMessage(emsg)
 		/*
 			if downSource > 0 {
@@ -150,11 +173,11 @@ func (mc *MistController) mainLoop() error {
 				messenger.SendMessage(emsg)
 			}
 		*/
-		time.Sleep(120 * time.Second)
+		time.Sleep(32 * time.Second)
 	}
 }
 
-func (mc *MistController) startStreams() error {
+func (mc *MistController) startStreams(failedStreams *cache.Cache) error {
 	ps, err := picarto.GetOnlineUsers(picartoCountry, mc.adult, mc.gaming)
 	if err != nil {
 		return err
@@ -170,6 +193,9 @@ streamsLoop:
 		if utils.StringsSliceContains(started, userName) {
 			continue
 		}
+		if _, has := failedStreams.Get(userName); has {
+			continue
+		}
 		if _, has := mc.downloaders[userName]; has {
 			continue
 		}
@@ -181,11 +207,13 @@ streamsLoop:
 			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v started so far %d try %d",
 				userName, err, len(mc.downloaders), try))
 			if err == ErrStreamOpenFailed {
+				failedStreams.SetDefault(userName, true)
 				continue streamsLoop
 			}
 			time.Sleep((200*time.Duration(try) + 300) * time.Millisecond)
 		}
 		if err != nil {
+			failedStreams.SetDefault(userName, true)
 			continue
 		}
 
@@ -230,7 +258,7 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 	for {
 		mediaURIs, err = mc.pullFirstTime(uri)
 		if err != nil {
-			if err == ErrZeroStreams || err == ErrStreamOpenFailed {
+			if err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) {
 				return "", nil, err
 			}
 		}
@@ -314,10 +342,18 @@ func mistGetTimeFromSegURI(segURI string) int {
 	return pts
 }
 
+func timedout(e error) bool {
+	t, ok := e.(interface {
+		Timeout() bool
+	})
+	return ok && t.Timeout()
+}
+
 func (mc *MistController) pullFirstTime(uri string) ([]string, error) {
-	resp, err := httpClient.Do(uhttp.GetRequest(uri))
+	resp, err := mhttpClient.Do(uhttp.GetRequest(uri))
 	if err != nil {
-		glog.Infof("===== get error getting master playlist %s: %v", uri, err)
+		to := timedout(err)
+		glog.Infof("===== get error (timed out: %v) getting master playlist %s: %v ", to, uri, err)
 		return nil, err
 	}
 	b, err := ioutil.ReadAll(resp.Body)
@@ -375,7 +411,7 @@ type plPullRes struct {
 }
 
 func (mc *MistController) pullMediaPL(uri string, i int, out chan *plPullRes) (*m3u8.MediaPlaylist, error) {
-	resp, err := httpClient.Do(uhttp.GetRequest(uri))
+	resp, err := mhttpClient.Do(uhttp.GetRequest(uri))
 	if err != nil {
 		glog.Infof("===== get error getting media playlist %s: %v", uri, err)
 		out <- &plPullRes{err: err, i: i}
