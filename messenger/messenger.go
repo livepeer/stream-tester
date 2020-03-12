@@ -50,7 +50,7 @@ func sendLoop() {
 	timer := time.NewTimer(2 * time.Second)
 	var step int
 	for {
-		glog.V(model.VVERBOSE).Infof("====> sendLoop step %d queue len %d", step, len(msgQueue))
+		glog.V(model.INSANE).Infof("====> sendLoop step %d queue len %d", step, len(msgQueue))
 		step++
 		select {
 		case <-timer.C:
@@ -62,6 +62,14 @@ func sendLoop() {
 			if headers == nil || (status != http.StatusNoContent && status != http.StatusOK) {
 				// error possibly
 				// timer.Reset(2 * time.Second)
+				if headers != nil && status == http.StatusTooManyRequests {
+					rafters := headers.Get("Retry-After")
+					if rafters != "" {
+						rafter, _ := strconv.ParseInt(rafters, 10, 64)
+						timer = time.NewTimer(time.Duration(rafter) * time.Millisecond)
+						continue
+					}
+				}
 				timer = time.NewTimer(2 * time.Second)
 				continue
 			}
@@ -70,12 +78,23 @@ func sendLoop() {
 		case msg := <-msgCh:
 			if len(msgQueue) > 0 || time.Now().Before(goodAfter) {
 				msgQueue = append(msgQueue, msg)
+				if len(msgQueue) > 128 {
+					msgQueue = msgQueue[1:]
+				}
 				continue
 			}
 			status, headers = postMessage(msg)
 			if headers == nil || (status != http.StatusNoContent && status != http.StatusOK) {
 				// error possibly
 				msgQueue = append(msgQueue, msg)
+				if headers != nil && status == http.StatusTooManyRequests {
+					rafters := headers.Get("Retry-After")
+					if rafters != "" {
+						rafter, _ := strconv.ParseInt(rafters, 10, 64)
+						timer = time.NewTimer(time.Duration(rafter) * time.Millisecond)
+						continue
+					}
+				}
 				// if !timer.Stop() {
 				// 	<-timer.C
 				// }
