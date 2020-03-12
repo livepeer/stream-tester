@@ -89,6 +89,10 @@ func (mc *MistController) Start() error {
 }
 
 func (mc *MistController) mainLoop() error {
+	statsDelay := 120 * time.Second
+	if !model.Production {
+		statsDelay = 32 * time.Second
+	}
 	started := time.Now()
 	var streamsNoSegmentsAnymore []string
 	failedStreams := cache.New(5*time.Minute, 8*time.Minute)
@@ -105,8 +109,7 @@ func (mc *MistController) mainLoop() error {
 	emsg += strings.Join(sms, "\n")
 	messenger.SendMessage(emsg)
 
-	time.Sleep(120 * time.Second)
-	// time.Sleep(12 * time.Second)
+	time.Sleep(statsDelay)
 	for {
 		activeStreams, err := mc.activeStreams()
 		if err != nil {
@@ -182,11 +185,7 @@ func (mc *MistController) mainLoop() error {
 				messenger.SendMessage(emsg)
 			}
 		*/
-		if model.Production {
-			time.Sleep(120 * time.Second)
-		} else {
-			time.Sleep(32 * time.Second)
-		}
+		time.Sleep(statsDelay)
 	}
 }
 
@@ -195,6 +194,7 @@ func (mc *MistController) startStreams(failedStreams *cache.Cache) error {
 	if err != nil {
 		return err
 	}
+	ps = ps[10:]
 	// start initial downloaders
 	var started []string
 	var uri string
@@ -203,6 +203,7 @@ streamsLoop:
 	for i := 0; len(mc.downloaders) < mc.streamsNum && i < len(ps); i++ {
 		userName := ps[i].Name
 		// userName = "Felino"
+		// userName = "AwfulRabbit"
 		if utils.StringsSliceContains(started, userName) || utils.StringsSliceContains(mc.blackListedStreams, userName) {
 			continue
 		}
@@ -219,7 +220,7 @@ streamsLoop:
 			}
 			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v started so far %d try %d",
 				userName, err, len(mc.downloaders), try))
-			if err == ErrStreamOpenFailed || timedout(err) || err == io.EOF || err.Error() == "EOF" || errors.Is(err, io.EOF) {
+			if isFatalError(err) {
 				failedStreams.SetDefault(userName, true)
 				continue streamsLoop
 			}
@@ -271,7 +272,7 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 	for {
 		mediaURIs, err = mc.pullFirstTime(uri)
 		if err != nil {
-			if err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || err == io.EOF {
+			if isFatalError(err) {
 				return "", nil, err
 			}
 		}
@@ -366,7 +367,7 @@ func (mc *MistController) pullFirstTime(uri string) ([]string, error) {
 	resp, err := mhttpClient.Do(uhttp.GetRequest(uri))
 	if err != nil {
 		to := timedout(err)
-		glog.Infof("===== get error (timed out: %v) getting master playlist %s: %v ", to, uri, err)
+		glog.Infof("===== get error (timed out: %v eof: %v) getting master playlist %s: %v", to, errors.Is(err, io.EOF), uri, err)
 		return nil, err
 	}
 	b, err := ioutil.ReadAll(resp.Body)
@@ -468,3 +469,7 @@ func (p picartoSortedSegments) Less(i, j int) bool {
 	return mistGetTimeFromSegURI(p[i]) < mistGetTimeFromSegURI(p[j])
 }
 func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+
+func isFatalError(err error) bool {
+	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF)
+}

@@ -24,6 +24,7 @@ import (
 )
 
 const picartoDebug = false
+const stopAfterMediaStreamsDrop = false
 
 // HTTPTimeout http timeout downloading manifests/segments
 const HTTPTimeout = 16 * time.Second
@@ -708,6 +709,7 @@ func (mt *m3utester) downloadLoop() {
 		glog.Infof("Waiting for playlist %s", surl)
 	}
 	mistMediaStreams := make(map[string]string) // maps clean urls to urls with session
+	stopDeclared := false
 
 	for {
 		select {
@@ -753,6 +755,14 @@ func (mt *m3utester) downloadLoop() {
 		}
 		glog.V(model.VVERBOSE).Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), surl)
 		glog.V(model.VVERBOSE).Info(mpl)
+		if stopAfterMediaStreamsDrop && len(mpl.Variants) < 2 && !stopDeclared {
+			glog.Infof("===== master playlist low on stream %s", surl)
+			stopDeclared = true
+			go func() {
+				time.Sleep(10 * time.Second)
+				panic("stop because of " + surl)
+			}()
+		}
 		// glog.Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), surl)
 		// glog.Info(mpl)
 		if mt.picartoMode && len(mpl.Variants) < 2 {
@@ -830,7 +840,7 @@ func (mt *m3utester) downloadLoop() {
 			// glog.Infof("Processed playlist with %d variant, not checking anymore", len(mpl.Variants))
 			// return
 		}
-		if mt.picartoMode {
+		if mt.picartoMode && !stopAfterMediaStreamsDrop {
 			return
 		}
 		// }
