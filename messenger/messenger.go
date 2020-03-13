@@ -41,24 +41,24 @@ type DiscordEmbed struct {
 	Description string `json:"description,omitempty"`
 	URL         string `json:"url,omitempty"`
 	Color       uint32 `json:"color,omitempty"`
-	Footer      struct {
+	Footer      *struct {
 		Text         string `json:"text,omitempty"`
 		IconURL      string `json:"icon_url,omitempty"`
 		ProxyIconURL string `json:"proxy_icon_url,omitempty"`
 	} `json:"footer,omitempty"`
-	Image struct {
+	Image *struct {
 		URL      string `json:"url,omitempty"`
 		ProxyURL string `json:"proxy_url,omitempty"`
 		Height   int    `json:"height,omitempty"`
 		Width    int    `json:"width,omitempty"`
 	} `json:"image,omitempty"`
-	Thumbnail struct {
+	Thumbnail *struct {
 		URL      string `json:"url,omitempty"`
 		ProxyURL string `json:"proxy_url,omitempty"`
 		Height   int    `json:"height,omitempty"`
 		Width    int    `json:"width,omitempty"`
 	} `json:"thumbnail,omitempty"`
-	Author struct {
+	Author *struct {
 		Name         string `json:"name,omitempty"`
 		IconURL      string `json:"icon_url,omitempty"`
 		URL          string `json:"url,omitempty"`
@@ -86,7 +86,7 @@ func (de *DiscordEmbed) AddFieldF(name string, inline bool, format string, a ...
 
 // SetColorBySuccess sets embed's color between red and green assuming percent equal 100.0 is green and 0 is red
 func (de *DiscordEmbed) SetColorBySuccess(percent float64) {
-	de.Color = successRate2Color(percent)
+	de.Color = successRate2Color(percent / 100.0)
 }
 
 type discordField struct {
