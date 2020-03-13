@@ -84,6 +84,11 @@ func (de *DiscordEmbed) AddFieldF(name string, inline bool, format string, a ...
 	de.Fields = append(de.Fields, discordField{Name: name, Value: mp.Sprintf(format, a...), Inline: inline})
 }
 
+// SetColorBySuccess sets embed's color between red and green assuming percent equal 100.0 is green and 0 is red
+func (de *DiscordEmbed) SetColorBySuccess(percent float64) {
+	de.Color = successRate2Color(percent)
+}
+
 type discordField struct {
 	Name   string `json:"name,omitempty"`
 	Value  string `json:"value,omitempty"`
@@ -364,4 +369,10 @@ func postMessage(msg []byte) (int, http.Header) {
 		glog.Errorf("status error posting to Discord status=%s body: %s", resp.Status, string(b))
 	}
 	return resp.StatusCode, resp.Header
+}
+
+func successRate2Color(rate float64) uint32 {
+	green := uint32(255 * rate)
+	red := uint32(255 * (1 - rate))
+	return red<<16 | green
 }

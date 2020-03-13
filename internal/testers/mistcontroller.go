@@ -165,14 +165,17 @@ func (mc *MistController) mainLoop() error {
 			// emsg := fmt.Sprintf("Stream __%s__ success rate: **%f%%** (%d/%d) (num proflies %d)", sn,
 			// 	ds2.successRate, ds2.downTransAll, ds2.downSource, ds2.numProfiles)
 			// ssm = append(ssm, emsg)
-			emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Stream __%s__", sn))
-			emmsg.URL = mt.initialURL.String()
-			emmsg.Color = successRate2Color(ds2.successRate)
-			emmsg.AddFieldF("Success rate", true, "**%f%%**", ds2.successRate)
-			emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2.downTransAll, ds2.downSource)
-			emmsg.AddFieldF("num proflies", true, "%d", ds2.numProfiles)
+
+			/*
+				emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Stream __%s__", sn))
+				emmsg.URL = mt.initialURL.String()
+				emmsg.Color = successRate2Color(ds2.successRate)
+				emmsg.AddFieldF("Success rate", true, "**%f%%**", ds2.successRate)
+				emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2.downTransAll, ds2.downSource)
+				emmsg.AddFieldF("Num proflies", true, "%d", ds2.numProfiles)
+			*/
 			if ds2.successRate < 100 {
-				ssm = append(ssm, emmsg)
+				ssm = append(ssm, ds2.discordRichMesage(fmt.Sprintf("Stream __%s__", sn), true))
 			}
 			// messenger.SendRichMessage(emmsg)
 			// messenger.SendMessage(emsg)
@@ -196,16 +199,20 @@ func (mc *MistController) mainLoop() error {
 		// 	ds2all.successRate, ds2all.downTransAll, ds2all.downSource, ds2all.transAllBytes, ds2all.sourceBytes, float64(ds2all.transAllBytes)/float64(ds2all.sourceBytes)*100, runningFor)
 		// messenger.SendMessage(emsg)
 
-		emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)))
-		emmsg.Color = successRate2Color(ds2all.successRate)
-		emmsg.AddFieldF("Success rate", true, "**%7.4f%%**", ds2all.successRate)
-		emmsg.AddFieldF("Bytes downloaded", true, "%d/%d", ds2all.transAllBytes, ds2all.sourceBytes)
-		var pob float64
-		if ds2all.sourceBytes > 0 {
-			pob = float64(ds2all.transAllBytes) / float64(ds2all.sourceBytes) * 100
-		}
-		emmsg.AddFieldF("Percent of source bandwitdh", true, "**%4.2f%%**", pob)
-		emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2all.downTransAll, ds2all.downSource)
+		emmsg := ds2all.discordRichMesage(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)), false)
+		emmsg.URL = ""
+		/*
+			emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)))
+			emmsg.Color = successRate2Color(ds2all.successRate)
+			emmsg.AddFieldF("Success rate", true, "**%7.4f%%**", ds2all.successRate)
+			emmsg.AddFieldF("Bytes downloaded", true, "%d/%d", ds2all.transAllBytes, ds2all.sourceBytes)
+			var pob float64
+			if ds2all.sourceBytes > 0 {
+				pob = float64(ds2all.transAllBytes) / float64(ds2all.sourceBytes) * 100
+			}
+			emmsg.AddFieldF("Percent of source bandwitdh", true, "**%4.2f%%**", pob)
+			emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2all.downTransAll, ds2all.downSource)
+		*/
 		emmsg.AddFieldF("Running for", true, "%s", runningFor)
 		messenger.SendRichMessage(emmsg)
 		/*
@@ -505,10 +512,4 @@ func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
 func isFatalError(err error) bool {
 	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF)
-}
-
-func successRate2Color(rate float64) uint32 {
-	green := uint32(255 * rate)
-	red := uint32(255 * (1 - rate))
-	return red<<16 | green
 }

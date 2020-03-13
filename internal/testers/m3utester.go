@@ -57,6 +57,7 @@ type downStats2 struct {
 	downTrans        []int
 	successRate      float64
 	lastDownloadTime time.Time
+	url              string
 }
 
 // m3utester tests one stream, reading all the media streams
@@ -236,6 +237,7 @@ func (mt *m3utester) Start(u string) {
 		}
 		glog.Infof("Save dir name: '%s', save playlist name %s", mt.saveDirName, mt.savePlayListName)
 	}
+	mt.downStats2.url = u
 	go mt.downloadLoop()
 	go mt.workerLoop()
 	// if mt.infiniteMode {
@@ -874,6 +876,24 @@ func (ds2 *downStats2) clone() *downStats2 {
 	r.downTrans = make([]int, len(ds2.downTrans))
 	copy(r.downTrans, ds2.downTrans)
 	return &r
+}
+
+func (ds2 *downStats2) discordRichMesage(title string, includeProfiles bool) *messenger.DiscordEmbed {
+	emmsg := messenger.NewDiscordEmbed(title)
+	emmsg.URL = ds2.url
+	emmsg.SetColorBySuccess(ds2.successRate)
+	emmsg.AddFieldF("Success rate", true, "**%7.4f%%**", ds2.successRate)
+	emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2.downTransAll, ds2.downSource)
+	if includeProfiles {
+		emmsg.AddFieldF("Num proflies", true, "%d", ds2.numProfiles)
+	}
+	emmsg.AddFieldF("Bytes downloaded", true, "%d/%d", ds2.transAllBytes, ds2.sourceBytes)
+	var pob float64
+	if ds2.sourceBytes > 0 {
+		pob = float64(ds2.transAllBytes) / float64(ds2.sourceBytes) * 100
+	}
+	emmsg.AddFieldF("Percent of source bandwitdh", true, "**%4.2f%%**", pob)
+	return emmsg
 }
 
 func (ds2 *downStats2) add(other *downStats2) {
