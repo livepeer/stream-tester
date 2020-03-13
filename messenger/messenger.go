@@ -173,6 +173,22 @@ func SendRichMessage(embeds ...*DiscordEmbed) {
 	sendRawMessage(raw)
 }
 
+// SendFatalRichMessage sends rich message mentioning configured users
+func SendFatalRichMessage(embeds ...*DiscordEmbed) {
+	if usersToNotify == "" {
+		SendRichMessage(embeds...)
+		return
+	}
+	for _, em := range embeds {
+		if em.Description != "" {
+			em.Description = usersToNotify + ": " + em.Description
+		} else {
+			em.Description = usersToNotify
+		}
+	}
+	SendRichMessage(embeds...)
+}
+
 func sendLoop() {
 	var msgQueue [][]byte
 	var goodAfter time.Time

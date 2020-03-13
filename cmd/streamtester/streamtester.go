@@ -145,6 +145,7 @@ func main() {
 		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, *save, mapi, *picartoBlackList)
 		emsg := fmt.Sprintf("Starting **%d** Picarto streams (ver %s)", *picartoStreams, model.Version)
 		messenger.SendMessage(emsg)
+
 		err = mc.Start()
 		if err != nil {
 			emsg := fmt.Sprintf("Fatal error starting Picarto testing: %v", err)

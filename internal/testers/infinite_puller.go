@@ -33,11 +33,10 @@ func (ip *infinitePuller) Start() {
 
 	done := make(chan struct{})
 	// var sentTimesMap *utils.SyncedTimesMap
-	down := newM3UTester(nil, done, nil, true, false, false, true, ip.save, nil, nil)
+	down := newM3UTester(nil, done, nil, true, false, false, true, ip.save, nil, nil, "")
 	// go findSkippedSegmentsNumber(up, down)
 	// sr.downloaders = append(sr.downloaders, down)
 	msg := fmt.Sprintf("Starting to pull infinite stream from %s", ip.url)
 	messenger.SendMessage(msg)
 	down.Start(ip.url)
-
 }

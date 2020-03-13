@@ -63,6 +63,7 @@ type downStats2 struct {
 // m3utester tests one stream, reading all the media streams
 type m3utester struct {
 	initialURL       *url.URL
+	name             string
 	downloads        map[string]*mediaDownloader
 	downloadsKeys    []string // first should be source
 	mu               sync.RWMutex
@@ -173,7 +174,7 @@ func (p downloadResultsBySeq) findByMySeqNo(seqNo uint64) *downloadResult {
 
 // newM3UTester ...
 func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, mistMode,
-	picartoMode, infiniteMode, save bool, sm *segmentsMatcher, shouldSkip [][]string) *m3utester {
+	picartoMode, infiniteMode, save bool, sm *segmentsMatcher, shouldSkip [][]string, name string) *m3utester {
 
 	t := &m3utester{
 		downloads:       make(map[string]*mediaDownloader),
@@ -186,6 +187,7 @@ func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils
 		save:            save,
 		segmentsMatcher: sm,
 		shouldSkip:      shouldSkip,
+		name:            name,
 		fullResultsCh:   make(chan *fullDownloadResult, 32),
 		downSegs:        make(map[string]map[string]*fullDownloadResult),
 		// downloadResults: make(map[string]*fullDownloadResults),
@@ -680,7 +682,13 @@ func (mt *m3utester) workerLoop() {
 			mt.succ2mu.Unlock()
 			if mt.picartoMode && fr.videoParseError != nil {
 				if time.Since(lastVideoParseErrorSent[mt.initialURL.String()]) > 120*time.Second {
-					messenger.SendFatalMessage(fmt.Sprintf("Video parsing error for name=%s media manifest uri=%s err=%v", fr.name, fr.uri, fr.videoParseError))
+					// messenger.SendFatalMessage(fmt.Sprintf("Video parsing error for name=%s media manifest uri=%s err=%v", fr.name, fr.uri, fr.videoParseError))
+					emsg := messenger.NewDiscordEmbed("Video parsing error for " + mt.name)
+					emsg.AddField("Name", fr.name, true)
+					emsg.AddField("Error", fr.videoParseError.Error(), true)
+					emsg.URL = fr.uri
+					emsg.SetColorBySuccess(0.0)
+					messenger.SendFatalRichMessage(emsg)
 					lastVideoParseErrorSent[mt.initialURL.String()] = time.Now()
 				}
 			}
