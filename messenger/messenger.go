@@ -390,5 +390,5 @@ func postMessage(msg []byte) (int, http.Header) {
 func successRate2Color(rate float64) uint32 {
 	green := uint32(255 * rate)
 	red := uint32(255 * (1 - rate))
-	return red<<16 | green
+	return red<<16 | green<<8
 }
