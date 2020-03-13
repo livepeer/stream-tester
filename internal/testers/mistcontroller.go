@@ -171,7 +171,9 @@ func (mc *MistController) mainLoop() error {
 			emmsg.AddFieldF("Success rate", true, "**%f%%**", ds2.successRate)
 			emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2.downTransAll, ds2.downSource)
 			emmsg.AddFieldF("num proflies", true, "%d", ds2.numProfiles)
-			ssm = append(ssm, emmsg)
+			if ds2.successRate < 100 {
+				ssm = append(ssm, emmsg)
+			}
 			// messenger.SendRichMessage(emmsg)
 			// messenger.SendMessage(emsg)
 			// time.Sleep(10 * time.Millisecond)
