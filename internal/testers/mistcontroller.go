@@ -42,6 +42,7 @@ type (
 		profilesNum        int // transcoding profiles number. Should be one for now.
 		adult              bool
 		gaming             bool
+		save               bool
 		streamsNum         int // number of streams to maintain
 		blackListedStreams []string
 		downloaders        map[string]*m3utester // [Picarto name]
@@ -66,13 +67,14 @@ var (
 )
 
 // NewMistController creates new MistController
-func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming bool, mapi *mist.API, blackListedStreams string) *MistController {
+func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming, save bool, mapi *mist.API, blackListedStreams string) *MistController {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &MistController{
 		mapi:               mapi,
 		mistHot:            mistHost,
 		adult:              adult,
 		gaming:             gaming,
+		save:               save,
 		streamsNum:         streamsNum,
 		profilesNum:        profilesNum,
 		blackListedStreams: strings.Split(blackListedStreams, ","),
@@ -92,6 +94,7 @@ func (mc *MistController) mainLoop() error {
 	statsDelay := 120 * time.Second
 	if !model.Production {
 		statsDelay = 32 * time.Second
+		// statsDelay = 3 * time.Second
 	}
 	started := time.Now()
 	var streamsNoSegmentsAnymore []string
@@ -139,6 +142,8 @@ func (mc *MistController) mainLoop() error {
 		var downSource, downTrans int
 		var ds2all downStats2
 		now := time.Now()
+		// ssm := make([]string, 0, len(mc.downloaders))
+		var ssm []*messenger.DiscordEmbed
 		for sn, mt := range mc.downloaders {
 			stats := mt.statsSeparate()
 			glog.Infoln(strings.Repeat("*", 100))
@@ -157,10 +162,19 @@ func (mc *MistController) mainLoop() error {
 				streamsNoSegmentsAnymore = append(streamsNoSegmentsAnymore, sn)
 			}
 			ds2all.add(ds2)
-			emsg := fmt.Sprintf("Stream __%s__ success rate: **%f%%** (%d/%d) (num proflies %d)", sn,
-				ds2.successRate, ds2.downTransAll, ds2.downSource, ds2.numProfiles)
-			messenger.SendMessage(emsg)
-			time.Sleep(10 * time.Millisecond)
+			// emsg := fmt.Sprintf("Stream __%s__ success rate: **%f%%** (%d/%d) (num proflies %d)", sn,
+			// 	ds2.successRate, ds2.downTransAll, ds2.downSource, ds2.numProfiles)
+			// ssm = append(ssm, emsg)
+			emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Stream __%s__", sn))
+			emmsg.URL = mt.initialURL.String()
+			emmsg.Color = successRate2Color(ds2.successRate)
+			emmsg.AddFieldF("Success rate", true, "**%f%%**", ds2.successRate)
+			emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2.downTransAll, ds2.downSource)
+			emmsg.AddFieldF("num proflies", true, "%d", ds2.numProfiles)
+			ssm = append(ssm, emmsg)
+			// messenger.SendRichMessage(emmsg)
+			// messenger.SendMessage(emsg)
+			// time.Sleep(10 * time.Millisecond)
 			if picartoDebug {
 				for _, mdkey := range mt.downloadsKeys {
 					md := mt.downloads[mdkey]
@@ -173,10 +187,25 @@ func (mc *MistController) mainLoop() error {
 				}
 			}
 		}
+		// messenger.SendMessageSlice(ssm)
+		messenger.SendRichMessage(ssm...)
 		runningFor := time.Since(started)
-		emsg := mp.Sprintf("Number of streams: **%d** success rate: **%7.4f%%** (%d/%d) bytes downloaded %d/%d (transcoded is **%4.2f%%** of source bandwitdh) running for %s", len(mc.downloaders),
-			ds2all.successRate, ds2all.downTransAll, ds2all.downSource, ds2all.transAllBytes, ds2all.sourceBytes, float64(ds2all.transAllBytes)/float64(ds2all.sourceBytes)*100, runningFor)
-		messenger.SendMessage(emsg)
+		// emsg := mp.Sprintf("Number of streams: **%d** success rate: **%7.4f%%** (%d/%d) bytes downloaded %d/%d (transcoded is **%4.2f%%** of source bandwitdh) running for %s", len(mc.downloaders),
+		// 	ds2all.successRate, ds2all.downTransAll, ds2all.downSource, ds2all.transAllBytes, ds2all.sourceBytes, float64(ds2all.transAllBytes)/float64(ds2all.sourceBytes)*100, runningFor)
+		// messenger.SendMessage(emsg)
+
+		emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)))
+		emmsg.Color = successRate2Color(ds2all.successRate)
+		emmsg.AddFieldF("Success rate", true, "**%7.4f%%**", ds2all.successRate)
+		emmsg.AddFieldF("Bytes downloaded", true, "%d/%d", ds2all.transAllBytes, ds2all.sourceBytes)
+		var pob float64
+		if ds2all.sourceBytes > 0 {
+			pob = float64(ds2all.transAllBytes) / float64(ds2all.sourceBytes) * 100
+		}
+		emmsg.AddFieldF("Percent of source bandwitdh", true, "**%4.2f%%**", pob)
+		emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2all.downTransAll, ds2all.downSource)
+		emmsg.AddFieldF("Running for", true, "%s", runningFor)
+		messenger.SendRichMessage(emmsg)
 		/*
 			if downSource > 0 {
 				emsg := fmt.Sprintf("Number of streams: **%d** success rate: **%f** (%d/%d)", len(mc.downloaders),
@@ -204,6 +233,8 @@ streamsLoop:
 		userName := ps[i].Name
 		// userName = "Felino"
 		// userName = "AwfulRabbit"
+		// userName = "axonradiolive"
+		// userName = "playloudlive"
 		if utils.StringsSliceContains(started, userName) || utils.StringsSliceContains(mc.blackListedStreams, userName) {
 			continue
 		}
@@ -231,7 +262,7 @@ streamsLoop:
 			continue
 		}
 
-		mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, true, false, false, nil, shouldSkip)
+		mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, true, false, mc.save, nil, shouldSkip)
 		mc.downloaders[userName] = mt
 		mt.Start(uri)
 		messenger.SendMessage(fmt.Sprintf("Started stream %s", uri))
@@ -472,4 +503,10 @@ func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
 func isFatalError(err error) bool {
 	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF)
+}
+
+func successRate2Color(rate float64) uint32 {
+	green := uint32(255 * rate)
+	red := uint32(255 * (1 - rate))
+	return red<<16 | green
 }

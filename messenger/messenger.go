@@ -5,7 +5,6 @@ package messenger
 
 import (
 	"bytes"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -16,19 +15,79 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/patrickmn/go-cache"
+	"golang.org/x/text/message"
 )
+
+const maxMessageLen = 2000
 
 var (
 	webhookURL    string
 	userName      string
 	usersToNotify string
 	debounceCache *cache.Cache = cache.New(5*time.Minute, 30*time.Minute)
-	msgCh         chan string
+	msgCh         chan []byte
+	mp            = message.NewPrinter(message.MatchLanguage("en"))
 )
 
 type discordMessage struct {
-	Content  string `json:"content,omitempty"`
-	UserName string `json:"username,omitempty"`
+	Content  string          `json:"content,omitempty"`
+	UserName string          `json:"username,omitempty"`
+	Embeds   []*DiscordEmbed `json:"embeds,omitempty"`
+}
+
+// DiscordEmbed rich Discord message
+type DiscordEmbed struct {
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	URL         string `json:"url,omitempty"`
+	Color       uint32 `json:"color,omitempty"`
+	Footer      struct {
+		Text         string `json:"text,omitempty"`
+		IconURL      string `json:"icon_url,omitempty"`
+		ProxyIconURL string `json:"proxy_icon_url,omitempty"`
+	} `json:"footer,omitempty"`
+	Image struct {
+		URL      string `json:"url,omitempty"`
+		ProxyURL string `json:"proxy_url,omitempty"`
+		Height   int    `json:"height,omitempty"`
+		Width    int    `json:"width,omitempty"`
+	} `json:"image,omitempty"`
+	Thumbnail struct {
+		URL      string `json:"url,omitempty"`
+		ProxyURL string `json:"proxy_url,omitempty"`
+		Height   int    `json:"height,omitempty"`
+		Width    int    `json:"width,omitempty"`
+	} `json:"thumbnail,omitempty"`
+	Author struct {
+		Name         string `json:"name,omitempty"`
+		IconURL      string `json:"icon_url,omitempty"`
+		URL          string `json:"url,omitempty"`
+		ProxyIconURL string `json:"proxy_icon_url,omitempty"`
+	} `json:"author,omitempty"`
+	Fields []discordField `json:"fields,omitempty"`
+	// timestamp // ISO8601 timestamp
+}
+
+// NewDiscordEmbed creates new Discord embed object
+func NewDiscordEmbed(title string) *DiscordEmbed {
+	return &DiscordEmbed{Title: title}
+}
+
+// AddField adds new field
+func (de *DiscordEmbed) AddField(name, value string, inline bool) {
+	de.Fields = append(de.Fields, discordField{Name: name, Value: value, Inline: inline})
+}
+
+// AddFieldF adds new field
+func (de *DiscordEmbed) AddFieldF(name string, inline bool, format string, a ...interface{}) {
+	// de.Fields = append(de.Fields, discordField{Name: name, Value: fmt.Sprintf(format, a...), Inline: inline})
+	de.Fields = append(de.Fields, discordField{Name: name, Value: mp.Sprintf(format, a...), Inline: inline})
+}
+
+type discordField struct {
+	Name   string `json:"name,omitempty"`
+	Value  string `json:"value,omitempty"`
+	Inline bool   `json:"inline,omitempty"`
 }
 
 // Init ...
@@ -37,13 +96,80 @@ func Init(WebhookURL, UserName, UsersToNotify string) {
 	userName = UserName
 	usersToNotify = UsersToNotify
 	if WebhookURL != "" {
-		msgCh = make(chan string, 64)
+		msgCh = make(chan []byte, 64)
 		go sendLoop()
 	}
 }
 
+// SendFatalMessage send message to Discord channel
+// and automatically mentiones UsersToNotify in the message
+func SendFatalMessage(msg string) {
+	glog.Error(msg)
+	if usersToNotify != "" {
+		msg = usersToNotify + ": " + msg
+	}
+	sendMessage(msg)
+}
+
+// SendMessageSlice send message to Discord channel
+func SendMessageSlice(msgs []string) {
+	if len(msgs) == 0 {
+		return
+	}
+	var cmsg string
+	for _, msg := range msgs {
+		if len(cmsg)+len(msg)+1 >= maxMessageLen {
+			SendMessage(cmsg)
+			cmsg = ""
+		}
+		if len(cmsg) > 0 {
+			cmsg += "\n"
+		}
+		cmsg += msg
+	}
+	SendMessage(cmsg)
+}
+
+// SendMessage send message to Discord channel
+func SendMessage(msg string) {
+	if msg == "" {
+		return
+	}
+	glog.Info(msg)
+	sendMessage(msg)
+}
+
+// SendCodeMessage send message to Discord channel, wrapping it as three ticks
+func SendCodeMessage(msg string) {
+	if msg == "" {
+		return
+	}
+	glog.Info(msg)
+	sendMessage("```\n" + msg + "```")
+}
+
+// SendMessageDebounced send message to Discord channel
+func SendMessageDebounced(msg string) {
+	glog.Info(msg)
+	if _, has := debounceCache.Get(msg); !has {
+		sendMessage(msg)
+		debounceCache.SetDefault(msg, true)
+	}
+}
+
+// SendRichMessage sends rich message
+func SendRichMessage(embeds ...*DiscordEmbed) {
+	for len(embeds) > 10 {
+		SendRichMessage(embeds[:10]...)
+		embeds = embeds[10:]
+	}
+	raw := encodeEmbedsMessage(embeds)
+	glog.Infof("raw message: %s", raw)
+	sendRawMessage(raw)
+}
+
 func sendLoop() {
-	var msgQueue []string
+	var msgQueue [][]byte
 	var goodAfter time.Time
 	var headers http.Header
 	var status int
@@ -144,50 +270,10 @@ func sendLoop() {
 	}
 }
 
-// SendFatalMessage send message to Discord channel
-// and automatically mentiones UsersToNotify in the message
-func SendFatalMessage(msg string) {
-	glog.Error(msg)
-	if usersToNotify != "" {
-		msg = usersToNotify + ": " + msg
-	}
-	sendMessage(msg)
-}
-
-// SendMessage send message to Discord channel
-func SendMessage(msg string) {
-	if msg == "" {
-		return
-	}
-	glog.Info(msg)
-	sendMessage(msg)
-}
-
-// SendCodeMessage send message to Discord channel, wrapping it as three ticks
-func SendCodeMessage(msg string) {
-	if msg == "" {
-		return
-	}
-	glog.Info(msg)
-	sendMessage("```\n" + msg + "```")
-}
-
-// SendMessageDebounced send message to Discord channel
-func SendMessageDebounced(msg string) {
-	glog.Info(msg)
-	if _, has := debounceCache.Get(msg); !has {
-		sendMessage(msg)
-		debounceCache.SetDefault(msg, true)
-	}
-}
-
 func sendMessage(msg string) {
-	if webhookURL == "" || msgCh == nil {
-		return
-	}
-	if len(msg) > 2000 {
+	if len(msg) > maxMessageLen {
 		for {
-			l := 1980
+			l := maxMessageLen - 10
 			if l > len(msg) {
 				l = len(msg)
 			}
@@ -200,20 +286,64 @@ func sendMessage(msg string) {
 		}
 		return
 	}
+	sendRawMessage(encodeMessage(msg))
+}
+
+func sendRawMessage(msg []byte) {
+	if webhookURL == "" || msgCh == nil {
+		return
+	}
+	/*
+		if len(msg) > maxMessageLen {
+			for {
+				l := maxMessageLen - 10
+				if l > len(msg) {
+					l = len(msg)
+				}
+				msg1 := msg[:l]
+				msg = msg[l:]
+				sendMessage(msg1)
+				if len(msg) == 0 {
+					break
+				}
+			}
+			return
+		}
+	*/
 	msgCh <- msg
 }
 
-func postMessage(msg string) (int, http.Header) {
-	if webhookURL == "" {
-		return 0, nil
-	}
+func encodeMessage(msg string) []byte {
 	dm := &discordMessage{
 		Content:  msg,
 		UserName: userName,
 	}
 	data, _ := json.Marshal(dm)
-	var body io.Reader
-	body = bytes.NewReader(data)
+	return data
+}
+
+func encodeEmbedsMessage(embeds []*DiscordEmbed) []byte {
+	dm := &discordMessage{
+		Embeds:   embeds,
+		UserName: userName,
+	}
+	data, _ := json.Marshal(dm)
+	return data
+}
+
+func postMessage(msg []byte) (int, http.Header) {
+	if webhookURL == "" {
+		return 0, nil
+	}
+	/*
+		dm := &discordMessage{
+			Content:  msg,
+			UserName: userName,
+		}
+		data, _ := json.Marshal(dm)
+		var body io.Reader
+	*/
+	body := bytes.NewReader(msg)
 	// resp, err := http.Post(webhookURL, "application/json", body)
 	req, _ := http.NewRequest("POST", webhookURL, body)
 	req.Header.Add("User-Agent", "stream-tester/"+model.Version)

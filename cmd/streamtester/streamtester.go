@@ -142,7 +142,7 @@ func main() {
 		mapi = mistapi.NewMist(*bhost, mcreds[0], mcreds[1], *apiToken)
 		mapi.Login()
 
-		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, mapi, *picartoBlackList)
+		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, *save, mapi, *picartoBlackList)
 		emsg := fmt.Sprintf("Starting **%d** Picarto streams (ver %s)", *picartoStreams, model.Version)
 		messenger.SendMessage(emsg)
 		err = mc.Start()
