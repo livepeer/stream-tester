@@ -27,9 +27,11 @@ import (
 )
 
 const (
-	picartoCountry = "us-east1"
-	hlsURLTemplate = "http://%s:8080/hls/golive+%s/index.m3u8"
-	baseStreamName = "golive"
+	picartoCountry       = "us-east1"
+	hlsURLTemplate       = "http://%s:8080/hls/golive+%s/index.m3u8"
+	baseStreamName       = "golive"
+	streamsStartStep     = 5
+	mainLoopStepDuration = 32 * time.Second
 )
 
 type (
@@ -101,7 +103,11 @@ func (mc *MistController) mainLoop() error {
 	started := time.Now()
 	var streamsNoSegmentsAnymore []string
 	failedStreams := cache.New(5*time.Minute, 8*time.Minute)
-	err := mc.startStreams(failedStreams)
+	toBeStarted := mc.streamsNum
+	if toBeStarted > streamsStartStep {
+		toBeStarted = streamsStartStep
+	}
+	err := mc.startStreams(failedStreams, toBeStarted)
 	if err != nil {
 		return err
 	}
@@ -114,7 +120,8 @@ func (mc *MistController) mainLoop() error {
 	emsg += strings.Join(sms, "\n")
 	messenger.SendMessage(emsg)
 
-	time.Sleep(statsDelay)
+	time.Sleep(mainLoopStepDuration)
+	var lastTimeStatsShown time.Time
 	for {
 		activeStreams, err := mc.activeStreams()
 		if err != nil {
@@ -138,98 +145,105 @@ func (mc *MistController) mainLoop() error {
 					failedStreams.SetDefault(sn, true)
 				}
 			}
+			toBeStarted := mc.streamsNum
+			if toBeStarted-len(mc.downloaders) > streamsStartStep {
+				toBeStarted = len(mc.downloaders) + streamsStartStep
+			}
 			// need to start new streams
-			mc.startStreams(failedStreams)
+			mc.startStreams(failedStreams, toBeStarted)
 		}
-		var downSource, downTrans int
-		var ds2all downStats2
-		now := time.Now()
-		// ssm := make([]string, 0, len(mc.downloaders))
-		var ssm []*messenger.DiscordEmbed
-		for sn, mt := range mc.downloaders {
-			stats := mt.statsSeparate()
-			glog.Infoln(strings.Repeat("*", 100))
-			glog.Infof("====> download stats for %s:", sn)
-			for _, st := range stats {
-				glog.Infof("====> resolution=%s source=%v", st.resolution, st.source)
-				glog.Infof("%+v", st)
-				if st.source {
-					downSource += st.success
-				} else {
-					downTrans += st.success
+		if time.Since(lastTimeStatsShown) > statsDelay {
+			var downSource, downTrans int
+			var ds2all downStats2
+			now := time.Now()
+			// ssm := make([]string, 0, len(mc.downloaders))
+			var ssm []*messenger.DiscordEmbed
+			for sn, mt := range mc.downloaders {
+				stats := mt.statsSeparate()
+				glog.Infoln(strings.Repeat("*", 100))
+				glog.Infof("====> download stats for %s:", sn)
+				for _, st := range stats {
+					glog.Infof("====> resolution=%s source=%v", st.resolution, st.source)
+					glog.Infof("%+v", st)
+					if st.source {
+						downSource += st.success
+					} else {
+						downTrans += st.success
+					}
+				}
+				ds2 := mt.getDownStats2()
+				if !ds2.lastDownloadTime.IsZero() && now.Sub(ds2.lastDownloadTime) > 30*time.Second {
+					streamsNoSegmentsAnymore = append(streamsNoSegmentsAnymore, sn)
+				}
+				ds2all.add(ds2)
+				// emsg := fmt.Sprintf("Stream __%s__ success rate: **%f%%** (%d/%d) (num proflies %d)", sn,
+				// 	ds2.successRate, ds2.downTransAll, ds2.downSource, ds2.numProfiles)
+				// ssm = append(ssm, emsg)
+
+				/*
+					emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Stream __%s__", sn))
+					emmsg.URL = mt.initialURL.String()
+					emmsg.Color = successRate2Color(ds2.successRate)
+					emmsg.AddFieldF("Success rate", true, "**%f%%**", ds2.successRate)
+					emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2.downTransAll, ds2.downSource)
+					emmsg.AddFieldF("Num proflies", true, "%d", ds2.numProfiles)
+				*/
+				// if ds2.successRate < 100 {
+				ssm = append(ssm, ds2.discordRichMesage(fmt.Sprintf("Stream __%s__", sn), true))
+				// }
+				// messenger.SendRichMessage(emmsg)
+				// messenger.SendMessage(emsg)
+				// time.Sleep(10 * time.Millisecond)
+				if picartoDebug {
+					for _, mdkey := range mt.downloadsKeys {
+						md := mt.downloads[mdkey]
+						md.mu.Lock()
+						glog.Infof("=========> down segments for %s %s len=%d", md.name, md.resolution, len(md.downloadedSegments))
+						ps := picartoSortedSegments(md.downloadedSegments)
+						sort.Sort(ps)
+						glog.Infof("\n%s", strings.Join(ps, "\n"))
+						md.mu.Unlock()
+					}
 				}
 			}
-			ds2 := mt.getDownStats2()
-			if !ds2.lastDownloadTime.IsZero() && now.Sub(ds2.lastDownloadTime) > 30*time.Second {
-				streamsNoSegmentsAnymore = append(streamsNoSegmentsAnymore, sn)
-			}
-			ds2all.add(ds2)
-			// emsg := fmt.Sprintf("Stream __%s__ success rate: **%f%%** (%d/%d) (num proflies %d)", sn,
-			// 	ds2.successRate, ds2.downTransAll, ds2.downSource, ds2.numProfiles)
-			// ssm = append(ssm, emsg)
-
-			/*
-				emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Stream __%s__", sn))
-				emmsg.URL = mt.initialURL.String()
-				emmsg.Color = successRate2Color(ds2.successRate)
-				emmsg.AddFieldF("Success rate", true, "**%f%%**", ds2.successRate)
-				emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2.downTransAll, ds2.downSource)
-				emmsg.AddFieldF("Num proflies", true, "%d", ds2.numProfiles)
-			*/
-			// if ds2.successRate < 100 {
-			ssm = append(ssm, ds2.discordRichMesage(fmt.Sprintf("Stream __%s__", sn), true))
-			// }
-			// messenger.SendRichMessage(emmsg)
+			// messenger.SendMessageSlice(ssm)
+			messenger.SendRichMessage(ssm...)
+			runningFor := time.Since(started)
+			// emsg := mp.Sprintf("Number of streams: **%d** success rate: **%7.4f%%** (%d/%d) bytes downloaded %d/%d (transcoded is **%4.2f%%** of source bandwitdh) running for %s", len(mc.downloaders),
+			// 	ds2all.successRate, ds2all.downTransAll, ds2all.downSource, ds2all.transAllBytes, ds2all.sourceBytes, float64(ds2all.transAllBytes)/float64(ds2all.sourceBytes)*100, runningFor)
 			// messenger.SendMessage(emsg)
-			// time.Sleep(10 * time.Millisecond)
-			if picartoDebug {
-				for _, mdkey := range mt.downloadsKeys {
-					md := mt.downloads[mdkey]
-					md.mu.Lock()
-					glog.Infof("=========> down segments for %s %s len=%d", md.name, md.resolution, len(md.downloadedSegments))
-					ps := picartoSortedSegments(md.downloadedSegments)
-					sort.Sort(ps)
-					glog.Infof("\n%s", strings.Join(ps, "\n"))
-					md.mu.Unlock()
-				}
-			}
-		}
-		// messenger.SendMessageSlice(ssm)
-		messenger.SendRichMessage(ssm...)
-		runningFor := time.Since(started)
-		// emsg := mp.Sprintf("Number of streams: **%d** success rate: **%7.4f%%** (%d/%d) bytes downloaded %d/%d (transcoded is **%4.2f%%** of source bandwitdh) running for %s", len(mc.downloaders),
-		// 	ds2all.successRate, ds2all.downTransAll, ds2all.downSource, ds2all.transAllBytes, ds2all.sourceBytes, float64(ds2all.transAllBytes)/float64(ds2all.sourceBytes)*100, runningFor)
-		// messenger.SendMessage(emsg)
 
-		emmsg := ds2all.discordRichMesage(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)), false)
-		emmsg.URL = ""
-		/*
-			emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)))
-			emmsg.Color = successRate2Color(ds2all.successRate)
-			emmsg.AddFieldF("Success rate", true, "**%7.4f%%**", ds2all.successRate)
-			emmsg.AddFieldF("Bytes downloaded", true, "%d/%d", ds2all.transAllBytes, ds2all.sourceBytes)
-			var pob float64
-			if ds2all.sourceBytes > 0 {
-				pob = float64(ds2all.transAllBytes) / float64(ds2all.sourceBytes) * 100
-			}
-			emmsg.AddFieldF("Percent of source bandwitdh", true, "**%4.2f%%**", pob)
-			emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2all.downTransAll, ds2all.downSource)
-		*/
-		emmsg.AddFieldF("Running for", true, "%s", runningFor)
-		messenger.SendRichMessage(emmsg)
-		/*
-			if downSource > 0 {
-				emsg := fmt.Sprintf("Number of streams: **%d** success rate: **%f** (%d/%d)", len(mc.downloaders),
-					float64(downTrans)/float64(downSource)*100.0, downTrans, downSource)
-				glog.Infoln(emsg)
-				messenger.SendMessage(emsg)
-			}
-		*/
-		time.Sleep(statsDelay)
+			emmsg := ds2all.discordRichMesage(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)), false)
+			emmsg.URL = ""
+			/*
+				emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)))
+				emmsg.Color = successRate2Color(ds2all.successRate)
+				emmsg.AddFieldF("Success rate", true, "**%7.4f%%**", ds2all.successRate)
+				emmsg.AddFieldF("Bytes downloaded", true, "%d/%d", ds2all.transAllBytes, ds2all.sourceBytes)
+				var pob float64
+				if ds2all.sourceBytes > 0 {
+					pob = float64(ds2all.transAllBytes) / float64(ds2all.sourceBytes) * 100
+				}
+				emmsg.AddFieldF("Percent of source bandwitdh", true, "**%4.2f%%**", pob)
+				emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2all.downTransAll, ds2all.downSource)
+			*/
+			emmsg.AddFieldF("Running for", true, "%s", runningFor)
+			messenger.SendRichMessage(emmsg)
+			/*
+				if downSource > 0 {
+					emsg := fmt.Sprintf("Number of streams: **%d** success rate: **%f** (%d/%d)", len(mc.downloaders),
+						float64(downTrans)/float64(downSource)*100.0, downTrans, downSource)
+					glog.Infoln(emsg)
+					messenger.SendMessage(emsg)
+				}
+			*/
+			lastTimeStatsShown = time.Now()
+		}
+		time.Sleep(mainLoopStepDuration)
 	}
 }
 
-func (mc *MistController) startStreams(failedStreams *cache.Cache) error {
+func (mc *MistController) startStreams(failedStreams *cache.Cache, streamsNum int) error {
 	ps, err := picarto.GetOnlineUsers(picartoCountry, mc.adult, mc.gaming)
 	if err != nil {
 		return err
@@ -240,12 +254,13 @@ func (mc *MistController) startStreams(failedStreams *cache.Cache) error {
 	var uri string
 	var shouldSkip [][]string
 streamsLoop:
-	for i := 0; len(mc.downloaders) < mc.streamsNum && i < len(ps); i++ {
+	for i := 0; len(mc.downloaders) < streamsNum && i < len(ps); i++ {
 		userName := ps[i].Name
 		// userName = "Felino"
 		// userName = "AwfulRabbit"
 		// userName = "axonradiolive"
 		// userName = "playloudlive"
+		// userName = "forbae"
 		if utils.StringsSliceContains(started, userName) || utils.StringsSliceContains(mc.blackListedStreams, userName) {
 			continue
 		}
