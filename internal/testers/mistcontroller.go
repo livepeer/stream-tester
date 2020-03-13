@@ -56,6 +56,8 @@ var (
 	ErrZeroStreams = errors.New("Zero streams")
 	// ErrStreamOpenFailed ...
 	ErrStreamOpenFailed = errors.New("Stream open failed")
+	// ErrNoAudioInStream ...
+	ErrNoAudioInStream = errors.New("No audio in stream")
 
 	mp          = message.NewPrinter(message.MatchLanguage("en"))
 	mhttpClient = &http.Client{
@@ -271,7 +273,7 @@ streamsLoop:
 			continue
 		}
 
-		mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, true, false, mc.save, nil, shouldSkip)
+		mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, true, false, mc.save, nil, shouldSkip, userName)
 		mc.downloaders[userName] = mt
 		mt.Start(uri)
 		messenger.SendMessage(fmt.Sprintf("Started stream %s", uri))
@@ -338,6 +340,9 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 		if mpullres[i].err != nil {
 			return uri, nil, mpullres[i].err
 		}
+	}
+	if mpullres[0].firstSegmentParseError != nil {
+		return uri, nil, mpullres[0].firstSegmentParseError
 	}
 	// find first transcoded segment time
 	transTime := mistGetTimeFromSegURI(mpullres[1].pl.Segments[0].URI)
@@ -459,9 +464,10 @@ func (mc *MistController) pullFirstTime(uri string) ([]string, error) {
 }
 
 type plPullRes struct {
-	pl  *m3u8.MediaPlaylist
-	err error
-	i   int
+	pl                     *m3u8.MediaPlaylist
+	firstSegmentParseError error
+	err                    error
+	i                      int
 }
 
 func (mc *MistController) pullMediaPL(uri string, i int, out chan *plPullRes) (*m3u8.MediaPlaylist, error) {
@@ -474,7 +480,7 @@ func (mc *MistController) pullMediaPL(uri string, i int, out chan *plPullRes) (*
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
-		err := fmt.Errorf("===== status error getting media playlist %s: %v (%s) body: %s", uri, resp.StatusCode, resp.Status, string(b))
+		err := fmt.Errorf("Status error getting media playlist %s: %v (%s) body: %s", uri, resp.StatusCode, resp.Status, string(b))
 		out <- &plPullRes{err: err, i: i}
 		return nil, err
 	}
@@ -483,7 +489,7 @@ func (mc *MistController) pullMediaPL(uri string, i int, out chan *plPullRes) (*
 	// err = mpl.Decode(*bytes.NewBuffer(b), true)
 	resp.Body.Close()
 	if err != nil {
-		glog.Infof("===== error getting media playlist uri=%s err=%v", uri, err)
+		glog.Infof("Error getting media playlist uri=%s err=%v", uri, err)
 		out <- &plPullRes{err: err, i: i}
 		return nil, err
 	}
@@ -498,8 +504,38 @@ func (mc *MistController) pullMediaPL(uri string, i int, out chan *plPullRes) (*
 		panic("no segments")
 		return nil, ErrZeroStreams
 	}
-	out <- &plPullRes{pl: mpl, i: i}
+	var verr error
+	if i == 0 {
+		segURI := mpl.Segments[mpl.Count()-1].URI
+		purl, err := url.Parse(segURI)
+		if err != nil {
+			glog.Fatal(err)
+		}
+		mplu, _ := url.Parse(uri)
+		if !purl.IsAbs() {
+			segURI = mplu.ResolveReference(purl).String()
+		}
+		_, verr, _ = mc.downloadSegment(segURI)
+	}
+	out <- &plPullRes{pl: mpl, i: i, firstSegmentParseError: verr}
 	return mpl, nil
+}
+
+func (mc *MistController) downloadSegment(uri string) ([]byte, error, error) {
+	resp, err := mhttpClient.Do(uhttp.GetRequest(uri))
+	if err != nil {
+		glog.Infof("Error downloading video segment %s: %v", uri, err)
+		return nil, nil, err
+	}
+	b, _ := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		err := fmt.Errorf("Status error downloading media segment %s: %v (%s) body: %s", uri, resp.StatusCode, resp.Status, string(b))
+		return nil, nil, err
+	}
+	fsttim, dur, keyFrames, _, verr := utils.GetVideoStartTimeDurFrames(b)
+	glog.V(model.DEBUG).Infof("Downloaded segment %s pts=%s dur=%s keyFrames=%d verr=%v", uri, fsttim, dur, keyFrames)
+	return b, verr, nil
 }
 
 type picartoSortedSegments []string
@@ -511,5 +547,5 @@ func (p picartoSortedSegments) Less(i, j int) bool {
 func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
 func isFatalError(err error) bool {
-	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF)
+	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF) || err == ErrNoAudioInStream
 }
