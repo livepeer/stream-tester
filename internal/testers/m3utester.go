@@ -57,6 +57,7 @@ type downStats2 struct {
 	downTrans        []int
 	successRate      float64
 	lastDownloadTime time.Time
+	videoParseErrors int64
 	url              string
 }
 
@@ -679,6 +680,9 @@ func (mt *m3utester) workerLoop() {
 			mt.downSegs[fr.uri][fr.name] = fr
 			mt.succ2mu.Lock()
 			mt.downStats2.lastDownloadTime = fr.downloadCompetedAt
+			if fr.videoParseError != nil {
+				mt.downStats2.videoParseErrors++
+			}
 			mt.succ2mu.Unlock()
 			if mt.picartoMode && fr.videoParseError != nil {
 				if time.Since(lastVideoParseErrorSent[mt.initialURL.String()]) > 120*time.Second {
@@ -687,7 +691,8 @@ func (mt *m3utester) workerLoop() {
 					emsg.AddField("Name", fr.name, true)
 					emsg.AddField("Error", fr.videoParseError.Error(), true)
 					emsg.URL = fr.uri
-					emsg.SetColorBySuccess(0.0)
+					// emsg.SetColorBySuccess(0.0)
+					emsg.Color = 0xE1E412
 					messenger.SendFatalRichMessage(emsg)
 					lastVideoParseErrorSent[mt.initialURL.String()] = time.Now()
 				}
@@ -901,6 +906,9 @@ func (ds2 *downStats2) discordRichMesage(title string, includeProfiles bool) *me
 		pob = float64(ds2.transAllBytes) / float64(ds2.sourceBytes) * 100
 	}
 	emmsg.AddFieldF("Percent of source bandwitdh", true, "**%4.2f%%**", pob)
+	if ds2.videoParseErrors > 0 {
+		emmsg.AddFieldF("Number of video parse errors", true, "%d", ds2.videoParseErrors)
+	}
 	return emmsg
 }
 
@@ -909,6 +917,7 @@ func (ds2 *downStats2) add(other *downStats2) {
 	ds2.downTransAll += other.downTransAll
 	ds2.sourceBytes += other.sourceBytes
 	ds2.transAllBytes += other.transAllBytes
+	ds2.videoParseErrors += other.videoParseErrors
 	ds2.numProfiles = other.numProfiles
 	if ds2.downSource > 0 {
 		ds2.successRate = float64(ds2.downTransAll) / float64(ds2.downSource*ds2.numProfiles) * 100.0
