@@ -626,6 +626,7 @@ func (mt *m3utester) getDownStats2() *downStats2 {
 
 func (mt *m3utester) workerLoop() {
 	c := time.NewTicker(8 * time.Second)
+	lastVideoParseErrorSent := make(map[string]time.Time)
 	for {
 		select {
 		case <-mt.done:
@@ -676,7 +677,10 @@ func (mt *m3utester) workerLoop() {
 			mt.downStats2.lastDownloadTime = fr.downloadCompetedAt
 			mt.succ2mu.Unlock()
 			if mt.picartoMode && fr.videoParseError != nil {
-				messenger.SendFatalMessage(fmt.Sprintf("Video parsing error for name=%s media manifest uri=%s err=%v", fr.name, fr.uri, fr.videoParseError))
+				if time.Since(lastVideoParseErrorSent[mt.initialURL.String()]) > 120*time.Second {
+					messenger.SendFatalMessage(fmt.Sprintf("Video parsing error for name=%s media manifest uri=%s err=%v", fr.name, fr.uri, fr.videoParseError))
+					lastVideoParseErrorSent[mt.initialURL.String()] = time.Now()
+				}
 			}
 
 			// downSegs         map[string]map[string]*downloadResult
