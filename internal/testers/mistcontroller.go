@@ -176,9 +176,9 @@ func (mc *MistController) mainLoop() error {
 				emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2.downTransAll, ds2.downSource)
 				emmsg.AddFieldF("Num proflies", true, "%d", ds2.numProfiles)
 			*/
-			if ds2.successRate < 100 {
-				ssm = append(ssm, ds2.discordRichMesage(fmt.Sprintf("Stream __%s__", sn), true))
-			}
+			// if ds2.successRate < 100 {
+			ssm = append(ssm, ds2.discordRichMesage(fmt.Sprintf("Stream __%s__", sn), true))
+			// }
 			// messenger.SendRichMessage(emmsg)
 			// messenger.SendMessage(emsg)
 			// time.Sleep(10 * time.Millisecond)
