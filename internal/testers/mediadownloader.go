@@ -2,6 +2,7 @@ package testers
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/joy4/jerrors"
 	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
@@ -211,7 +213,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 		if verr != nil {
 			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
 			glog.Error(msg)
-			if model.FailHardOnBadSegments {
+			if model.FailHardOnBadSegments && !(IgnoreNoCodecError && (errors.Is(verr, jerrors.ErrNoAudioInfoFound) || errors.Is(verr, jerrors.ErrNoVideoInfoFound))) {
 				fname := fmt.Sprintf("bad_video_%s_%d.ts", utils.CleanFileName(md.name), task.seqNo)
 				err = ioutil.WriteFile(fname, b, 0644)
 				glog.Infof("Wrote bad segment to '%s' (err=%v)", fname, err)
