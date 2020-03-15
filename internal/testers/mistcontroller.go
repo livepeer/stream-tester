@@ -103,56 +103,114 @@ func (mc *MistController) mainLoop() error {
 	started := time.Now()
 	var streamsNoSegmentsAnymore []string
 	failedStreams := cache.New(5*time.Minute, 8*time.Minute)
-	toBeStarted := mc.streamsNum
-	if toBeStarted > streamsStartStep {
-		toBeStarted = streamsStartStep
-	}
-	err := mc.startStreams(failedStreams, toBeStarted)
-	if err != nil {
-		return err
-	}
-	time.Sleep(500 * time.Millisecond)
-	emsg := fmt.Sprintf("Started **%d** Picarto streams\n", len(mc.downloaders))
-	sms := make([]string, 0, len(mc.downloaders))
-	for _, d := range mc.downloaders {
-		sms = append(sms, d.initialURL.String())
-	}
-	emsg += strings.Join(sms, "\n")
-	messenger.SendMessage(emsg)
+	starting := make(map[string]bool)
+	/*
+			toBeStarted := mc.streamsNum
+			if toBeStarted > streamsStartStep {
+				toBeStarted = streamsStartStep
+			}
+			err := mc.startStreams(failedStreams, toBeStarted)
+			if err != nil {
+				return err
+			}
+			time.Sleep(500 * time.Millisecond)
+			emsg := fmt.Sprintf("Started **%d** Picarto streams\n", len(mc.downloaders))
+			sms := make([]string, 0, len(mc.downloaders))
+			for _, d := range mc.downloaders {
+				sms = append(sms, d.initialURL.String())
+			}
+			emsg += strings.Join(sms, "\n")
+			messenger.SendMessage(emsg)
 
-	time.Sleep(mainLoopStepDuration)
-	var lastTimeStatsShown time.Time
+		time.Sleep(mainLoopStepDuration)
+	*/
+	// var lastTimeStatsShown time.Time
+	activityCheck := time.NewTicker(100 * time.Millisecond)
+	statsCheck := time.NewTicker(statsDelay)
+	firstTime := true
+	sRes := make(chan *startRes, 32)
 	for {
-		activeStreams, err := mc.activeStreams()
-		if err != nil {
-			glog.Errorf("Error getting active streams err=%v", err)
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		if len(activeStreams) < mc.streamsNum || len(streamsNoSegmentsAnymore) > 0 {
-			// remove old downloaders
-			for sn, mt := range mc.downloaders {
-				noSegs := utils.StringsSliceContains(streamsNoSegmentsAnymore, sn)
-				notActive := !utils.StringsSliceContains(activeStreams, sn)
-				if notActive || noSegs {
-					mt.Stop()
-					reason := "not in active streams anymore"
-					if noSegs {
-						reason = "no segments downloaded for 30s"
-					}
-					messenger.SendMessage(fmt.Sprintf("Stopped stream **%s** because %s", sn, reason))
-					delete(mc.downloaders, sn)
-					failedStreams.SetDefault(sn, true)
+		select {
+		case sr := <-sRes:
+			if !sr.finished {
+				if sr.err != nil {
+					messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v started so far %d staring %d try %d",
+						sr.name, sr.err, len(mc.downloaders), len(starting), sr.try))
+				}
+			} else {
+				delete(starting, sr.name)
+				if sr.err != nil {
+					messenger.SendMessage(fmt.Sprintf("Fatal error starting Picarto stream pull user=%s err=%v started so far %d try %d",
+						sr.name, sr.err, len(mc.downloaders), sr.try))
+					failedStreams.SetDefault(sr.name, true)
+					// if isFatalError(err) {
+					// 	continue streamsLoop
+					// }
+				} else {
+					mc.downloaders[sr.name] = sr.mt
 				}
 			}
-			toBeStarted := mc.streamsNum
-			if toBeStarted-len(mc.downloaders) > streamsStartStep {
-				toBeStarted = len(mc.downloaders) + streamsStartStep
+		case <-activityCheck.C:
+			activeStreams, err := mc.activeStreams()
+			if err != nil {
+				glog.Errorf("Error getting active streams err=%v", err)
+				time.Sleep(5 * time.Second)
+				continue
 			}
-			// need to start new streams
-			mc.startStreams(failedStreams, toBeStarted)
-		}
-		if time.Since(lastTimeStatsShown) > statsDelay {
+			if len(activeStreams) < mc.streamsNum || len(streamsNoSegmentsAnymore) > 0 {
+				// remove old downloaders
+				for sn, mt := range mc.downloaders {
+					noSegs := utils.StringsSliceContains(streamsNoSegmentsAnymore, sn)
+					notActive := !utils.StringsSliceContains(activeStreams, sn)
+					if notActive || noSegs {
+						mt.Stop()
+						reason := "not in active streams anymore"
+						if noSegs {
+							reason = "no segments downloaded for 30s"
+						}
+						messenger.SendMessage(fmt.Sprintf("Stopped stream **%s** because %s", sn, reason))
+						delete(mc.downloaders, sn)
+						failedStreams.SetDefault(sn, true)
+					}
+				}
+			}
+			if len(mc.downloaders)+len(starting) < mc.streamsNum {
+				/*
+					toBeStarted := mc.streamsNum
+					if toBeStarted-len(mc.downloaders) > streamsStartStep {
+						toBeStarted = len(mc.downloaders) + streamsStartStep
+					}
+					// need to start new streams
+					mc.startStreams(failedStreams, toBeStarted)
+				*/
+				// toBeStarted := mc.streamsNum - len(mc.downloaders) + len(starting)
+				ps, err := picarto.GetOnlineUsers(picartoCountry, mc.adult, mc.gaming)
+				if err != nil {
+					if firstTime {
+						return err
+					}
+					continue
+				}
+				if firstTime {
+					activityCheck = time.NewTicker(mainLoopStepDuration)
+					firstTime = false
+				}
+				for i := 0; len(mc.downloaders)+len(starting) < mc.streamsNum && i < len(ps); i++ {
+					userName := ps[i].Name
+					if _, has := failedStreams.Get(userName); has {
+						continue
+					}
+					if _, has := mc.downloaders[userName]; has {
+						continue
+					}
+					if _, has := starting[userName]; has {
+						continue
+					}
+					starting[userName] = true
+					go mc.startOneStream(userName, sRes)
+				}
+			}
+		case <-statsCheck.C:
 			var downSource, downTrans int
 			var ds2all downStats2
 			now := time.Now()
@@ -237,10 +295,56 @@ func (mc *MistController) mainLoop() error {
 					messenger.SendMessage(emsg)
 				}
 			*/
-			lastTimeStatsShown = time.Now()
+			// lastTimeStatsShown = time.Now()
+			// time.Sleep(mainLoopStepDuration)
 		}
-		time.Sleep(mainLoopStepDuration)
 	}
+}
+
+type startRes struct {
+	name     string
+	finished bool
+	err      error
+	try      int
+	mt       *m3utester
+	// isFatal  bool
+}
+
+func (mc *MistController) startOneStream(streamName string, resp chan *startRes) {
+	var err error
+	var uri string
+	var shouldSkip [][]string
+	for try := 0; try < 12; try++ {
+		uri, shouldSkip, err = mc.startStream(streamName)
+		if err == nil {
+			break
+		}
+		isFatal := isFatalError(err)
+		resp <- &startRes{name: streamName, err: err, try: try, finished: isFatal}
+		if isFatal {
+			return
+		}
+		/*
+			messenger.SendMessage(fmt.Sprintf("Error starting Picarto stream pull user=%s err=%v started so far %d try %d",
+				userName, err, len(mc.downloaders), try))
+			if isFatalError(err) {
+				failedStreams.SetDefault(userName, true)
+				continue streamsLoop
+			}
+		*/
+		time.Sleep((200*time.Duration(try) + 300) * time.Millisecond)
+	}
+	if err != nil {
+		// failedStreams.SetDefault(userName, true)
+		resp <- &startRes{name: streamName, err: err, finished: true}
+		return
+	}
+
+	mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, true, false, mc.save, nil, shouldSkip, streamName)
+	// mc.downloaders[userName] = mt
+	mt.Start(uri)
+	messenger.SendMessage(fmt.Sprintf("Started stream %s", uri))
+	resp <- &startRes{name: streamName, mt: mt, finished: true}
 }
 
 func (mc *MistController) startStreams(failedStreams *cache.Cache, streamsNum int) error {
@@ -562,5 +666,6 @@ func (p picartoSortedSegments) Less(i, j int) bool {
 func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
 func isFatalError(err error) bool {
-	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF) || err == ErrNoAudioInStream
+	// return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF) || err == ErrNoAudioInStream
+	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || err == ErrNoAudioInStream
 }
