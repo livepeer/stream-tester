@@ -162,6 +162,7 @@ func (mc *MistController) mainLoop() error {
 				for sn, mt := range mc.downloaders {
 					noSegs := utils.StringsSliceContains(streamsNoSegmentsAnymore, sn)
 					notActive := !utils.StringsSliceContains(activeStreams, sn)
+					notActive = false
 					if notActive || noSegs {
 						mt.Stop()
 						reason := "not in active streams anymore"
