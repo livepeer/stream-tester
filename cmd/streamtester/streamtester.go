@@ -57,6 +57,9 @@ func main() {
 	save := flag.Bool("save", false, "Save downloaded segments")
 	gsBucket := flag.String("gsbucket", "", "Google storage bucket (to store segments that was not successfully parsed)")
 	gsKey := flag.String("gskey", "", "Google Storage private key (in json format)")
+	azureStorageAccount := flag.String("azure-storage-account", "", "Azure storage account")
+	azureAccessKey := flag.String("azure-access-key", "", "Azure access key")
+	azureContainer := flag.String("azure-container", "", "Azure container")
 	ignoreNoCodecError := flag.Bool("ignore-no-codec-error", false, "Do not stop streaming if segment without codec's info downloaded")
 	ignoreGaps := flag.Bool("ignore-gaps", false, "Do not stop streaming if gaps found")
 	ignoreTimeDrift := flag.Bool("ignore-time-drift", false, "Do not stop streaming if time drift detected")
@@ -99,6 +102,9 @@ func main() {
 	messenger.Init(*discordURL, *discordUserName, *discordUsersToNotify)
 	testers.Bucket = *gsBucket
 	testers.CredsJSON = *gsKey
+	if err := testers.AzureInit(*azureStorageAccount, *azureAccessKey, *azureContainer); err != nil {
+		panic(err)
+	}
 	if *infinitePull != "" {
 		puller := testers.NewInfinitePuller(*infinitePull, *save)
 		puller.Start()

@@ -2,7 +2,6 @@ package testers
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -16,10 +15,10 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/joy4/jerrors"
 	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
+	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 )
 
@@ -215,12 +214,19 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 		if verr != nil {
 			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
 			glog.Error(msg)
-			if model.FailHardOnBadSegments && !(IgnoreNoCodecError && (errors.Is(verr, jerrors.ErrNoAudioInfoFound) || errors.Is(verr, jerrors.ErrNoVideoInfoFound))) {
+			if shouldSave(verr) {
 				fname := fmt.Sprintf("bad_video_%s_%s_%d_%s.ts", utils.CleanFileName(md.parentName), utils.CleanFileName(md.name),
 					task.seqNo, randName())
 				err = ioutil.WriteFile(fname, b, 0644)
-				glog.Infof("Wrote bad segment to '%s' (err=%v)", fname, err)
-				panic(verr)
+				glog.Infof("Wrote bad segment to local file '%s' (err=%v)", fname, err)
+				if extURL, service, err := saveToExternalStorage(fname, b); err != nil {
+					glog.Infof("Failed saving bad segment %s to %s err=%v", fname, service, err)
+				} else {
+					messenger.SendFatalMessage(fmt.Sprintf("Saved bad segment to %s url=%s verr=%v", service, extURL, verr))
+				}
+				if model.FailHardOnBadSegments {
+					panic(verr)
+				}
 			}
 		} else {
 			// add keys

@@ -4,9 +4,9 @@ go 1.13
 
 require (
 	cloud.google.com/go/storage v1.4.0
+	github.com/Azure/azure-storage-blob-go v0.8.0
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/gosuri/uilive v0.0.3 // indirect
-
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/livepeer/joy4 v0.1.2-0.20191220171501-3d0cd11ebf39
 	github.com/livepeer/m3u8 v0.11.0
@@ -20,4 +20,5 @@ require (
 )
 
 exclude github.com/gosuri/uilive v0.0.4 // cause memory corruption
-// replace github.com/livepeer/joy4 => /Users/dark/projects/livepeer/joy4
+
+replace github.com/livepeer/joy4 => /Users/dark/projects/livepeer/joy4
