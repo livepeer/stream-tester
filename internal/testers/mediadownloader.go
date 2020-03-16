@@ -54,6 +54,7 @@ func (ds *downloadStats) formatForConsole() string {
 // mediaDownloader downloads all the segments from one media stream
 // (it constanly reloads manifest, and downloads any segments found in manifest)
 type mediaDownloader struct {
+	parentName         string
 	name               string // usually medial playlist relative name
 	resolution         string
 	u                  *url.URL
@@ -82,13 +83,14 @@ type mediaDownloader struct {
 	downloadedSegments []string // for debugging
 }
 
-func newMediaDownloader(name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan *fullDownloadResult,
+func newMediaDownloader(parentName, name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan *fullDownloadResult,
 	baseSaveDir string, sm *segmentsMatcher, shouldSkip []string) *mediaDownloader {
 	pu, err := url.Parse(u)
 	if err != nil {
 		glog.Fatal(err)
 	}
 	md := &mediaDownloader{
+		parentName:      parentName,
 		name:            name,
 		u:               pu,
 		suri:            u,
@@ -214,7 +216,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
 			glog.Error(msg)
 			if model.FailHardOnBadSegments && !(IgnoreNoCodecError && (errors.Is(verr, jerrors.ErrNoAudioInfoFound) || errors.Is(verr, jerrors.ErrNoVideoInfoFound))) {
-				fname := fmt.Sprintf("bad_video_%s_%d.ts", utils.CleanFileName(md.name), task.seqNo)
+				fname := fmt.Sprintf("bad_video_%s_%s_%d.ts", utils.CleanFileName(md.parentName), utils.CleanFileName(md.name), task.seqNo)
 				err = ioutil.WriteFile(fname, b, 0644)
 				glog.Infof("Wrote bad segment to '%s' (err=%v)", fname, err)
 				panic(verr)
