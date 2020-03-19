@@ -368,6 +368,7 @@ func (mc *MistController) makeExternalURL(iurl string) string {
 	return pu.String()
 }
 
+/*
 func (mc *MistController) startStreams(failedStreams *cache.Cache, streamsNum int) error {
 	ps, err := picarto.GetOnlineUsers(picartoCountry, mc.adult, mc.gaming)
 	if err != nil {
@@ -386,6 +387,8 @@ streamsLoop:
 		// userName = "axonradiolive"
 		// userName = "playloudlive"
 		// userName = "forbae"
+		// userName = "Noerbmu"
+		// userName = "NylaTheWolf"
 		if utils.StringsSliceContains(started, userName) || utils.StringsSliceContains(mc.blackListedStreams, userName) {
 			continue
 		}
@@ -426,6 +429,7 @@ streamsLoop:
 	}
 	return nil
 }
+*/
 
 func (mc *MistController) activeStreams() ([]string, error) {
 	_, activeStreams, err := mc.mapi.Streams()
@@ -470,7 +474,7 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 	mpullres := make([]*plPullRes, len(mediaURIs))
 	mediaPulCh := make(chan *plPullRes, len(mediaURIs))
 	for i, muri := range mediaURIs {
-		go mc.pullMediaPL(muri, i, mediaPulCh)
+		go mc.pullMediaPL(userName, muri, i, mediaPulCh)
 	}
 	for i := 0; i < len(mediaURIs); i++ {
 		res := <-mediaPulCh
@@ -610,7 +614,7 @@ type plPullRes struct {
 	i                      int
 }
 
-func (mc *MistController) pullMediaPL(uri string, i int, out chan *plPullRes) (*m3u8.MediaPlaylist, error) {
+func (mc *MistController) pullMediaPL(userName, uri string, i int, out chan *plPullRes) (*m3u8.MediaPlaylist, error) {
 	resp, err := mhttpClient.Do(uhttp.GetRequest(uri))
 	if err != nil {
 		glog.Infof("===== get error getting media playlist %s: %v", uri, err)
@@ -655,26 +659,37 @@ func (mc *MistController) pullMediaPL(uri string, i int, out chan *plPullRes) (*
 		if !purl.IsAbs() {
 			segURI = mplu.ResolveReference(purl).String()
 		}
-		_, verr, _ = mc.downloadSegment(segURI)
+		_, verr, _ = mc.downloadSegment(userName, segURI)
 	}
 	out <- &plPullRes{pl: mpl, i: i, firstSegmentParseError: verr}
 	return mpl, nil
 }
 
-func (mc *MistController) downloadSegment(uri string) ([]byte, error, error) {
-	resp, err := mhttpClient.Do(uhttp.GetRequest(uri))
+func (mc *MistController) downloadSegment(userName, uri string) ([]byte, error, error) {
+	resp, err := httpClient.Do(uhttp.GetRequest(uri))
 	if err != nil {
 		glog.Infof("Error downloading video segment %s: %v", uri, err)
 		return nil, nil, err
 	}
-	b, _ := ioutil.ReadAll(resp.Body)
+	b, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		err := fmt.Errorf("Status error downloading media segment %s: %v (%s) body: %s", uri, resp.StatusCode, resp.Status, string(b))
 		return nil, nil, err
 	}
+	if err != nil {
+		glog.Errorf("Error downloading first segment uri=%s err=%v", uri, err)
+		// panic(err)
+		return nil, nil, err
+	}
 	fsttim, dur, keyFrames, _, verr := utils.GetVideoStartTimeDurFrames(b)
-	glog.V(model.DEBUG).Infof("Downloaded segment %s pts=%s dur=%s keyFrames=%d verr=%v", uri, fsttim, dur, keyFrames)
+	glog.V(model.DEBUG).Infof("Downloaded segment %s pts=%s dur=%s keyFrames=%d len=%d verr=%v iseOF=%v", uri, fsttim, dur, keyFrames, len(b), verr, errors.Is(verr, io.EOF))
+	if verr != nil && false {
+		fname := "bad_video_seg_" + userName + ".ts"
+		err = ioutil.WriteFile(fname, b, 0644)
+		glog.Infof("Wrote bad segment to local file '%s' (err=%v)", fname, err)
+		panic(err)
+	}
 	return b, verr, nil
 }
 

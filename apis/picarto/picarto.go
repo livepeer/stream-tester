@@ -77,7 +77,7 @@ func GetOnlineUsers(country string, adult, gaming bool) ([]UserProfile, error) {
 		glog.Errorf("Error requesting Picarto online users (%s) error: %v", u, err)
 		return nil, err
 	}
-	glog.V(model.INSANE).Info(string(b))
+	glog.V(model.INSANE2).Info(string(b))
 	var users []UserProfile
 	err = json.Unmarshal(b, &users)
 	if err != nil || country == "" {

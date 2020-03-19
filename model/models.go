@@ -16,6 +16,7 @@ const (
 	VERBOSE  = 6
 	VVERBOSE = 7
 	INSANE   = 12
+	INSANE2  = 14
 )
 
 // IProduction is set to true in the proceess of building Docker container
