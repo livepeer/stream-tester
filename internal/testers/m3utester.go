@@ -3,6 +3,7 @@ package testers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/joy4/jerrors"
 	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
@@ -49,16 +51,20 @@ var wowzaBandwidthRE *regexp.Regexp = regexp.MustCompile(`_b(\d+)\.`)
 var mistSessionRE *regexp.Regexp = regexp.MustCompile(`(\?sessId=\d+)`)
 
 type downStats2 struct {
-	downSource       int
-	downTransAll     int
-	numProfiles      int
-	sourceBytes      int64
-	transAllBytes    int64
-	downTrans        []int
-	successRate      float64
-	lastDownloadTime time.Time
-	videoParseErrors int64
-	url              string
+	downSource            int
+	downTransAll          int
+	numProfiles           int
+	sourceBytes           int64
+	sourceTranscodedBytes int64 // downloaded bytes in source stream that matched with transcoded segments
+	transAllBytes         int64
+	downTrans             []int
+	successRate           float64
+	lastDownloadTime      time.Time
+	videoParseErrors      int64
+	audioCodecErrors      int64
+	sourceDuration        time.Duration
+	transcodedDuration    time.Duration
+	url                   string
 }
 
 // m3utester tests one stream, reading all the media streams
@@ -650,7 +656,9 @@ func (mt *m3utester) workerLoop() {
 				if now.Sub(dr.downloadCompetedAt) > 16*time.Second {
 					mt.downStats2.downSource++
 					mt.downStats2.sourceBytes += int64(dr.bytes)
+					mt.downStats2.sourceDuration += dr.duration
 					glog.V(model.INSANE).Infof("Checking source seg %s  pts %s down at %s", dk, dr.startTime, dr.downloadCompetedAt)
+					someFound := false
 					for i, transKey := range mt.downloadsKeys[1:] {
 						transDM := mt.downSegs[transKey]
 						found := false
@@ -661,14 +669,19 @@ func (mt *m3utester) workerLoop() {
 								mt.downStats2.downTransAll++
 								mt.downStats2.downTrans[i]++
 								mt.downStats2.transAllBytes += int64(transSeg.bytes)
+								mt.downStats2.transcodedDuration += transSeg.duration
 								delete(transDM, transSegName)
 								found = true
+								someFound = true
 								break
 							}
 						}
 						if !found {
 							glog.V(model.VERBOSE).Infof("Not found pair for %s seg", dr.name)
 						}
+					}
+					if someFound {
+						mt.downStats2.sourceTranscodedBytes += int64(dr.bytes)
 					}
 					delete(mt.downSegs[sourceKey], dk)
 					mt.downStats2.successRate = float64(mt.downStats2.downTransAll) / float64(mt.downStats2.downSource*mt.downStats2.numProfiles) * 100.0
@@ -682,6 +695,9 @@ func (mt *m3utester) workerLoop() {
 			mt.downStats2.lastDownloadTime = fr.downloadCompetedAt
 			if fr.videoParseError != nil {
 				mt.downStats2.videoParseErrors++
+				if errors.Is(fr.videoParseError, jerrors.ErrNoAudioInfoFound) {
+					mt.downStats2.audioCodecErrors++
+				}
 			}
 			mt.succ2mu.Unlock()
 			if mt.picartoMode && fr.videoParseError != nil {
@@ -908,12 +924,16 @@ func (ds2 *downStats2) discordRichMesage(title, hostSubstitute string, includePr
 	}
 	emmsg.AddFieldF("Bytes downloaded", true, "%d/%d", ds2.transAllBytes, ds2.sourceBytes)
 	var pob float64
-	if ds2.sourceBytes > 0 {
-		pob = float64(ds2.transAllBytes) / float64(ds2.sourceBytes) * 100
+	if ds2.sourceTranscodedBytes > 0 {
+		pob = float64(ds2.transAllBytes) / float64(ds2.sourceTranscodedBytes) * 100
 	}
 	emmsg.AddFieldF("Percent of source bandwitdh", true, "**%4.2f%%**", pob)
+	emmsg.AddFieldF("Video duration trans/source", true, "%s/%s", ds2.transcodedDuration, ds2.sourceDuration)
 	if ds2.videoParseErrors > 0 {
 		emmsg.AddFieldF("Number of video parse errors", true, "%d", ds2.videoParseErrors)
+	}
+	if ds2.audioCodecErrors > 0 {
+		emmsg.AddFieldF("Number of audio codec errors", true, "%d", ds2.audioCodecErrors)
 	}
 	return emmsg
 }
@@ -922,8 +942,12 @@ func (ds2 *downStats2) add(other *downStats2) {
 	ds2.downSource += other.downSource
 	ds2.downTransAll += other.downTransAll
 	ds2.sourceBytes += other.sourceBytes
+	ds2.sourceTranscodedBytes += other.sourceTranscodedBytes
 	ds2.transAllBytes += other.transAllBytes
 	ds2.videoParseErrors += other.videoParseErrors
+	ds2.audioCodecErrors += other.audioCodecErrors
+	ds2.sourceDuration += other.sourceDuration
+	ds2.transcodedDuration += other.transcodedDuration
 	ds2.numProfiles = other.numProfiles
 	if ds2.downSource > 0 {
 		ds2.successRate = float64(ds2.downTransAll) / float64(ds2.downSource*ds2.numProfiles) * 100.0
