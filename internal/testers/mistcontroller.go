@@ -48,6 +48,7 @@ type (
 		streamsNum         int // number of streams to maintain
 		externalHost       string
 		blackListedStreams []string
+		statsInterval      time.Duration
 		downloaders        map[string]*m3utester // [Picarto name]
 		ctx                context.Context
 		cancel             context.CancelFunc
@@ -72,7 +73,18 @@ var (
 )
 
 // NewMistController creates new MistController
-func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming, save bool, mapi *mist.API, blackListedStreams, externalHost string) *MistController {
+func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming, save bool, mapi *mist.API, blackListedStreams, externalHost string,
+	statsInterval time.Duration) *MistController {
+
+	statsDelay := 120 * time.Second
+	if !model.Production {
+		statsDelay = 32 * time.Second
+		// statsDelay = 3 * time.Second
+	}
+	if statsInterval != 0 {
+		statsDelay = statsInterval
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	return &MistController{
 		mapi:               mapi,
@@ -83,6 +95,7 @@ func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gami
 		streamsNum:         streamsNum,
 		externalHost:       externalHost,
 		profilesNum:        profilesNum,
+		statsInterval:      statsDelay,
 		blackListedStreams: strings.Split(blackListedStreams, ","),
 		downloaders:        make(map[string]*m3utester),
 		ctx:                ctx,
@@ -97,11 +110,6 @@ func (mc *MistController) Start() error {
 }
 
 func (mc *MistController) mainLoop() error {
-	statsDelay := 120 * time.Second
-	if !model.Production {
-		statsDelay = 32 * time.Second
-		// statsDelay = 3 * time.Second
-	}
 	started := time.Now()
 	var streamsNoSegmentsAnymore []string
 	failedStreams := cache.New(5*time.Minute, 8*time.Minute)
@@ -128,7 +136,7 @@ func (mc *MistController) mainLoop() error {
 	*/
 	// var lastTimeStatsShown time.Time
 	activityCheck := time.NewTicker(100 * time.Millisecond)
-	statsCheck := time.NewTicker(statsDelay)
+	statsCheck := time.NewTicker(mc.statsInterval)
 	firstTime := true
 	sRes := make(chan *startRes, 32)
 	for {
