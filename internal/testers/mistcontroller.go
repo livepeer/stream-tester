@@ -76,7 +76,7 @@ var (
 func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming, save bool, mapi *mist.API, blackListedStreams, externalHost string,
 	statsInterval time.Duration) *MistController {
 
-	statsDelay := 120 * time.Second
+	statsDelay := 4 * 60 * time.Second
 	if !model.Production {
 		statsDelay = 32 * time.Second
 		// statsDelay = 3 * time.Second
