@@ -46,6 +46,7 @@ type (
 		gaming             bool
 		save               bool
 		streamsNum         int // number of streams to maintain
+		externalHost       string
 		blackListedStreams []string
 		downloaders        map[string]*m3utester // [Picarto name]
 		ctx                context.Context
@@ -71,7 +72,7 @@ var (
 )
 
 // NewMistController creates new MistController
-func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming, save bool, mapi *mist.API, blackListedStreams string) *MistController {
+func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming, save bool, mapi *mist.API, blackListedStreams, externalHost string) *MistController {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &MistController{
 		mapi:               mapi,
@@ -80,6 +81,7 @@ func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gami
 		gaming:             gaming,
 		save:               save,
 		streamsNum:         streamsNum,
+		externalHost:       externalHost,
 		profilesNum:        profilesNum,
 		blackListedStreams: strings.Split(blackListedStreams, ","),
 		downloaders:        make(map[string]*m3utester),
@@ -248,7 +250,7 @@ func (mc *MistController) mainLoop() error {
 					emmsg.AddFieldF("Num proflies", true, "%d", ds2.numProfiles)
 				*/
 				// if ds2.successRate < 100 {
-				ssm = append(ssm, ds2.discordRichMesage(fmt.Sprintf("Stream __%s__", sn), true))
+				ssm = append(ssm, ds2.discordRichMesage(fmt.Sprintf("Stream __%s__", sn), mc.externalHost, true))
 				// }
 				// messenger.SendRichMessage(emmsg)
 				// messenger.SendMessage(emsg)
@@ -272,7 +274,7 @@ func (mc *MistController) mainLoop() error {
 			// 	ds2all.successRate, ds2all.downTransAll, ds2all.downSource, ds2all.transAllBytes, ds2all.sourceBytes, float64(ds2all.transAllBytes)/float64(ds2all.sourceBytes)*100, runningFor)
 			// messenger.SendMessage(emsg)
 
-			emmsg := ds2all.discordRichMesage(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)), false)
+			emmsg := ds2all.discordRichMesage(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)), mc.externalHost, false)
 			emmsg.URL = ""
 			/*
 				emmsg := messenger.NewDiscordEmbed(fmt.Sprintf("Number of streams **%d**", len(mc.downloaders)))
@@ -344,8 +346,18 @@ func (mc *MistController) startOneStream(streamName string, resp chan *startRes)
 	mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, true, false, mc.save, nil, shouldSkip, streamName)
 	// mc.downloaders[userName] = mt
 	mt.Start(uri)
-	messenger.SendMessage(fmt.Sprintf("Started stream %s", uri))
+	messenger.SendMessage(fmt.Sprintf("Started stream %s", mc.makeExternalURL(uri)))
 	resp <- &startRes{name: streamName, mt: mt, finished: true}
+}
+
+func (mc *MistController) makeExternalURL(iurl string) string {
+	if mc.externalHost == "" || iurl == "" {
+		return iurl
+	}
+	pu, _ := url.Parse(iurl)
+	port := pu.Port()
+	pu.Host = mc.externalHost + ":" + port
+	return pu.String()
 }
 
 func (mc *MistController) startStreams(failedStreams *cache.Cache, streamsNum int) error {

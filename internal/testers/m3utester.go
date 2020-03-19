@@ -891,9 +891,15 @@ func (ds2 *downStats2) clone() *downStats2 {
 	return &r
 }
 
-func (ds2 *downStats2) discordRichMesage(title string, includeProfiles bool) *messenger.DiscordEmbed {
+func (ds2 *downStats2) discordRichMesage(title, hostSubstitute string, includeProfiles bool) *messenger.DiscordEmbed {
 	emmsg := messenger.NewDiscordEmbed(title)
 	emmsg.URL = ds2.url
+	if hostSubstitute != "" && ds2.url != "" {
+		pu, _ := url.Parse(ds2.url)
+		port := pu.Port()
+		pu.Host = hostSubstitute + ":" + port
+		emmsg.URL = pu.String()
+	}
 	emmsg.SetColorBySuccess(ds2.successRate)
 	emmsg.AddFieldF("Success rate", true, "**%7.4f%%**", ds2.successRate)
 	emmsg.AddFieldF("Segments trans/source", true, "%d/%d", ds2.downTransAll, ds2.downSource)
