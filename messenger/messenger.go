@@ -217,6 +217,9 @@ func sendLoop() {
 						continue
 					}
 				}
+				if status == http.StatusBadRequest {
+					msgQueue = msgQueue[1:]
+				}
 				timer = time.NewTimer(2 * time.Second)
 				continue
 			}
