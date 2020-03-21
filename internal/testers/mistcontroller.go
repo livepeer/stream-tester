@@ -62,6 +62,10 @@ var (
 	ErrStreamOpenFailed = errors.New("Stream open failed")
 	// ErrNoAudioInStream ...
 	ErrNoAudioInStream = errors.New("No audio in stream")
+	// ErrBigTimeDifference ...
+	ErrBigTimeDifference = errors.New("Time difference too big")
+	// ErrNoMatchingSegments ...
+	ErrNoMatchingSegments = errors.New("Can't match transcoded segments to source segments")
 
 	mp          = message.NewPrinter(message.MatchLanguage("en"))
 	mhttpClient = &http.Client{
@@ -208,6 +212,20 @@ func (mc *MistController) mainLoop() error {
 				}
 				for i := 0; len(mc.downloaders)+len(starting) < mc.streamsNum && i < len(ps); i++ {
 					userName := ps[i].Name
+					// userName = "Noerbmu"
+					// userName = "NylaTheWolf"
+					// userName = "rudeezy"
+					// userName = "snooze"
+					// userName = "FreeMusicLive"
+					// userName = "Amodwithoutamark"
+					// userName = "ajfjsgo"
+					// userName = "StudioNLM"
+					// userName = "Nasnency"
+					// userName = "PurpleLemons"
+					// userName = "MEDYUM"
+					// userName = "RTI"
+					// userName = "balanceduniverse"
+					// userName = "BlindCoyote"
 					if _, has := failedStreams.Get(userName); has {
 						continue
 					}
@@ -488,8 +506,16 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 	if mpullres[0].firstSegmentParseError != nil {
 		return uri, nil, mpullres[0].firstSegmentParseError
 	}
-	// find first transcoded segment time
+	// check difference between timestamps in source and transcoded streams
+	sourceTime := mistGetTimeFromSegURI(mpullres[0].pl.Segments[0].URI)
 	transTime := mistGetTimeFromSegURI(mpullres[1].pl.Segments[0].URI)
+	if absDiff(sourceTime, transTime) > 10*60*1000 { // 10 min
+		// panic(fmt.Errorf("Diffeerence is %d", absDiff(sourceTime, transTime)))
+		return uri, nil, ErrBigTimeDifference
+	}
+
+	// find first transcoded segment time
+	// transTime := mistGetTimeFromSegURI(mpullres[1].pl.Segments[0].URI)
 	shouldSkip := make([][]string, len(mediaURIs))
 	found := false
 	for si, seg := range mpullres[0].pl.Segments {
@@ -519,6 +545,7 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 			transTime := mistGetTimeFromSegURI(seg.URI)
 			glog.Infof("Source time %d trans time %d i %d", sourceTime, transTime, si)
 			if absDiff(transTime, sourceTime) < 200 {
+				found = true
 				for i := 0; i < si; i++ {
 					shouldSkip[1] = append(shouldSkip[1], mistSessionRE.ReplaceAllString(mpullres[1].pl.Segments[i].URI, ""))
 				}
@@ -526,6 +553,9 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 				break
 			}
 		}
+	}
+	if !found {
+		return uri, nil, ErrNoMatchingSegments
 	}
 	return uri, shouldSkip, nil
 }
@@ -703,5 +733,6 @@ func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
 func isFatalError(err error) bool {
 	// return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF) || err == ErrNoAudioInStream
-	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || err == ErrNoAudioInStream
+	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || err == ErrNoAudioInStream ||
+		err == ErrBigTimeDifference || err == ErrNoMatchingSegments
 }
