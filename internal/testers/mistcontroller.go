@@ -350,7 +350,7 @@ func (mc *MistController) startOneStream(streamName string, resp chan *startRes)
 	var shouldSkip [][]string
 	for try := 0; try < 12; try++ {
 		uri, shouldSkip, err, mediaErr = mc.startStream(streamName)
-		if err == nil {
+		if err == nil && mediaErr == nil {
 			break
 		}
 		isFatal := isFatalError(err, try)
@@ -593,7 +593,7 @@ func timedout(e error) bool {
 	t, ok := e.(interface {
 		Timeout() bool
 	})
-	return ok && t.Timeout()
+	return ok && t.Timeout() || (e != nil && strings.Contains(e.Error(), "Client.Timeout"))
 }
 
 func (mc *MistController) pullFirstTime(uri string) ([]string, error) {
