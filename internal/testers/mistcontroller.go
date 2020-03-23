@@ -345,15 +345,18 @@ type startRes struct {
 }
 
 func (mc *MistController) startOneStream(streamName string, resp chan *startRes) {
-	var err error
+	var err, mediaErr error
 	var uri string
 	var shouldSkip [][]string
 	for try := 0; try < 12; try++ {
-		uri, shouldSkip, err = mc.startStream(streamName)
+		uri, shouldSkip, err, mediaErr = mc.startStream(streamName)
 		if err == nil {
 			break
 		}
-		isFatal := isFatalError(err)
+		isFatal := isFatalError(err, try)
+		if err == nil && mediaErr != nil {
+			err = mediaErr
+		}
 		resp <- &startRes{name: streamName, err: err, try: try, finished: isFatal}
 		if isFatal {
 			return
@@ -368,8 +371,11 @@ func (mc *MistController) startOneStream(streamName string, resp chan *startRes)
 		*/
 		time.Sleep((200*time.Duration(try) + 300) * time.Millisecond)
 	}
-	if err != nil {
+	if err != nil || mediaErr != nil {
 		// failedStreams.SetDefault(userName, true)
+		if err == nil {
+			err = mediaErr
+		}
 		resp <- &startRes{name: streamName, err: err, finished: true}
 		return
 	}
@@ -472,7 +478,7 @@ func (mc *MistController) activeStreams() ([]string, error) {
 	return asr, nil
 }
 
-func (mc *MistController) startStream(userName string) (string, [][]string, error) {
+func (mc *MistController) startStream(userName string) (string, [][]string, error, error) {
 	uri := fmt.Sprintf(hlsURLTemplate, mc.mistHot, userName)
 	glog.Infof("Starting to pull from user=%s uri=%s", userName, uri)
 	var try int
@@ -481,15 +487,15 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 	for {
 		mediaURIs, err = mc.pullFirstTime(uri)
 		if err != nil {
-			if isFatalError(err) {
-				return "", nil, err
+			if isFatalError(err, try) {
+				return "", nil, err, nil
 			}
 		}
 		if len(mediaURIs) >= mc.profilesNum+1 {
 			break
 		}
 		if try > 7 {
-			return "", nil, fmt.Errorf("Stream uri=%s did not started transcoding lasterr=%v", uri, err)
+			return "", nil, fmt.Errorf("Stream uri=%s did not started transcoding lasterr=%w", uri, err), nil
 		}
 		try++
 		time.Sleep((time.Duration(try) + 1) * 500 * time.Millisecond)
@@ -505,21 +511,21 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 	}
 	for i := 0; i < len(mediaURIs); i++ {
 		if mpullres[i].err != nil {
-			return uri, nil, mpullres[i].err
+			return uri, nil, nil, mpullres[i].err
 		}
 	}
 	if mpullres[0].firstSegmentParseError != nil {
-		return uri, nil, mpullres[0].firstSegmentParseError
+		return uri, nil, mpullres[0].firstSegmentParseError, nil
 	}
 	// check difference between timestamps in source and transcoded streams
 	sourceTime := mistGetTimeFromSegURI(mpullres[0].pl.Segments[0].URI)
 	transTime := mistGetTimeFromSegURI(mpullres[1].pl.Segments[0].URI)
 	if absDiff(sourceTime, transTime) > 10*60*1000 { // 10 min
 		// panic(fmt.Errorf("Diffeerence is %d", absDiff(sourceTime, transTime)))
-		return uri, nil, ErrBigTimeDifference
+		return uri, nil, ErrBigTimeDifference, nil
 	}
 	if mc.sdCutOff > 0.0 && mpullres[0].standardDeviation > mc.sdCutOff {
-		return uri, nil, fmt.Errorf("%w: standard deviation is %f, threshold is %f", ErrTooBigDurationsDeviation, mpullres[0].standardDeviation, mc.sdCutOff)
+		return uri, nil, fmt.Errorf("%w: standard deviation is %f, threshold is %f", ErrTooBigDurationsDeviation, mpullres[0].standardDeviation, mc.sdCutOff), nil
 	}
 
 	// find first transcoded segment time
@@ -563,9 +569,9 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 		}
 	}
 	if !found {
-		return uri, nil, ErrNoMatchingSegments
+		return uri, nil, ErrNoMatchingSegments, nil
 	}
-	return uri, shouldSkip, nil
+	return uri, shouldSkip, nil, nil
 }
 
 func absDiff(i1, i2 int) int {
@@ -763,8 +769,8 @@ func (p picartoSortedSegments) Less(i, j int) bool {
 }
 func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
-func isFatalError(err error) bool {
+func isFatalError(err error, try int) bool {
 	// return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF) || err == ErrNoAudioInStream
-	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || err == ErrNoAudioInStream ||
+	return err == ErrZeroStreams || err == ErrStreamOpenFailed || (timedout(err) && try > 3) || err == ErrNoAudioInStream ||
 		err == ErrBigTimeDifference || err == ErrNoMatchingSegments || errors.Is(err, ErrTooBigDurationsDeviation)
 }
