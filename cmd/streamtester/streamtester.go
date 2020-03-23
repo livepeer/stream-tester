@@ -79,6 +79,7 @@ func main() {
 	picartoExternalHost := flag.String("picarto-external-host", "", "Host name of the Picarto server to be used in the messages to Discord")
 	picartoStatsInterval := flag.Duration("picarto-stats-interval", 0, "Interval between stats messages sent to Discord")
 	picartoSDCutOff := flag.Float64("picarto-standad-deviation-cutoff", 0.0, "Do not start streams that have standard deviation of segments durations more than that")
+	delayStart := flag.Duration("delay-start", 0, "Delay start")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -107,6 +108,10 @@ func main() {
 	testers.CredsJSON = *gsKey
 	if err := testers.AzureInit(*azureStorageAccount, *azureAccessKey, *azureContainer); err != nil {
 		panic(err)
+	}
+	if *delayStart > 0 {
+		glog.Infof("Waiting %s", *delayStart)
+		time.Sleep(*delayStart)
 	}
 	if *infinitePull != "" {
 		puller := testers.NewInfinitePuller(*infinitePull, *save)
