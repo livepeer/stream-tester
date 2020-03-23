@@ -682,6 +682,8 @@ func (mt *m3utester) workerLoop() {
 					}
 					if someFound {
 						mt.downStats2.sourceTranscodedBytes += int64(dr.bytes)
+					} else {
+						glog.V(model.VERBOSE).Infof("Source segment without matching transcoded one: name=%s uri=%s resolution=%s", dr.name, dr.uri, dr.resolution)
 					}
 					delete(mt.downSegs[sourceKey], dk)
 					mt.downStats2.successRate = float64(mt.downStats2.downTransAll) / float64(mt.downStats2.downSource*mt.downStats2.numProfiles) * 100.0
