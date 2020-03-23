@@ -653,7 +653,7 @@ func (mt *m3utester) workerLoop() {
 			glog.V(model.VVERBOSE).Infof("source key = %s, down stats2 %+v", sourceKey, mt.downStats2)
 			// glog.Infof("%+v", mt.downSegs)
 			for dk, dr := range mt.downSegs[sourceKey] {
-				if now.Sub(dr.downloadCompetedAt) > 16*time.Second {
+				if now.Sub(dr.downloadCompetedAt) > 40*time.Second {
 					mt.downStats2.downSource++
 					mt.downStats2.sourceBytes += int64(dr.bytes)
 					mt.downStats2.sourceDuration += dr.duration
