@@ -853,7 +853,7 @@ func (mt *m3utester) downloadLoop() {
 					if len(mt.shouldSkip) > i {
 						shouldSkip = mt.shouldSkip[i]
 					}
-					md := newMediaDownloader(mt.name, variant.URI, mediaURL, variant.Resolution, mt.done, mt.sentTimesMap, mt.wowzaMode, mt.save,
+					md := newMediaDownloader(mt.name, variant.URI, mediaURL, variant.Resolution, mt.done, mt.sentTimesMap, mt.wowzaMode, mt.picartoMode, mt.save,
 						mt.fullResultsCh, mt.saveDirName, mt.segmentsMatcher, shouldSkip)
 					mt.downloads[mediaURL] = md
 					// md.source = strings.Contains(mediaURL, "source")

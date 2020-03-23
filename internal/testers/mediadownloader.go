@@ -70,6 +70,7 @@ type mediaDownloader struct {
 	latenciesPerStream []time.Duration // here index is seqNo, so if segment is failed download then value will be zero
 	source             bool
 	wowzaMode          bool
+	picartoMode        bool
 	shouldSkip         []string
 	saveSegmentsToDisk bool
 	savePlayList       *m3u8.MediaPlaylist
@@ -82,7 +83,7 @@ type mediaDownloader struct {
 	downloadedSegments []string // for debugging
 }
 
-func newMediaDownloader(parentName, name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, save bool, frc chan *fullDownloadResult,
+func newMediaDownloader(parentName, name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, picartoMode, save bool, frc chan *fullDownloadResult,
 	baseSaveDir string, sm *segmentsMatcher, shouldSkip []string) *mediaDownloader {
 	pu, err := url.Parse(u)
 	if err != nil {
@@ -104,6 +105,7 @@ func newMediaDownloader(parentName, name, u, resolution string, done <-chan stru
 		done:               done,
 		sentTimesMap:       sentTimesMap,
 		wowzaMode:          wowzaMode,
+		picartoMode:        picartoMode,
 		saveSegmentsToDisk: save,
 		fullResultsCh:      frc,
 	}
@@ -227,6 +229,9 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 				if model.FailHardOnBadSegments {
 					panic(verr)
 				}
+			}
+			if md.picartoMode {
+				fsttim = time.Duration(mistGetTimeFromSegURI(task.url)) * time.Millisecond
 			}
 		} else {
 			// add keys
