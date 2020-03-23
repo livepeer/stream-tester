@@ -231,6 +231,12 @@ func (mc *MistController) mainLoop() error {
 					// userName = "RTI"
 					// userName = "balanceduniverse"
 					// userName = "BlindCoyote"
+					// userName = "AnnMaulina"
+					// userName = "KepArtem"
+					// userName = "Artzipants"
+					// userName = "MiiNiiRU"
+					// userName = "drawdle"
+					// userName = "unwulfd"
 					if _, has := failedStreams.Get(userName); has {
 						continue
 					}
