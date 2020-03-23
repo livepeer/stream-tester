@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -45,7 +46,8 @@ type (
 		adult              bool
 		gaming             bool
 		save               bool
-		streamsNum         int // number of streams to maintain
+		streamsNum         int     // number of streams to maintain
+		sdCutOff           float64 // do not start streams that have standard deviation of segments durations more than that
 		externalHost       string
 		blackListedStreams []string
 		statsInterval      time.Duration
@@ -66,6 +68,8 @@ var (
 	ErrBigTimeDifference = errors.New("Time difference too big")
 	// ErrNoMatchingSegments ...
 	ErrNoMatchingSegments = errors.New("Can't match transcoded segments to source segments")
+	// ErrTooBigDurationsDeviation ...
+	ErrTooBigDurationsDeviation = errors.New("Too big deviation of segment's durations")
 
 	mp          = message.NewPrinter(message.MatchLanguage("en"))
 	mhttpClient = &http.Client{
@@ -78,7 +82,7 @@ var (
 
 // NewMistController creates new MistController
 func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming, save bool, mapi *mist.API, blackListedStreams, externalHost string,
-	statsInterval time.Duration) *MistController {
+	statsInterval time.Duration, sdCutOff float64) *MistController {
 
 	statsDelay := 4 * 60 * time.Second
 	if !model.Production {
@@ -100,6 +104,7 @@ func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gami
 		externalHost:       externalHost,
 		profilesNum:        profilesNum,
 		statsInterval:      statsDelay,
+		sdCutOff:           sdCutOff,
 		blackListedStreams: strings.Split(blackListedStreams, ","),
 		downloaders:        make(map[string]*m3utester),
 		ctx:                ctx,
@@ -513,6 +518,9 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 		// panic(fmt.Errorf("Diffeerence is %d", absDiff(sourceTime, transTime)))
 		return uri, nil, ErrBigTimeDifference
 	}
+	if mc.sdCutOff > 0.0 && mpullres[0].standardDeviation > mc.sdCutOff {
+		return uri, nil, fmt.Errorf("%w: standard deviation is %f, threshold is %f", ErrTooBigDurationsDeviation, mpullres[0].standardDeviation, mc.sdCutOff)
+	}
 
 	// find first transcoded segment time
 	// transTime := mistGetTimeFromSegURI(mpullres[1].pl.Segments[0].URI)
@@ -641,6 +649,7 @@ type plPullRes struct {
 	pl                     *m3u8.MediaPlaylist
 	firstSegmentParseError error
 	err                    error
+	standardDeviation      float64 // σ of durations of segments in the playlist
 	i                      int
 }
 
@@ -691,7 +700,30 @@ func (mc *MistController) pullMediaPL(userName, uri string, i int, out chan *plP
 		}
 		_, verr, _ = mc.downloadSegment(userName, segURI)
 	}
-	out <- &plPullRes{pl: mpl, i: i, firstSegmentParseError: verr}
+	var j uint
+	var mean, sd float64
+	for j = 0; j < mpl.Count(); j++ {
+		seg := mpl.Segments[j]
+		if seg == nil {
+			// something wrong
+			break
+		}
+		// glog.V(model.VVERBOSE).Infof("Segment j=%d seqid=%d dur=%f name=%s", j, seg.SeqId, seg.Duration, seg.URI)
+		mean += seg.Duration
+	}
+	mean /= float64(mpl.Count())
+	for j = 0; j < mpl.Count(); j++ {
+		seg := mpl.Segments[j]
+		if seg == nil {
+			// something wrong
+			break
+		}
+		// glog.V(model.VVERBOSE).Infof("Segment j=%d seqid=%d dur=%f name=%s", j, seg.SeqId, seg.Duration, seg.URI)
+		sd += math.Pow(seg.Duration-mean, 2)
+	}
+	sd = math.Sqrt(sd / float64(mpl.Count()))
+	glog.V(model.VVERBOSE).Infof("SD=%f uri=%s", sd, uri)
+	out <- &plPullRes{pl: mpl, i: i, firstSegmentParseError: verr, standardDeviation: sd}
 	return mpl, nil
 }
 
@@ -734,5 +766,5 @@ func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 func isFatalError(err error) bool {
 	// return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF) || err == ErrNoAudioInStream
 	return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || err == ErrNoAudioInStream ||
-		err == ErrBigTimeDifference || err == ErrNoMatchingSegments
+		err == ErrBigTimeDifference || err == ErrNoMatchingSegments || errors.Is(err, ErrTooBigDurationsDeviation)
 }
