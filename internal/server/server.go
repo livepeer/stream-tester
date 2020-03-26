@@ -14,6 +14,9 @@ import (
 	// pprof adds handlers to default mux via `init()`
 	"net/http/pprof"
 
+	"contrib.go.opencensus.io/exporter/prometheus"
+	rprom "github.com/prometheus/client_golang/prometheus"
+
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	mistapi "github.com/livepeer/stream-tester/apis/mist"
@@ -69,11 +72,29 @@ func (ss *StreamerServer) webServerHandlers(bindAddr string) *http.ServeMux {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.Handle("/metrics", ss.initPrometheusExporter())
 
 	mux.HandleFunc("/start_streams", ss.handleStartStreams)
 	mux.HandleFunc("/stats", ss.handleStats)
 	mux.HandleFunc("/stop", ss.handleStop)
 	return mux
+}
+
+func (ss *StreamerServer) initPrometheusExporter() *prometheus.Exporter {
+
+	registry := rprom.NewRegistry()
+	registry.MustRegister(rprom.NewProcessCollector(rprom.ProcessCollectorOpts{}))
+	registry.MustRegister(rprom.NewGoCollector())
+
+	pe, err := prometheus.NewExporter(prometheus.Options{
+		Namespace: "streamtester",
+		Registry:  registry,
+	})
+	if err != nil {
+		glog.Fatalf("Failed to create the Prometheus stats exporter: %v", err)
+	}
+
+	return pe
 }
 
 // Stop currently running streams
