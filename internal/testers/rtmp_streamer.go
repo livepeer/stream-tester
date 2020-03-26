@@ -1,6 +1,7 @@
 package testers
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"time"
@@ -22,13 +23,14 @@ var segLen = 2 * time.Second
 
 // rtmpStreamer streams one video file to RTMP server
 type rtmpStreamer struct {
+	ctx             context.Context
+	cancel          context.CancelFunc
 	baseManifestID  string
 	ingestURL       string
 	counter         *segmentsCounter
 	skippedSegments int
 	connectionLost  bool
 	active          bool
-	done            chan struct{}
 	file            av.DemuxCloser
 	wowzaMode       bool
 	segmentsMatcher *segmentsMatcher
@@ -37,9 +39,12 @@ type rtmpStreamer struct {
 }
 
 // source is local file name for now
-func newRtmpStreamer(ingestURL, source, baseManifestID string, sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, done chan struct{}, wowzaMode bool, sm *segmentsMatcher) *rtmpStreamer {
+func newRtmpStreamer(ctx context.Context, cancel context.CancelFunc, ingestURL, source, baseManifestID string,
+	sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, wowzaMode bool, sm *segmentsMatcher) *rtmpStreamer {
+
 	return &rtmpStreamer{
-		done:            done,
+		ctx:             ctx,
+		cancel:          cancel,
 		wowzaMode:       wowzaMode,
 		ingestURL:       ingestURL,
 		counter:         newSegmentsCounter(segLen, bar, false, sentTimesMap),
@@ -216,7 +221,7 @@ outloop:
 		packetIdx := 0
 		for {
 			select {
-			case <-rs.done:
+			case <-rs.ctx.Done():
 				glog.Infof("=========>>>> got stop singal")
 				// rs.file.Close()
 				// conn.Close()
@@ -321,9 +326,5 @@ outloop:
 }
 
 func (rs *rtmpStreamer) closeDone() {
-	select {
-	case <-rs.done:
-	default:
-		close(rs.done)
-	}
+	rs.cancel()
 }

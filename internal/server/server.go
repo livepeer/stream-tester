@@ -223,6 +223,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	glog.Infof("Get request: %+v", ssr)
+	ctx, cancel := context.WithCancel(context.Background())
 	if !ssr.DoNotClearStats || ss.streamer == nil {
 		if ssr.HTTPIngest {
 			var lapi *livepeer.API
@@ -232,14 +233,14 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 				lapi = livepeer.NewLivepeer(ss.lapiToken, livepeer.ACServer, presetsParts) // hardcode AC server for now
 				lapi.Init()
 			}
-			ss.streamer = testers.NewHTTPLoadTester(lapi, 0)
+			ss.streamer = testers.NewHTTPLoadTester(ctx, cancel, lapi, 0)
 		} else {
 			var mapi *mistapi.API
 			if ssr.Mist {
 				mapi = mistapi.NewMist(ssr.Host, ss.mistCreds[0], ss.mistCreds[1], ss.lapiToken)
 				mapi.Login()
 			}
-			ss.streamer = testers.NewStreamer(ss.wowzaMode, ssr.Mist, mapi, nil)
+			ss.streamer = testers.NewStreamer(ctx, cancel, ss.wowzaMode, ssr.Mist, mapi, nil)
 		}
 	}
 	var streamDuration time.Duration

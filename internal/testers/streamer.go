@@ -30,11 +30,12 @@ func init() {
 // reads back source and transcoded segments and count them
 // and calculates success rate from these numbers
 type streamer struct {
+	ctx                 context.Context
+	cancel              context.CancelFunc
 	uploaders           []*rtmpStreamer
 	downloaders         []*m3utester
 	totalSegmentsToSend int
 	stopSignal          bool
-	eof                 chan struct{}
 	wowzaMode           bool
 	mistMode            bool
 	mapi                *mist.API
@@ -43,12 +44,19 @@ type streamer struct {
 }
 
 // NewStreamer returns new streamer
-func NewStreamer(wowzaMode, mistMode bool, mapi *mist.API, lapi *livepeer.API) model.Streamer {
-	return &streamer{eof: make(chan struct{}), wowzaMode: wowzaMode, mistMode: mistMode, mapi: mapi, lapi: lapi}
+func NewStreamer(ctx context.Context, cancel context.CancelFunc, wowzaMode, mistMode bool, mapi *mist.API, lapi *livepeer.API) model.Streamer {
+	return &streamer{
+		ctx:       ctx,
+		cancel:    cancel,
+		wowzaMode: wowzaMode,
+		mistMode:  mistMode,
+		mapi:      mapi,
+		lapi:      lapi,
+	}
 }
 
 func (sr *streamer) Done() <-chan struct{} {
-	return sr.eof
+	return sr.ctx.Done()
 }
 
 func (sr *streamer) Cancel() {
@@ -59,7 +67,7 @@ func (sr *streamer) Cancel() {
 		}
 		sr.createdMistStreams = nil
 	}
-	close(sr.eof)
+	sr.cancel()
 }
 
 func (sr *streamer) Stop() {
@@ -126,7 +134,7 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 		// messenger.SendMessage(sr.AnalyzeFormatted(true))
 		// fmt.Printf(sr.AnalyzeFormatted(false))
 		if !notFinal {
-			close(sr.eof)
+			sr.cancel()
 		}
 	}()
 	return baseManfistID, nil
@@ -150,7 +158,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 		rtmpURLTemplate = "rtmp://%s:%d/live/%s"
 		mediaURLTemplate = "http://%s:%d/hls/%s/index.m3u8"
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(sr.ctx)
 
 	var wg sync.WaitGroup
 	started := make(chan interface{})
@@ -206,21 +214,21 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 				SaveNewStreams(ctx, "localhost", "10.140.19.178", "10.140.21.136")
 			}
 
-			done := make(chan struct{})
+			sctx, scancel := context.WithCancel(ctx)
 			var sentTimesMap *utils.SyncedTimesMap
 			var segmentsMatcher *segmentsMatcher
 			if measureLatency {
 				// sentTimesMap = utils.NewSyncedTimesMap()
 				segmentsMatcher = newsementsMatcher()
 			}
-			up := newRtmpStreamer(rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, done, sr.wowzaMode, segmentsMatcher)
+			up := newRtmpStreamer(sctx, scancel, rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, sr.wowzaMode, segmentsMatcher)
 			wg.Add(1)
 			go func() {
 				up.StartUpload(sourceFileName, rtmpURL, streamDuration, waitForTarget)
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)
-			down := newM3UTester(nil, done, sentTimesMap, sr.wowzaMode, sr.mistMode, false, false, saveDownloaded, segmentsMatcher, nil, "")
+			down := newM3UTester(sctx, sentTimesMap, sr.wowzaMode, sr.mistMode, false, false, saveDownloaded, segmentsMatcher, nil, "")
 			go findSkippedSegmentsNumber(up, down)
 			sr.downloaders = append(sr.downloaders, down)
 			down.Start(mediaURL)

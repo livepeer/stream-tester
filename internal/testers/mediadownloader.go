@@ -54,6 +54,8 @@ func (ds *downloadStats) formatForConsole() string {
 // mediaDownloader downloads all the segments from one media stream
 // (it constanly reloads manifest, and downloads any segments found in manifest)
 type mediaDownloader struct {
+	ctx                context.Context
+	cancel             context.CancelFunc
 	parentName         string
 	name               string // usually medial playlist relative name
 	resolution         string
@@ -81,8 +83,6 @@ type mediaDownloader struct {
 	segmentsMatcher    *segmentsMatcher
 	lastKeyFramesPTSs  sortedTimes
 	downloadedSegments []string // for debugging
-	ctx                context.Context
-	cancel             context.CancelFunc
 }
 
 func newMediaDownloader(ctx context.Context, parentName, name, u, resolution string, sentTimesMap *utils.SyncedTimesMap, wowzaMode, picartoMode, save bool, frc chan *fullDownloadResult,

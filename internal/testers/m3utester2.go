@@ -2,6 +2,7 @@ package testers
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -38,7 +39,8 @@ type (
 	resolution string
 
 	finite struct {
-		done chan struct{} // signals to stop
+		ctx    context.Context
+		cancel context.CancelFunc
 	}
 	// m3utester2 tests one stream, reading all the media streams
 	m3utester2 struct {
@@ -78,14 +80,17 @@ type (
 	}
 )
 
-func newM3utester2(u string, wowzaMode, mistMode bool, done chan struct{}, waitForTarget time.Duration, sm *segmentsMatcher) *m3utester2 {
+func newM3utester2(ctx context.Context, cancel context.CancelFunc, u string, wowzaMode, mistMode bool,
+	waitForTarget time.Duration, sm *segmentsMatcher) *m3utester2 {
+
 	iu, err := url.Parse(u)
 	if err != nil {
 		glog.Fatal(err)
 	}
 	mut := &m3utester2{
 		finite: finite{
-			done: done,
+			ctx:    ctx,
+			cancel: cancel,
 		},
 		initialURL:      iu,
 		wowzaMode:       wowzaMode,
@@ -100,12 +105,13 @@ func newM3utester2(u string, wowzaMode, mistMode bool, done chan struct{}, waitF
 	return mut
 }
 
-func newM3uMediaStream(name, resolution string, u *url.URL, wowzaMode bool, done chan struct{}, masterDR chan *downloadResult, sm *segmentsMatcher,
+func newM3uMediaStream(ctx context.Context, cancel context.CancelFunc, name, resolution string, u *url.URL, wowzaMode bool, masterDR chan *downloadResult, sm *segmentsMatcher,
 	latencyResults chan *latencyResult) *m3uMediaStream {
 
 	ms := &m3uMediaStream{
 		finite: finite{
-			done: done,
+			ctx:    ctx,
+			cancel: cancel,
 		},
 		name:             name,
 		u:                u,
@@ -144,7 +150,7 @@ func (mut *m3utester2) workerLoop() {
 	var lastTimeDriftReportTime time.Time
 	for {
 		select {
-		case <-mut.done:
+		case <-mut.ctx.Done():
 			printStats()
 			return
 		case <-timer.C:
@@ -278,11 +284,7 @@ func (mut *m3utester2) workerLoop() {
 func (f *finite) fatalEnd(msg string) {
 	glog.Error(msg)
 	messenger.SendFatalMessage(msg)
-	select {
-	case <-f.done:
-	default:
-		close(f.done)
-	}
+	f.cancel()
 	// panic(msg)
 }
 
@@ -297,7 +299,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 	countTimeouts := 0
 	for {
 		select {
-		case <-mut.done:
+		case <-mut.ctx.Done():
 			return
 		default:
 		}
@@ -408,7 +410,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			}
 
 			glog.Info(pvrui)
-			stream := newM3uMediaStream(variant.URI, variant.Resolution, pvrui, mut.wowzaMode, mut.done, mut.downloadResults, mut.segmentsMatcher, mut.latencyResults)
+			stream := newM3uMediaStream(mut.ctx, mut.cancel, variant.URI, variant.Resolution, pvrui, mut.wowzaMode, mut.downloadResults, mut.segmentsMatcher, mut.latencyResults)
 			mut.streams[res] = stream
 		}
 		time.Sleep(1 * time.Second)
@@ -437,7 +439,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 
 	for {
 		select {
-		case <-ms.done:
+		case <-ms.ctx.Done():
 			return
 		case dres := <-ms.downloadResults:
 			// desc := fmt.Sprintf("== ms loop downloaded status %s res %s name %s seqNo %d len %d", dres.status, dres.resolution, dres.name, dres.seqNo, dres.bytes)
@@ -551,7 +553,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 	countTimeouts := 0
 	for {
 		select {
-		case <-ms.done:
+		case <-ms.ctx.Done():
 			return
 		case switched := <-ms.streamSwitchedTo:
 			glog.Infof(`Stream %s (%s) switched to %s (%s)`, ms.name, surl, switched.name, switched.uri.String())

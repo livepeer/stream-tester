@@ -30,8 +30,7 @@ type HTTPLoadTester struct {
 }
 
 // NewHTTPLoadTester returns new HTTPLoadTester
-func NewHTTPLoadTester(lapi *livepeer.API, skipFirst time.Duration) model.Streamer {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewHTTPLoadTester(ctx context.Context, cancel context.CancelFunc, lapi *livepeer.API, skipFirst time.Duration) model.Streamer {
 	return &HTTPLoadTester{ctx: ctx, cancel: cancel, lapi: lapi, skipFirst: skipFirst}
 }
 

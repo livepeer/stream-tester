@@ -83,7 +83,6 @@ type m3utester struct {
 	infiniteMode     bool
 	save             bool
 	startTime        time.Time
-	done             <-chan struct{} // signals to stop
 	sentTimesMap     *utils.SyncedTimesMap
 	segmentsMatcher  *segmentsMatcher
 	fullResultsCh    chan *fullDownloadResult
@@ -181,13 +180,12 @@ func (p downloadResultsBySeq) findByMySeqNo(seqNo uint64) *downloadResult {
 }
 
 // newM3UTester ...
-func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, mistMode,
+func newM3UTester(ctx context.Context, sentTimesMap *utils.SyncedTimesMap, wowzaMode, mistMode,
 	picartoMode, infiniteMode, save bool, sm *segmentsMatcher, shouldSkip [][]string, name string) *m3utester {
 
 	t := &m3utester{
 		ctx:             ctx,
 		downloads:       make(map[string]*mediaDownloader),
-		done:            done,
 		sentTimesMap:    sentTimesMap,
 		wowzaMode:       wowzaMode,
 		mistMode:        mistMode,
@@ -201,20 +199,9 @@ func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils
 		downSegs:        make(map[string]map[string]*fullDownloadResult),
 		// downloadResults: make(map[string]*fullDownloadResults),
 	}
-	if ctx == nil {
-		t.ctx = context.Background()
-		// temp hack
-		go func() {
-			<-done
-			t.cancel()
-		}()
-	}
-	if t.ctx != nil {
-		ct, cancel := context.WithCancel(ctx)
-		t.ctx = ct
-		t.done = ct.Done()
-		t.cancel = cancel
-	}
+	ct, cancel := context.WithCancel(ctx)
+	t.ctx = ct
+	t.cancel = cancel
 	if save {
 		t.savePlayList = m3u8.NewMasterPlaylist()
 	}
@@ -651,7 +638,7 @@ func (mt *m3utester) workerLoop() {
 	lastVideoParseErrorSent := make(map[string]time.Time)
 	for {
 		select {
-		case <-mt.done:
+		case <-mt.ctx.Done():
 			return
 		case <-c.C:
 			if len(mt.downloadsKeys) == 0 {
@@ -765,7 +752,7 @@ func (mt *m3utester) downloadLoop() {
 
 	for {
 		select {
-		case <-mt.done:
+		case <-mt.ctx.Done():
 			return
 		default:
 		}

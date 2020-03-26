@@ -188,7 +188,7 @@ func main() {
 	if *mediaURL != "" && *rtmpURL == "" {
 		msg := fmt.Sprintf(`Starting infinite pull from %s`, *mediaURL)
 		messenger.SendMessage(msg)
-		sr2 := testers.NewStreamer2(*wowza, *mist)
+		sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
 		sr2.StartPulling(*mediaURL)
 		return
 	}
@@ -198,7 +198,7 @@ func main() {
 		}
 		msg := fmt.Sprintf(`Starting infinite stream to %s`, *mediaURL)
 		messenger.SendMessage(msg)
-		sr2 := testers.NewStreamer2(*wowza, *mist)
+		sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
 		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, waitForDur)
 		if *wowza {
 			// let Wowza remove session
@@ -273,9 +273,9 @@ func main() {
 	defer glog.Infof("Exiting")
 	var sr model.Streamer
 	if !*httpIngest {
-		sr = testers.NewStreamer(*wowza, *mist, mapi, lapi)
+		sr = testers.NewStreamer(gctx, gcancel, *wowza, *mist, mapi, lapi)
 	} else {
-		sr = testers.NewHTTPLoadTester(lapi, *skipTime)
+		sr = testers.NewHTTPLoadTester(gctx, gcancel, lapi, *skipTime)
 	}
 	_, err = sr.StartStreams(fn, *bhost, *rtmp, mHost, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
 	if err != nil {

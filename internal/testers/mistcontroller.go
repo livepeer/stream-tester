@@ -243,7 +243,7 @@ func (mc *MistController) mainLoop() error {
 					// userName = "Aciel"
 					// userName = "HoneyFoxArt"
 					// userName = "Ana"
-					userName = "FearDaKez"
+					// userName = "FearDaKez"
 					if _, has := failedStreams.Get(userName); has {
 						continue
 					}
@@ -393,7 +393,7 @@ func (mc *MistController) startOneStream(streamName string, resp chan *startRes)
 		return
 	}
 
-	mt := newM3UTester(mc.ctx, mc.ctx.Done(), nil, false, true, true, false, mc.save, nil, shouldSkip, streamName)
+	mt := newM3UTester(mc.ctx, nil, false, true, true, false, mc.save, nil, shouldSkip, streamName)
 	// mc.downloaders[userName] = mt
 	mt.Start(uri)
 	messenger.SendMessage(fmt.Sprintf("Started stream %s", mc.makeExternalURL(uri)))
