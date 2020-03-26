@@ -5,6 +5,7 @@ package messenger
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"encoding/json"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/patrickmn/go-cache"
@@ -95,8 +97,57 @@ type discordField struct {
 	Inline bool   `json:"inline,omitempty"`
 }
 
+var bot *discordgo.Session
+
+// This function will be called (due to AddHandler above) every time a new
+// message is created on any channel that the autenticated bot has access to.
+func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+
+	// Ignore all messages created by the bot itself
+	// This isn't required in this specific example but it's a good practice.
+	if m.Author.ID == s.State.User.ID {
+		return
+	}
+	glog.Infof("got message %+m", m)
+	// If the message is "ping" reply with "Pong!"
+	if m.Content == "ping" {
+		s.ChannelMessageSend(m.ChannelID, "Pong!")
+	}
+
+	// If the message is "pong" reply with "Ping!"
+	if m.Content == "pong" {
+		s.ChannelMessageSend(m.ChannelID, "Ping!")
+	}
+}
+
+func startBot(ctx context.Context) {
+	var err error
+	bot, err = discordgo.New("Bot " + "Njg3NDgyOTg4MDMxOTAxNzA2.XnxCpQ.tiPbxkbcypQM2RtgSxd7xCXuTcs")
+	if err != nil {
+		panic(err)
+	}
+	// Register the messageCreate func as a callback for MessageCreate events.
+	bot.AddHandler(messageCreate)
+	// Open a websocket connection to Discord and begin listening.
+	err = bot.Open()
+	if err != nil {
+		glog.Errorf("Error opening connection to Discord,", err)
+		return
+	}
+	glog.Infoln("Bot is now running.")
+
+	// wait for the global exit
+	<-ctx.Done()
+
+	// Cleanly close down the Discord session.
+	bot.Close()
+}
+
 // Init ...
-func Init(WebhookURL, UserName, UsersToNotify string) {
+func Init(ctx context.Context, WebhookURL, UserName, UsersToNotify string) {
+	// not tested yet
+	// go startBot(ctx)
+
 	webhookURL = WebhookURL
 	userName = UserName
 	usersToNotify = UsersToNotify

@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go/storage v1.4.0
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
 	github.com/Azure/azure-storage-blob-go v0.8.0
+	github.com/bwmarrin/discordgo v0.20.2
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1

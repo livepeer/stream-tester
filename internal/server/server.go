@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -54,12 +55,18 @@ func NewStreamerServer(wowzaMode bool, lapiToken, mistCreds string) *StreamerSer
 
 // StartWebServer starts web server
 // blocks until exit
-func (ss *StreamerServer) StartWebServer(bindAddr string) {
+func (ss *StreamerServer) StartWebServer(ctx context.Context, bindAddr string) {
 	mux := ss.webServerHandlers(bindAddr)
 	srv := &http.Server{
 		Addr:    bindAddr,
 		Handler: mux,
 	}
+	go func() {
+		<-ctx.Done()
+		c, _ := context.WithTimeout(context.Background(), time.Second)
+		glog.Infof("Shuttind down web server")
+		srv.Shutdown(c)
+	}()
 
 	glog.Info("Web server listening on ", bindAddr)
 	srv.ListenAndServe()

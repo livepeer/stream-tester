@@ -3,12 +3,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/peterbourgon/ff"
@@ -103,7 +105,9 @@ func main() {
 	if *latencyThreshold > 0 {
 		*latency = true
 	}
-	messenger.Init(*discordURL, *discordUserName, *discordUsersToNotify)
+	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
+	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify)
+
 	testers.Bucket = *gsBucket
 	testers.CredsJSON = *gsKey
 	if err := testers.AzureInit(*azureStorageAccount, *azureAccessKey, *azureContainer); err != nil {
@@ -121,8 +125,15 @@ func main() {
 	}
 	var lapi *livepeer.API
 	if *fServer {
+		exitc := make(chan os.Signal, 1)
+		signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+		go func() {
+			<-exitc
+			fmt.Println("Got Ctrl-C, cancelling")
+			gcancel()
+		}()
 		s := server.NewStreamerServer(*wowza, *apiToken, *mistCreds)
-		s.StartWebServer(*serverAddr)
+		s.StartWebServer(gctx, *serverAddr)
 		return
 	}
 	fn := "official_test_source_2s_keys_24pfs.mp4"
@@ -286,10 +297,11 @@ func main() {
 	// }()
 	// Catch interrupt signal to shut down transcoder
 	exitc := make(chan os.Signal, 1)
-	signal.Notify(exitc, os.Interrupt, os.Kill)
+	signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	go func() {
 		<-exitc
 		fmt.Println("Got Ctrl-C, cancelling")
+		gcancel()
 		sr.Cancel()
 	}()
 	glog.Infof("Waiting for test to complete")
@@ -315,7 +327,7 @@ func main() {
 	}
 	if *noExit {
 		s := server.NewStreamerServer(*wowza, "", "")
-		s.StartWebServer(*serverAddr)
+		s.StartWebServer(gctx, *serverAddr)
 	}
 	// messenger.SendMessage(sr.AnalyzeFormatted(true))
 }
