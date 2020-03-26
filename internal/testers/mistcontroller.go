@@ -237,6 +237,13 @@ func (mc *MistController) mainLoop() error {
 					// userName = "MiiNiiRU"
 					// userName = "drawdle"
 					// userName = "unwulfd"
+					// userName = "Mangopoptart"
+					// userName = "SNOWDON"
+					// userName = "hasnogame"
+					// userName = "Aciel"
+					// userName = "HoneyFoxArt"
+					// userName = "Ana"
+					userName = "FearDaKez"
 					if _, has := failedStreams.Get(userName); has {
 						continue
 					}
@@ -519,6 +526,9 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 		if mpullres[i].err != nil {
 			return uri, nil, nil, mpullres[i].err
 		}
+		if mc.sdCutOff > 0.0 && mpullres[i].standardDeviation > mc.sdCutOff {
+			return uri, nil, fmt.Errorf("%w: standard deviation is %f, threshold is %f", ErrTooBigDurationsDeviation, mpullres[i].standardDeviation, mc.sdCutOff), nil
+		}
 	}
 	if mpullres[0].firstSegmentParseError != nil {
 		return uri, nil, mpullres[0].firstSegmentParseError, nil
@@ -529,9 +539,6 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 	if absDiff(sourceTime, transTime) > 10*60*1000 { // 10 min
 		// panic(fmt.Errorf("Diffeerence is %d", absDiff(sourceTime, transTime)))
 		return uri, nil, ErrBigTimeDifference, nil
-	}
-	if mc.sdCutOff > 0.0 && mpullres[0].standardDeviation > mc.sdCutOff {
-		return uri, nil, fmt.Errorf("%w: standard deviation is %f, threshold is %f", ErrTooBigDurationsDeviation, mpullres[0].standardDeviation, mc.sdCutOff), nil
 	}
 
 	// find first transcoded segment time
