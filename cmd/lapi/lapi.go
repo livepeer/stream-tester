@@ -80,10 +80,29 @@ func main() {
 		},
 	}
 
+	ls := &ffcli.Command{
+		Name:       "ls",
+		ShortUsage: "lapi ls",
+		ShortHelp:  "Lists available broadcasters.",
+		Exec: func(_ context.Context, args []string) error {
+			if *token == "" {
+				return fmt.Errorf("Token should be provided")
+			}
+			lapi := livepeer.NewLivepeer(*token, livepeer.ACServer, nil) // hardcode AC server for now
+			lapi.Init()
+			bs, err := lapi.Broadcasters()
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Got broadcasters:\n%s\n", strings.Join(bs, "\n"))
+			return nil
+		},
+	}
+
 	root := &ffcli.Command{
 		ShortUsage:  "lapi [flags] <subcommand>",
 		FlagSet:     rootFlagSet,
-		Subcommands: []*ffcli.Command{create, transcode},
+		Subcommands: []*ffcli.Command{create, transcode, ls},
 	}
 
 	// if err := root.ParseAndRun(context.Background(), os.Args[1:]); err != nil {
@@ -138,7 +157,7 @@ func transcodeSegment(token, presets, name string) error {
 	fn := strings.TrimSuffix(f, ext)
 	fmt.Printf("base : %s d: %s f: %s ext: %s fn: %s\n", base, d, f, ext, fn)
 	burl := bs[0]
-	burl = "http://localhost:8935"
+	// burl = "http://localhost:8935"
 	data, err := ioutil.ReadFile(name)
 	if err != nil {
 		return err
