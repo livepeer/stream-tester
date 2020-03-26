@@ -69,6 +69,7 @@ type downStats2 struct {
 
 // m3utester tests one stream, reading all the media streams
 type m3utester struct {
+	ctx              context.Context
 	initialURL       *url.URL
 	name             string
 	downloads        map[string]*mediaDownloader
@@ -184,6 +185,7 @@ func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils
 	picartoMode, infiniteMode, save bool, sm *segmentsMatcher, shouldSkip [][]string, name string) *m3utester {
 
 	t := &m3utester{
+		ctx:             ctx,
 		downloads:       make(map[string]*mediaDownloader),
 		done:            done,
 		sentTimesMap:    sentTimesMap,
@@ -199,8 +201,17 @@ func newM3UTester(ctx context.Context, done <-chan struct{}, sentTimesMap *utils
 		downSegs:        make(map[string]map[string]*fullDownloadResult),
 		// downloadResults: make(map[string]*fullDownloadResults),
 	}
-	if ctx != nil {
+	if ctx == nil {
+		t.ctx = context.Background()
+		// temp hack
+		go func() {
+			<-done
+			t.cancel()
+		}()
+	}
+	if t.ctx != nil {
 		ct, cancel := context.WithCancel(ctx)
+		t.ctx = ct
 		t.done = ct.Done()
 		t.cancel = cancel
 	}
@@ -742,6 +753,10 @@ func (mt *m3utester) downloadLoop() {
 	// loops := 0
 	// var gotPlaylistWaitingForEnd bool
 	var gotPlaylist bool
+	period := 2 * time.Second
+	if mt.picartoMode {
+		period = 30 * time.Second
+	}
 	if mt.infiniteMode {
 		glog.Infof("Waiting for playlist %s", surl)
 	}
@@ -816,8 +831,9 @@ func (mt *m3utester) downloadLoop() {
 					gotPlaylist = true
 				}
 			}
-			// if len(mpl.Variants) > 1 && !gotPlaylistWaitingForEnd {
+			// if len(mpl.Variants) > 1 && !gotPlaylistWaitingForEnd
 			// gotPlaylistWaitingForEnd = true
+			currentURLs := make(map[string]bool)
 			for i, variant := range mpl.Variants {
 				// glog.Infof("Variant URI: %s", variant.URI)
 				if mt.wowzaMode {
@@ -845,6 +861,7 @@ func (mt *m3utester) downloadLoop() {
 				}
 				// glog.Info(pvrui)
 				mediaURL := pvrui.String()
+				currentURLs[mediaURL] = true
 				// Wowza changes media manifests on each fetch, so indentifying streams by
 				// bandwitdh and
 				// variantID := strconv.Itoa(variant.Bandwidth) + variant.Resolution
@@ -855,7 +872,7 @@ func (mt *m3utester) downloadLoop() {
 					if len(mt.shouldSkip) > i {
 						shouldSkip = mt.shouldSkip[i]
 					}
-					md := newMediaDownloader(mt.name, variant.URI, mediaURL, variant.Resolution, mt.done, mt.sentTimesMap, mt.wowzaMode, mt.picartoMode, mt.save,
+					md := newMediaDownloader(mt.ctx, mt.name, variant.URI, mediaURL, variant.Resolution, mt.sentTimesMap, mt.wowzaMode, mt.picartoMode, mt.save,
 						mt.fullResultsCh, mt.saveDirName, mt.segmentsMatcher, shouldSkip)
 					mt.downloads[mediaURL] = md
 					// md.source = strings.Contains(mediaURL, "source")
@@ -874,15 +891,35 @@ func (mt *m3utester) downloadLoop() {
 				}
 				mt.mu.Unlock()
 			}
+			mt.mu.Lock()
+			var toRemove []string
+			for _, u := range mt.downloadsKeys {
+				if _, has := currentURLs[u]; !has {
+					md := mt.downloads[u]
+					glog.Infof("Stream url=%s no longer in master playlist, removing from downloads", u)
+					toRemove = append(toRemove, u)
+					md.stop()
+				}
+			}
+			if len(toRemove) > 0 {
+				ok := mt.downloadsKeys
+				mt.downloadsKeys = make([]string, 0, len(mt.downloadsKeys))
+				for _, k := range ok {
+					if !utils.StringsSliceContains(toRemove, k) {
+						mt.downloadsKeys = append(mt.downloadsKeys, k)
+					}
+				}
+			}
+			mt.mu.Unlock()
 			// glog.Infof("Processed playlist with %d variant, not checking anymore", len(mpl.Variants))
 			// return
 		}
 		if mt.picartoMode && !stopAfterMediaStreamsDrop {
-			return
+			// return
 		}
 		// }
 		// glog.Info(string(b))
-		time.Sleep(2 * time.Second)
+		time.Sleep(period)
 		/*
 			loops++
 			if loops%2 == 0 {

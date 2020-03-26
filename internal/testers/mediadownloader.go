@@ -2,6 +2,7 @@ package testers
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -63,8 +64,7 @@ type mediaDownloader struct {
 	mu                 sync.Mutex
 	firstSegmentParsed bool
 	firstSegmentTime   time.Duration
-	firstSegmentTimes  sortedTimes     // PTSs of first segments
-	done               <-chan struct{} // signals to stop
+	firstSegmentTimes  sortedTimes // PTSs of first segments
 	sentTimesMap       *utils.SyncedTimesMap
 	latencies          []time.Duration // latencies stored as segments get downloaded
 	latenciesPerStream []time.Duration // here index is seqNo, so if segment is failed download then value will be zero
@@ -81,9 +81,11 @@ type mediaDownloader struct {
 	segmentsMatcher    *segmentsMatcher
 	lastKeyFramesPTSs  sortedTimes
 	downloadedSegments []string // for debugging
+	ctx                context.Context
+	cancel             context.CancelFunc
 }
 
-func newMediaDownloader(parentName, name, u, resolution string, done <-chan struct{}, sentTimesMap *utils.SyncedTimesMap, wowzaMode, picartoMode, save bool, frc chan *fullDownloadResult,
+func newMediaDownloader(ctx context.Context, parentName, name, u, resolution string, sentTimesMap *utils.SyncedTimesMap, wowzaMode, picartoMode, save bool, frc chan *fullDownloadResult,
 	baseSaveDir string, sm *segmentsMatcher, shouldSkip []string) *mediaDownloader {
 	pu, err := url.Parse(u)
 	if err != nil {
@@ -102,13 +104,13 @@ func newMediaDownloader(parentName, name, u, resolution string, done <-chan stru
 			errors:     make(map[string]int),
 			resolution: resolution,
 		},
-		done:               done,
 		sentTimesMap:       sentTimesMap,
 		wowzaMode:          wowzaMode,
 		picartoMode:        picartoMode,
 		saveSegmentsToDisk: save,
 		fullResultsCh:      frc,
 	}
+	md.ctx, md.cancel = context.WithCancel(ctx)
 	if save {
 		mpl, err := m3u8.NewMediaPlaylist(10000, 10000)
 		mpl.MediaType = m3u8.VOD
@@ -153,6 +155,10 @@ func newMediaDownloader(parentName, name, u, resolution string, done <-chan stru
 	go md.downloadLoop()
 	go md.workerLoop()
 	return md
+}
+
+func (md *mediaDownloader) stop() {
+	md.cancel()
 }
 
 func (md *mediaDownloader) statsFormatted() string {
@@ -370,7 +376,7 @@ func (md *mediaDownloader) workerLoop() {
 	resultsCahn := make(chan downloadResult, 32) // http status or excpetion
 	for {
 		select {
-		case <-md.done:
+		case <-md.ctx.Done():
 			return
 		case res := <-resultsCahn:
 			md.mu.Lock()
@@ -410,7 +416,7 @@ func (md *mediaDownloader) downloadLoop() {
 	seen := newStringRing(128 * 1024)
 	for {
 		select {
-		case <-md.done:
+		case <-md.ctx.Done():
 			return
 		default:
 		}
