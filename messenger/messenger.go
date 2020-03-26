@@ -122,7 +122,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func startBot(ctx context.Context) {
 	var err error
-	bot, err = discordgo.New("Bot " + "Njg3NDgyOTg4MDMxOTAxNzA2.XnxCpQ.tiPbxkbcypQM2RtgSxd7xCXuTcs")
+	bot, err = discordgo.New("Bot " + "token here")
 	if err != nil {
 		panic(err)
 	}
