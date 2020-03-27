@@ -82,6 +82,8 @@ func main() {
 	picartoStatsInterval := flag.Duration("picarto-stats-interval", 0, "Interval between stats messages sent to Discord")
 	picartoSDCutOff := flag.Float64("picarto-standad-deviation-cutoff", 0.0, "Do not start streams that have standard deviation of segments durations more than that")
 	delayStart := flag.Duration("delay-start", 0, "Delay start")
+	botToken := flag.String("bot-token", "", "Discord's bot token")
+	channelID := flag.String("channel-id", "", "Discord's channel id")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -106,7 +108,7 @@ func main() {
 		*latency = true
 	}
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
-	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify)
+	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, *botToken, *channelID, *apiToken)
 
 	testers.Bucket = *gsBucket
 	testers.CredsJSON = *gsKey
@@ -134,6 +136,7 @@ func main() {
 		}()
 		s := server.NewStreamerServer(*wowza, *apiToken, *mistCreds)
 		s.StartWebServer(gctx, *serverAddr)
+		time.Sleep(2 * time.Second)
 		return
 	}
 	fn := "official_test_source_2s_keys_24pfs.mp4"
@@ -303,6 +306,7 @@ func main() {
 		fmt.Println("Got Ctrl-C, cancelling")
 		gcancel()
 		sr.Cancel()
+		time.Sleep(2 * time.Second)
 	}()
 	glog.Infof("Waiting for test to complete")
 	<-sr.Done()

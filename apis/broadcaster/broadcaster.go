@@ -43,16 +43,19 @@ type (
 func Status(uri string) (*StatusResp, error) {
 	resp, err := httpClient.Do(uhttp.GetRequest(uri))
 	if err != nil {
-		glog.Fatalf("Error getting status  (%s) error: %v", uri, err)
+		glog.Errorf("Error getting status  (%s) error: %v", uri, err)
+		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
-		glog.Fatalf("Status error contacting Broadcaster (%s) status %d body: %s", uri, resp.StatusCode, string(b))
+		glog.Errorf("Status error contacting Broadcaster (%s) status %d body: %s", uri, resp.StatusCode, string(b))
+		return nil, err
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.Fatalf("Error getting status (%s) error: %v", uri, err)
+		glog.Errorf("Error getting status (%s) error: %v", uri, err)
+		return nil, err
 	}
 	glog.Info(string(b))
 	st := &StatusResp{}
