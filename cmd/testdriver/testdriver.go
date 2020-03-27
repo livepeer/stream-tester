@@ -67,7 +67,7 @@ func main() {
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
 
-	messenger.Init(context.Background(), *discordURL, *discordUserName, *discordUsersToNotify)
+	messenger.Init(context.Background(), *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
 
 	httpClient := &http.Client{
 		Timeout: 8 * time.Second,
