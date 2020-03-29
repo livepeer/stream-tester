@@ -31,7 +31,7 @@ RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$vers
 
 
 FROM alpine
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates ffmpeg
 
 WORKDIR /root
 COPY --from=builder /root/official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs.mp4
@@ -40,9 +40,9 @@ COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4
 COPY --from=builder /root/streamtester streamtester
 COPY --from=builder /root/testdriver testdriver
-COPY --from=builder /usr/lib/libavformat.so.58 /usr/lib/libavformat.so.58
-COPY --from=builder /usr/lib/libavutil.so.56 /usr/lib/libavutil.so.56
-COPY --from=builder /usr/lib/libavcodec.so.58 /usr/lib/libavcodec.so.58
+# COPY --from=builder /usr/lib/libavformat.so.58 /usr/lib/libavformat.so.58
+# COPY --from=builder /usr/lib/libavutil.so.56 /usr/lib/libavutil.so.56
+# COPY --from=builder /usr/lib/libavcodec.so.58 /usr/lib/libavcodec.so.58
 
 # docker build -t livepeer/streamtester:latest .
 # docker build -t livepeer/streamtester:latest --build-arg version=$(git describe --dirty) .
