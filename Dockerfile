@@ -26,6 +26,8 @@ RUN echo $version
 
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/streamtester/streamtester.go
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/testdriver/testdriver.go
+# RUN ls -a /usr
+# RUN find / -name libavformat.so.58
 
 
 FROM alpine
@@ -38,6 +40,9 @@ COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4
 COPY --from=builder /root/streamtester streamtester
 COPY --from=builder /root/testdriver testdriver
+COPY --from=builder /usr/lib/libavformat.so.58 /usr/lib/libavformat.so.58
+COPY --from=builder /usr/lib/libavutil.so.56 /usr/lib/libavutil.so.56
+COPY --from=builder /usr/lib/libavcodec.so.58 /usr/lib/libavcodec.so.58
 
 # docker build -t livepeer/streamtester:latest .
 # docker build -t livepeer/streamtester:latest --build-arg version=$(git describe --dirty) .
