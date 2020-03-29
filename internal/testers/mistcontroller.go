@@ -1,7 +1,6 @@
 package testers
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Necroforger/dgrouter/exrouter"
 	"github.com/golang/glog"
 	"github.com/livepeer/m3u8"
 	"github.com/livepeer/stream-tester/apis/mist"
@@ -54,14 +54,15 @@ type (
 		downloaders        map[string]*m3utester // [Picarto name]
 		ctx                context.Context
 		cancel             context.CancelFunc
+		startSignal        chan bool
+		stopSignal         chan bool
+		started            bool
 	}
 )
 
 var (
 	// ErrZeroStreams ...
 	ErrZeroStreams = errors.New("Zero streams")
-	// ErrStreamOpenFailed ...
-	ErrStreamOpenFailed = errors.New("Stream open failed")
 	// ErrNoAudioInStream ...
 	ErrNoAudioInStream = errors.New("No audio in stream")
 	// ErrBigTimeDifference ...
@@ -109,16 +110,48 @@ func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gami
 		downloaders:        make(map[string]*m3utester),
 		ctx:                ctx,
 		cancel:             cancel,
+		startSignal:        make(chan bool),
+		stopSignal:         make(chan bool),
 	}
 }
 
 // Start blocks forever. Returns error if can't start
 func (mc *MistController) Start() error {
-	err := mc.mainLoop()
+	bc := messenger.AddBotCommand("picarto", mc.botCommand)
+	if bc != nil {
+		bc.Desc("num gets/sets number of streams")
+	}
+	ec := make(chan error)
+	go mc.mainLoop(ec)
+	err := <-ec
 	return err
 }
 
-func (mc *MistController) mainLoop() error {
+func (mc *MistController) mainLoop(ec chan error) error {
+	go mc.workLoop(ec, true)
+	mc.started = true
+	for {
+		select {
+		case <-mc.stopSignal:
+			if mc.started {
+				mc.cancel()
+				mc.started = false
+			}
+		case <-mc.startSignal:
+			if !mc.started {
+				ctx, cancel := context.WithCancel(context.Background())
+				mc.ctx = ctx
+				mc.cancel = cancel
+				go mc.workLoop(ec, false)
+				mc.started = true
+			}
+		}
+	}
+}
+
+func (mc *MistController) workLoop(ec chan error, firstTime bool) error {
+	emsg := fmt.Sprintf("Starting **%d** Picarto streams (ver %s)", mc.streamsNum, model.Version)
+	messenger.SendMessage(emsg)
 	started := time.Now()
 	var streamsNoSegmentsAnymore []string
 	failedStreams := cache.New(5*time.Minute, 8*time.Minute)
@@ -146,10 +179,13 @@ func (mc *MistController) mainLoop() error {
 	// var lastTimeStatsShown time.Time
 	activityCheck := time.NewTicker(100 * time.Millisecond)
 	statsCheck := time.NewTicker(mc.statsInterval)
-	firstTime := true
+	// firstTime := true
 	sRes := make(chan *startRes, 32)
 	for {
 		select {
+		case <-mc.ctx.Done():
+			glog.Infof("====>>> returning from worker loop")
+			return nil
 		case sr := <-sRes:
 			if !sr.finished {
 				if sr.err != nil {
@@ -207,6 +243,7 @@ func (mc *MistController) mainLoop() error {
 				ps, err := picarto.GetOnlineUsers(picartoCountry, mc.adult, mc.gaming)
 				if err != nil {
 					if firstTime {
+						ec <- err
 						return err
 					}
 					continue
@@ -348,6 +385,34 @@ func (mc *MistController) mainLoop() error {
 	}
 }
 
+func (mc *MistController) botCommand(ctx *exrouter.Context) {
+	ctx.Reply("picarto called with arguments:\n", strings.Join(ctx.Args, ";"))
+	if len(ctx.Args) == 1 {
+		ctx.Reply(fmt.Sprintf("Pulling %d streams", mc.streamsNum))
+		return
+	}
+	switch ctx.Args[1] {
+	case "help":
+		ctx.Reply("**num** [value] gets/sets number of stream\n**stop** stops pulling\n**start** starts pulling")
+	case "stop":
+		mc.stopSignal <- true
+		ctx.Reply("Stopped pulling streams")
+	case "start":
+		ctx.Reply("Starting pulling streams")
+		mc.startSignal <- true
+	case "num":
+		if len(ctx.Args) == 2 {
+			ctx.Reply(fmt.Sprintf("Pulling %d streams", mc.streamsNum))
+		} else if len(ctx.Args) > 2 {
+			nn, _ := strconv.Atoi(ctx.Args[2])
+			if nn > 0 {
+				mc.streamsNum = nn
+				ctx.Reply(fmt.Sprintf("Number of streams set to %d", mc.streamsNum))
+			}
+		}
+	}
+}
+
 type startRes struct {
 	name     string
 	finished bool
@@ -362,6 +427,11 @@ func (mc *MistController) startOneStream(streamName string, resp chan *startRes)
 	var uri string
 	var shouldSkip [][]string
 	for try := 0; try < 12; try++ {
+		select {
+		case <-mc.ctx.Done():
+			return
+		default:
+		}
 		uri, shouldSkip, err, mediaErr = mc.startStream(streamName)
 		if err == nil && mediaErr == nil {
 			break
@@ -498,6 +568,11 @@ func (mc *MistController) startStream(userName string) (string, [][]string, erro
 	var err error
 	var mediaURIs []string
 	for {
+		select {
+		case <-mc.ctx.Done():
+			return "", nil, fmt.Errorf("stopped"), nil
+		default:
+		}
 		mediaURIs, err = mc.pullFirstTime(uri)
 		if err != nil {
 			if isFatalError(err, try) {
@@ -610,38 +685,10 @@ func timedout(e error) bool {
 }
 
 func (mc *MistController) pullFirstTime(uri string) ([]string, error) {
-	resp, err := mhttpClient.Do(uhttp.GetRequest(uri))
+	mpl, err := utils.DownloadMasterPlaylist(uri)
 	if err != nil {
-		to := timedout(err)
-		glog.Infof("===== get error (timed out: %v eof: %v) getting master playlist %s: %v", to, errors.Is(err, io.EOF), uri, err)
 		return nil, err
 	}
-	b, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		glog.Infof("===== error getting master playlist body uri=%s err=%v", uri, err)
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("===== status error getting master playlist %s: %v (%s) body: %s", uri, resp.StatusCode, resp.Status, string(b))
-		return nil, err
-	}
-	if strings.Contains(string(b), "Stream open failed") {
-		glog.Errorf("Master playlist stream open failed uri=%s", uri)
-		return nil, ErrStreamOpenFailed
-	}
-	mpl := m3u8.NewMasterPlaylist()
-	// err = mpl.DecodeFrom(resp.Body, true)
-	err = mpl.Decode(*bytes.NewBuffer(b), true)
-	// resp.Body.Close()
-	if err != nil {
-		glog.Infof("===== error getting master playlist uri=%s err=%v", uri, err)
-		return nil, err
-	}
-	glog.V(model.VVERBOSE).Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), uri)
-	glog.V(model.VVERBOSE).Info(mpl)
-	// glog.Infof("Got master playlist with %d variants (%s):", len(mpl.Variants), uri)
-	// glog.Info(mpl)
 	if len(mpl.Variants) < 1 {
 		glog.Infof("Playlist for uri=%s has streams=%d", uri, len(mpl.Variants))
 		return nil, ErrZeroStreams
@@ -784,6 +831,6 @@ func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
 func isFatalError(err error, try int) bool {
 	// return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF) || err == ErrNoAudioInStream
-	return err == ErrZeroStreams || err == ErrStreamOpenFailed || (timedout(err) && try > 3) || err == ErrNoAudioInStream ||
+	return err == ErrZeroStreams || err == utils.ErrStreamOpenFailed || (timedout(err) && try > 3) || err == ErrNoAudioInStream ||
 		err == ErrBigTimeDifference || err == ErrNoMatchingSegments || errors.Is(err, ErrTooBigDurationsDeviation)
 }

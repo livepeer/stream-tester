@@ -1,6 +1,6 @@
 FROM golang:1-alpine as builder
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git pkgconfig ffmpeg-dev build-base
 
 WORKDIR /root
 RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs.mp4
@@ -8,7 +8,7 @@ RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_sour
 RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_t02.mp4
 RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_2min.mp4
 
-ENV GOFLAGS "-mod=readonly"
+# ENV GOFLAGS "-mod=readonly"
 ARG version
 
 COPY go.mod go.mod
