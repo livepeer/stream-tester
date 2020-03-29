@@ -174,8 +174,8 @@ func (bot *discordBot) setupRouter() *exrouter.Route {
 			})
 	*/
 	router.On("bstreams", bot.bstreams).Desc("Show active streams across all broadcasters available through API in AC")
-	router.On("stats", bot.stats)
-	router.On("img", bot.imgTest)
+	// router.On("stats", bot.stats)
+	// router.On("img", bot.imgTest)
 
 	router.Default = router.On("help", func(ctx *exrouter.Context) {
 		var f func(depth int, r *exrouter.Route) string
