@@ -282,7 +282,7 @@ func getBName(burl string) string {
 func (bot *discordBot) getStreams(ctx *exrouter.Context, rc chan *streamDesc, totalc chan int, withImages bool, bexturl string) {
 	binturl := burlExt2Int(bexturl)
 	glog.Infof("Ext url %s int url %s", bexturl, binturl)
-	binturl = "http://localhost"
+	// binturl = "http://localhost"
 	furl := binturl + ":7935/status"
 	st, err := broadcaster.Status(furl)
 	if err != nil {
@@ -418,7 +418,7 @@ func (bot *discordBot) bstreams(ctx *exrouter.Context) {
 	for _, bexturl := range bds {
 		binturl := burlExt2Int(bexturl)
 		glog.Infof("Ext url %s int url %s", bexturl, binturl)
-		binturl = "http://localhost"
+		// binturl = "http://localhost"
 		furl := binturl + ":7935/status"
 		st, err := broadcaster.Status(furl)
 		if err != nil {
