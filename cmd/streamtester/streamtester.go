@@ -111,6 +111,17 @@ func main() {
 	// return
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
 	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, *botToken, *channelID, *apiToken)
+	startWebServer := func() {
+		exitc := make(chan os.Signal, 1)
+		signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+		go func() {
+			<-exitc
+			fmt.Println("Got Ctrl-C, cancelling")
+			gcancel()
+		}()
+		s := server.NewStreamerServer(*wowza, *apiToken, *mistCreds)
+		s.StartWebServer(gctx, *serverAddr)
+	}
 
 	testers.Bucket = *gsBucket
 	testers.CredsJSON = *gsKey
@@ -129,15 +140,7 @@ func main() {
 	}
 	var lapi *livepeer.API
 	if *fServer {
-		exitc := make(chan os.Signal, 1)
-		signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
-		go func() {
-			<-exitc
-			fmt.Println("Got Ctrl-C, cancelling")
-			gcancel()
-		}()
-		s := server.NewStreamerServer(*wowza, *apiToken, *mistCreds)
-		s.StartWebServer(gctx, *serverAddr)
+		startWebServer()
 		time.Sleep(2 * time.Second)
 		return
 	}
@@ -176,6 +179,7 @@ func main() {
 			*picartoBlackList, *picartoExternalHost, *picartoStatsInterval, *picartoSDCutOff)
 		// emsg := fmt.Sprintf("Starting **%d** Picarto streams (ver %s)", *picartoStreams, model.Version)
 		// messenger.SendMessage(emsg)
+		go startWebServer() // needed for /metrics endpoint
 
 		err = mc.Start()
 		if err != nil {
@@ -186,6 +190,7 @@ func main() {
 		}
 		emsg := fmt.Sprintf("Picarto streaming ended")
 		messenger.SendFatalMessage(emsg)
+		gcancel()
 		time.Sleep(time.Second)
 		return
 	}
