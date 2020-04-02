@@ -3,6 +3,8 @@ package utils
 import (
 	"bytes"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
 	"time"
 
@@ -118,4 +120,11 @@ func GetVideoStartTimeDurFrames(segment []byte) (time.Duration, time.Duration, i
 		lastTime = pkt.Time
 	}
 	return firstTime, lastTime - firstTime, keyFrames, skeyframes, nil
+}
+
+// Img2Jpeg encodees img to jpeg
+func Img2Jpeg(img *image.YCbCr) []byte {
+	w := new(bytes.Buffer)
+	jpeg.Encode(w, img, nil)
+	return w.Bytes()
 }

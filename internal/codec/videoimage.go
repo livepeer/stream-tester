@@ -1,9 +1,10 @@
+// +build h264
+
 package codec
 
 import (
 	"bytes"
 	"image"
-	"image/jpeg"
 	"io"
 
 	"github.com/golang/glog"
@@ -80,13 +81,6 @@ func TSFirstImage(tsb []byte) *image.YCbCr {
 	}
 
 	return nil
-}
-
-// Img2Jpeg encodees img to jpeg
-func Img2Jpeg(img *image.YCbCr) []byte {
-	w := new(bytes.Buffer)
-	jpeg.Encode(w, img, nil)
-	return w.Bytes()
 }
 
 /*

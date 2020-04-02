@@ -1,3 +1,4 @@
+// +build h264
 
 package codec
 

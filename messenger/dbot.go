@@ -201,7 +201,7 @@ func (bot *discordBot) imgTest(ctx *exrouter.Context) {
 	if img == nil {
 		return
 	}
-	jpg := codec.Img2Jpeg(img)
+	jpg := utils.Img2Jpeg(img)
 	r := bytes.NewReader(jpg)
 	ctx.Ses.ChannelMessageSendComplex(ctx.Msg.ChannelID, &discordgo.MessageSend{
 		File: &discordgo.File{
@@ -394,7 +394,7 @@ func (bot *discordBot) getStreamImage(rc chan *streamDesc, sd *streamDesc) {
 	glog.Infof("Downloaded segment %s", segURI)
 	img := codec.TSFirstImage(b)
 	if img != nil {
-		sd.jpg = codec.Img2Jpeg(img)
+		sd.jpg = utils.Img2Jpeg(img)
 	}
 }
 
