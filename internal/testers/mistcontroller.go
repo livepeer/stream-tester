@@ -386,7 +386,7 @@ func (mc *MistController) workLoop(ec chan error, firstTime bool) error {
 }
 
 func (mc *MistController) botCommand(ctx *exrouter.Context) {
-	ctx.Reply("picarto called with arguments:\n", strings.Join(ctx.Args, ";"))
+	// ctx.Reply("picarto called with arguments:\n", strings.Join(ctx.Args, ";"))
 	if len(ctx.Args) == 1 {
 		ctx.Reply(fmt.Sprintf("Pulling %d streams", mc.streamsNum))
 		return
