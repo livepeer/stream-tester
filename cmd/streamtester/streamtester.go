@@ -83,7 +83,7 @@ func main() {
 	picartoSDCutOff := flag.Float64("picarto-standad-deviation-cutoff", 0.0, "Do not start streams that have standard deviation of segments durations more than that")
 	delayStart := flag.Duration("delay-start", 0, "Delay start")
 	botToken := flag.String("bot-token", "", "Discord's bot token")
-	channelID := flag.String("channel-id", "", "Discord's channel id")
+	channelID := flag.String("channel-id", "", "Discord's channel id (can be list of channels, separated by comma)")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],

@@ -28,7 +28,7 @@ type (
 	discordBot struct {
 		ctx       context.Context
 		sess      *discordgo.Session
-		channelID string
+		channelID []string
 		lapiToken string
 		router    *exrouter.Route
 	}
@@ -72,7 +72,7 @@ func startBot(ctx context.Context, botToken, channelID, lapiToken string) {
 	bot := discordBot{
 		ctx:       ctx,
 		sess:      sess,
-		channelID: channelID,
+		channelID: strings.Split(channelID, ","),
 		lapiToken: lapiToken,
 	}
 	gbot = &bot
@@ -92,7 +92,7 @@ func (bot *discordBot) init() {
 	bot.sess.AddHandler(func(_ *discordgo.Session, m *discordgo.MessageCreate) {
 		// todo check for channel (allow to receive only direct messages and in specified channel)
 		// glog.Infof("===> mess: %s", m.Content)
-		if m.GuildID != "" && m.ChannelID != bot.channelID {
+		if m.GuildID != "" && len(bot.channelID) > 0 && !utils.StringsSliceContains(bot.channelID, m.ChannelID) {
 			// ignore messages not in specified channel
 			return
 		}
