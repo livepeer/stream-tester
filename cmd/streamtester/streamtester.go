@@ -4,16 +4,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"runtime"
 	"strings"
 	"syscall"
 	"time"
-	"io/ioutil"
-	"encoding/json"
+
 	"github.com/peterbourgon/ff"
 
 	"github.com/golang/glog"
@@ -85,7 +86,7 @@ func main() {
 	delayStart := flag.Duration("delay-start", 0, "Delay start")
 	botToken := flag.String("bot-token", "", "Discord's bot token")
 	channelID := flag.String("channel-id", "", "Discord's channel id (can be list of channels, separated by comma)")
-	statsFile := flag.String("stats-file", "", "path to where to store the stream stats, in JSON")
+	statsFile := flag.String("stats-file", "", "Path to where to store the stream stats, in JSON")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -327,14 +328,16 @@ func main() {
 
 	if len(*statsFile) > 0 {
 		jsonStats, err := json.Marshal(stats)
-    if err != nil {
-        fmt.Printf("Error: %s", err)
-        return;
-    }
+		if err != nil {
+			fmt.Printf("Error: %s", err)
+			glog.Errorf("Error marshalling stats err=%v", err)
+			return
+		}
 		err = ioutil.WriteFile(*statsFile, jsonStats, 0644)
 		if err != nil {
 			fmt.Printf("Error: %s", err)
-			return;
+			glog.Errorf("Error saving stats file err=%v", err)
+			return
 		}
 	}
 
