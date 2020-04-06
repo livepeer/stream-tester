@@ -54,7 +54,7 @@ func main() {
 	discordUserName := flag.String("discord-user-name", "", "User name to use when sending messages to Discord")
 	discordUsersToNotify := flag.String("discord-users", "", "Id's of users to notify in case of failure")
 	latencyThreshold := flag.Float64("latency-threshold", 0, "Report failure to Discord if latency is bigger than specified")
-	waitForTarget := flag.String("wait-for-target", "", "How long to wait for RTMP target to appear")
+	waitForTarget := flag.Duration("wait-for-target", 0, "How long to wait for RTMP target to appear")
 	rtmpURL := flag.String("rtmp-url", "", "If RTMP URL specified, then infinite streamer will be used (for Wowza testing)")
 	mediaURL := flag.String("media-url", "", "If RTMP URL specified, then infinite streamer will be used (for Wowza testing)")
 	noExit := flag.Bool("no-exit", false, "Do not exit after test. For use in k8s as one-off job")
@@ -157,13 +157,6 @@ func main() {
 	model.ProfilesNum = *profiles
 	model.FailHardOnBadSegments = *failHard
 	var err error
-	var waitForDur time.Duration
-	if *waitForTarget != "" {
-		waitForDur, err = time.ParseDuration(*waitForTarget)
-		if err != nil {
-			panic(err)
-		}
-	}
 	testers.IgnoreNoCodecError = *ignoreNoCodecError
 	testers.IgnoreGaps = *ignoreGaps
 	testers.IgnoreTimeDrift = *ignoreTimeDrift
@@ -212,7 +205,7 @@ func main() {
 		msg := fmt.Sprintf(`Starting infinite stream to %s`, *mediaURL)
 		messenger.SendMessage(msg)
 		sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
-		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, waitForDur)
+		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget)
 		if *wowza {
 			// let Wowza remove session
 			time.Sleep(3 * time.Minute)
@@ -290,7 +283,7 @@ func main() {
 	} else {
 		sr = testers.NewHTTPLoadTester(gctx, gcancel, lapi, *skipTime)
 	}
-	_, err = sr.StartStreams(fn, *bhost, *rtmp, mHost, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, waitForDur)
+	_, err = sr.StartStreams(fn, *bhost, *rtmp, mHost, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, *waitForTarget)
 	if err != nil {
 		glog.Fatal(err)
 	}
