@@ -12,7 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
+	"io/ioutil"
+	"encoding/json"
 	"github.com/peterbourgon/ff"
 
 	"github.com/golang/glog"
@@ -84,6 +85,7 @@ func main() {
 	delayStart := flag.Duration("delay-start", 0, "Delay start")
 	botToken := flag.String("bot-token", "", "Discord's bot token")
 	channelID := flag.String("channel-id", "", "Discord's channel id (can be list of channels, separated by comma)")
+	statsFile := flag.String("stats-file", "", "path to where to store the stream stats, in JSON")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -322,6 +324,20 @@ func main() {
 	stats, _ := sr.Stats("")
 	fmt.Println(stats.FormatForConsole())
 	fmt.Println(stats.FormatErrorsForConsole())
+
+	if len(*statsFile) > 0 {
+		jsonStats, err := json.Marshal(stats)
+    if err != nil {
+        fmt.Printf("Error: %s", err)
+        return;
+    }
+		err = ioutil.WriteFile(*statsFile, jsonStats, 0644)
+		if err != nil {
+			fmt.Printf("Error: %s", err)
+			return;
+		}
+	}
+
 	// fmt.Println(sr.AnalyzeFormatted(false))
 	if *latencyThreshold > 0 && stats.TranscodedLatencies.P95 > 0 {
 		// check latencies, report failure or success
