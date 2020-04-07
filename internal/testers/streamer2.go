@@ -3,11 +3,10 @@ package testers
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/url"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 )
@@ -45,7 +44,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 		glog.Fatal("Already streaming")
 	}
 	// check if we can make TCP connection to RTMP target
-	if err := sr.waitForTCP(waitForTarget, rtmpIngestURL); err != nil {
+	if err := utils.WaitForTCP(waitForTarget, rtmpIngestURL); err != nil {
 		glog.Info(err)
 		messenger.SendFatalMessage(err.Error())
 		return
@@ -73,25 +72,4 @@ func (sr *streamer2) StartPulling(mediaURL string) {
 	<-sctx.Done()
 	msg := fmt.Sprintf(`Streaming stopped after %s`, time.Since(started))
 	messenger.SendMessage(msg)
-}
-
-func (sr *streamer2) waitForTCP(waitForTarget time.Duration, rtmpIngestURL string) error {
-	var u *url.URL
-	var err error
-	if u, err = url.Parse(rtmpIngestURL); err != nil {
-		return err
-	}
-	dailer := net.Dialer{Timeout: 2 * time.Second}
-	started := time.Now()
-	for {
-		if _, err = dailer.Dial("tcp", u.Host); err != nil {
-			time.Sleep(4 * time.Second)
-			if time.Since(started) > waitForTarget {
-				return fmt.Errorf("Can't connect to '%s' for more than %s", rtmpIngestURL, waitForTarget)
-			}
-			continue
-		}
-		break
-	}
-	return nil
 }

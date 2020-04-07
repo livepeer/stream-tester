@@ -38,6 +38,16 @@ type rtmpStreamer struct {
 	started         time.Time
 }
 
+// NewRtmpStreamer ...
+func NewRtmpStreamer(ctx context.Context, cancel context.CancelFunc, ingestURL string) *rtmpStreamer {
+	return &rtmpStreamer{
+		ctx:       ctx,
+		cancel:    cancel,
+		ingestURL: ingestURL,
+		counter:   newSegmentsCounter(segLen, nil, false, nil),
+	}
+}
+
 // source is local file name for now
 func newRtmpStreamer(ctx context.Context, cancel context.CancelFunc, ingestURL, source, baseManifestID string,
 	sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, wowzaMode bool, sm *segmentsMatcher) *rtmpStreamer {
@@ -240,7 +250,7 @@ outloop:
 					glog.V(model.DEBUG).Info("==== RTMP streamer file ended.")
 					break outloop
 				}
-				if lastPacketTime >= streamDuration || streamDuration == 0 {
+				if streamDuration >= 0 && lastPacketTime >= streamDuration || streamDuration == 0 {
 					break outloop
 				}
 				/*

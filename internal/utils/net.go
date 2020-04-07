@@ -2,9 +2,11 @@ package utils
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -98,4 +100,32 @@ func GetIPs() [][]string {
 		}
 	}
 	return ips
+}
+
+// WaitForTCP trries to establish TCP connectin for a specified time
+func WaitForTCP(waitForTarget time.Duration, uri string) error {
+	var u *url.URL
+	var err error
+	if u, err = url.Parse(uri); err != nil {
+		return err
+	}
+	if u.Port() == "" {
+		switch u.Scheme {
+		case "rtmp":
+			u.Host = u.Host + ":1935"
+		}
+	}
+	dailer := net.Dialer{Timeout: 2 * time.Second}
+	started := time.Now()
+	for {
+		if _, err = dailer.Dial("tcp", u.Host); err != nil {
+			time.Sleep(4 * time.Second)
+			if time.Since(started) > waitForTarget {
+				return fmt.Errorf("Can't connect to '%s' for more than %s", uri, waitForTarget)
+			}
+			continue
+		}
+		break
+	}
+	return nil
 }

@@ -87,6 +87,7 @@ func main() {
 	botToken := flag.String("bot-token", "", "Discord's bot token")
 	channelID := flag.String("channel-id", "", "Discord's channel id (can be list of channels, separated by comma)")
 	statsFile := flag.String("stats-file", "", "Path to where to store the stream stats, in JSON")
+	rtmpInfinitePush := flag.Bool("rtmp-infinite-push", false, "Just push file infinitely to -rtmp-url and do not read anything back")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -160,6 +161,21 @@ func main() {
 	testers.IgnoreNoCodecError = *ignoreNoCodecError
 	testers.IgnoreGaps = *ignoreGaps
 	testers.IgnoreTimeDrift = *ignoreTimeDrift
+
+	if *rtmpInfinitePush {
+		if *rtmpURL == "" {
+			glog.Error("-rtmp-url should be specified")
+			return
+		}
+		// check if we can make TCP connection to RTMP target
+		if err := utils.WaitForTCP(*waitForTarget, *rtmpURL); err != nil {
+			glog.Error(err)
+			return
+		}
+		uploader := testers.NewRtmpStreamer(gctx, gcancel, *rtmpURL)
+		uploader.StartUpload(fn, *rtmpURL, -1, *waitForTarget)
+		return
+	}
 
 	if *picartoFlag {
 		var mapi *mistapi.API
