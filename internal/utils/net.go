@@ -6,11 +6,14 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"net/url"
 	"strings"
 	"time"
 
+	"contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/golang/glog"
+	rprom "github.com/prometheus/client_golang/prometheus"
 )
 
 var (
@@ -128,4 +131,31 @@ func WaitForTCP(waitForTarget time.Duration, uri string) error {
 		break
 	}
 	return nil
+}
+
+// InitPrometheusExporter init prometheus exporter
+func InitPrometheusExporter(namespace string) *prometheus.Exporter {
+
+	registry := rprom.NewRegistry()
+	registry.MustRegister(rprom.NewProcessCollector(rprom.ProcessCollectorOpts{}))
+	registry.MustRegister(rprom.NewGoCollector())
+
+	pe, err := prometheus.NewExporter(prometheus.Options{
+		Namespace: namespace,
+		Registry:  registry,
+	})
+	if err != nil {
+		glog.Fatalf("Failed to create the Prometheus stats exporter: %v", err)
+	}
+
+	return pe
+}
+
+// AddPProfHandlers add standard handlers from pprof package
+func AddPProfHandlers(mux *http.ServeMux) {
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 }

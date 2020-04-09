@@ -88,7 +88,7 @@ func TSFirstImage(tsb []byte) *image.YCbCr {
 func Packet2Image(vcd av.VideoCodecData, pkt av.Packet) {
 	hcd, ok := vcd.(h264parser.CodecData)
 	if !ok {
-		panic("fuck")
+		panic("stop")
 	}
 	dec, err := NewH264Decoder(hcd.Record)
 	if err != nil {
@@ -150,7 +150,7 @@ func MTest() {
 	}
 	hcd, ok := vcd.(h264parser.CodecData)
 	if !ok {
-		panic("fuck")
+		panic(stop)
 	}
 	dec, err := NewH264Decoder(hcd.Record)
 	if err != nil {

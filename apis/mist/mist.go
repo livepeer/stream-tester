@@ -40,14 +40,40 @@ type (
 		challengeRepsonse string
 	}
 
-	authorize struct {
-		Challenge string `json:"challenge,omitempty"`
-		Status    string `json:"status,omitempty"`
+	MistResp struct {
+		Authorize     *authorize         `json:"authorize,omitempty"`
+		ActiveStreams []string           `json:"active_streams,omitempty"`
+		Streams       map[string]*Stream `json:"streams,omitempty"`
+		Config        *Config            `json:"config,omitempty"`
 	}
 
-	authResp struct {
-		Authorize authorize `json:"authorize,omitempty"`
-		Streams   map[string]*Stream
+	Config struct {
+		Accesslog  string `json:"accesslog,omitempty"`
+		Controller struct {
+			Interface interface{} `json:"interface,omitempty"`
+			Port      interface{} `json:"port,omitempty"`
+			Username  interface{} `json:"username,omitempty"`
+		} `json:"controller,omitempty"`
+		Debug      interface{} `json:"debug,omitempty"`
+		Prometheus string      `json:"prometheus,omitempty"`
+		Protocols  []struct {
+			Connector  string      `json:"connector,omitempty"`
+			Nonchunked bool        `json:"nonchunked,omitempty"`
+			Online     interface{} `json:"online,omitempty"`
+			Pubaddr    string      `json:"pubaddr,omitempty"`
+		} `json:"protocols,omitempty"`
+		Time     int64       `json:"time,omitempty"`
+		Version  string      `json:"version,omitempty"`
+		Triggers TriggersMap `json:"triggers,omitempty"`
+	}
+
+	TriggersMap map[string][]Trigger
+
+	Trigger struct {
+		Default string   `json:"default"`
+		Handler string   `json:"handler"`
+		Streams []string `json:"streams"`
+		Sync    bool     `json:"sync"`
 	}
 
 	Process struct {
@@ -56,6 +82,7 @@ type (
 		TargetProfile string `json:"target_profile,omitempty"`
 		HumanName     string `json:"x-LSP-name,omitempty"`
 		Leastlive     string `json:"leastlive,omitempty"`
+		CustomURL     string `json:"custom_url,omitempty"`
 	}
 
 	Stream struct {
@@ -64,6 +91,16 @@ type (
 		Source      string     `json:"source,omitempty"`
 		Segmentsize string     `json:"segmentsize,omitempty"` // ms
 		Processes   []*Process `json:"processes,omitempty"`
+	}
+
+	authorize struct {
+		Challenge string `json:"challenge,omitempty"`
+		Status    string `json:"status,omitempty"`
+	}
+
+	authResp struct {
+		Authorize authorize `json:"authorize,omitempty"`
+		Streams   map[string]*Stream
 	}
 
 	authReq struct {
@@ -80,12 +117,6 @@ type (
 		Authorize    *authReq `json:"authorize,omitempty"`
 		Minimal      int      `json:"minimal,omitempty"`
 		Deletestream []string `json:"deletestream,omitempty"`
-	}
-
-	MistResp struct {
-		Authorize     *authorize         `json:"authorize,omitempty"`
-		ActiveStreams []string           `json:"active_streams,omitempty"`
-		Streams       map[string]*Stream `json:"streams,omitempty"`
 	}
 )
 
@@ -173,7 +204,7 @@ func (mapi *API) Login() error {
 }
 
 // CreateStream creates new stream in Mist server
-func (mapi *API) CreateStream(name, profile, segmentSize string) error {
+func (mapi *API) CreateStream(name, profile, segmentSize, customURL string) error {
 	glog.Infof("Creating Mist stream '%s' with profile '%s'", name, profile)
 	reqs := &addStreamReq{
 		Minimal:   1,
@@ -183,7 +214,7 @@ func (mapi *API) CreateStream(name, profile, segmentSize string) error {
 		Name:        name,
 		Source:      "push://",
 		Segmentsize: segmentSize,
-		Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfile: profile, Leastlive: "1"}},
+		Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfile: profile, Leastlive: "1", CustomURL: customURL}},
 	}
 	_, err := mapi.post(reqs, false)
 	return err
@@ -234,6 +265,56 @@ func (mapi *API) Streams() (map[string]*Stream, []string, error) {
 		return nil, nil, err
 	}
 	return mr.Streams, mr.ActiveStreams, nil
+}
+
+// GetTriggers returns map of triggers
+func (mapi *API) GetTriggers() (TriggersMap, error) {
+	config, err := mapi.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	glog.Infof("Got config: %+v", config)
+
+	return config.Triggers, nil
+}
+
+// SetTriggers sets triggers
+func (mapi *API) SetTriggers(triggers TriggersMap) error {
+	mr := &MistResp{
+		Config: &Config{
+			Triggers: triggers,
+		},
+	}
+	_, err := mapi.post(mr, false)
+	return err
+}
+
+// GetConfig returns config
+func (mapi *API) GetConfig() (*Config, error) {
+	u := mapi.apiURL + "?minimal=0&command=" + url.QueryEscape(fmt.Sprintf(`{"config":{},"authorize":{"username":"%s","password":"%s"}}`, mapi.login, mapi.challengeRepsonse))
+	resp, err := httpClient.Do(uhttp.GetRequest(u))
+	if err != nil {
+		glog.Errorf("Error authenticating to Mist server (%s) error: %v", u, err)
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		glog.Errorf("===== status error contacting Mist server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		return nil, fmt.Errorf("Status error %s", resp.Status)
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		glog.Errorf("Error getting config from Mist server (%s) error: %v", mapi.apiURL, err)
+		return nil, err
+	}
+	glog.V(model.VERBOSE).Info(string(b))
+	mr := &MistResp{}
+	if err = json.Unmarshal(b, mr); err != nil {
+		return nil, err
+	}
+	return mr.Config, nil
 }
 
 func (mapi *API) post(commandi interface{}, verbose bool) ([]byte, error) {

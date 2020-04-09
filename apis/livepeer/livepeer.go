@@ -4,15 +4,20 @@ package livepeer
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/model"
 )
+
+// ErrNotExists returned if stream is not found
+var ErrNotExists = errors.New("Stream does not exists")
 
 const httpTimeout = 4 * time.Second
 
@@ -69,7 +74,8 @@ type (
 		} `json:"profiles,omitempty"`
 	}
 
-	createStreamResp struct {
+	// CreateStreamResp returned by API
+	CreateStreamResp struct {
 		ID      string   `json:"id,omitempty"`
 		Name    string   `json:"name,omitempty"`
 		Presets []string `json:"presets,omitempty"`
@@ -85,7 +91,30 @@ type (
 
 // NewLivepeer creates new Livepeer API object
 func NewLivepeer(livepeerToken, serverOverride string, presets []string) *API {
-	return &API{choosenServer: serverOverride, accessToken: livepeerToken, presets: presets}
+	return &API{
+		choosenServer: addScheme(serverOverride),
+		accessToken:   livepeerToken,
+		presets:       presets,
+	}
+}
+
+func addScheme(uri string) string {
+	if uri == "" {
+		return uri
+	}
+	luri := strings.ToLower(uri)
+	if strings.HasPrefix(luri, "http://") || strings.HasPrefix(luri, "https://") {
+		return uri
+	}
+	if strings.Contains(luri, ".local") {
+		return "http://" + uri
+	}
+	return "https://" + uri
+}
+
+// GetServer returns choosen server
+func (lapi *API) GetServer() string {
+	return lapi.choosenServer
 }
 
 // Init calles geolocation API endpoint to find closes server
@@ -115,12 +144,12 @@ func (lapi *API) Init() {
 		panic(err)
 	}
 	glog.Infof("chosen server: %s, servers num: %d", geo.ChosenServer, len(geo.Servers))
-	lapi.choosenServer = geo.ChosenServer
+	lapi.choosenServer = addScheme(geo.ChosenServer)
 }
 
 // Broadcasters returns list of hostnames of broadcasters to use
 func (lapi *API) Broadcasters() ([]string, error) {
-	u := fmt.Sprintf("https://%s/api/broadcaster", lapi.choosenServer)
+	u := fmt.Sprintf("%s/api/broadcaster", lapi.choosenServer)
 	resp, err := httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
 		glog.Errorf("Error getting broadcasters from Livpeer API server (%s) error: %v", u, err)
@@ -164,7 +193,7 @@ func (lapi *API) CreateStream(name string, profiles ...string) (string, error) {
 		glog.V(model.SHORT).Infof("Error marshalling create stream request %v", err)
 		return "", err
 	}
-	u := fmt.Sprintf("https://%s/api/stream", lapi.choosenServer)
+	u := fmt.Sprintf("%s/api/stream", lapi.choosenServer)
 	req, err := uhttp.NewRequest("POST", u, bytes.NewBuffer(b))
 	if err != nil {
 		return "", err
@@ -183,7 +212,7 @@ func (lapi *API) CreateStream(name string, profiles ...string) (string, error) {
 	}
 	resp.Body.Close()
 	glog.Info(string(b))
-	r := &createStreamResp{}
+	r := &CreateStreamResp{}
 	err = json.Unmarshal(b, r)
 	if err != nil {
 		return "", err
@@ -195,4 +224,42 @@ func (lapi *API) CreateStream(name string, profiles ...string) (string, error) {
 // DefaultPresets returns default presets
 func (lapi *API) DefaultPresets() []string {
 	return lapi.presets
+}
+
+// GetStream gets stream by id
+func (lapi *API) GetStream(id string) (*CreateStreamResp, error) {
+	if id == "" {
+		return nil, errors.New("empty id")
+	}
+	u := fmt.Sprintf("%s/api/stream/%s", lapi.choosenServer, id)
+	req := uhttp.GetRequest(u)
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error getting stream by id from Livpeer API server (%s) error: %v", u, err)
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		glog.Errorf("Status error getting stream by id Livpeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		return nil, errors.New(http.StatusText(resp.StatusCode))
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error getting stream by id Livpeer API server (%s) error: %v", u, err)
+		return nil, err
+	}
+	bs := string(b)
+	glog.V(model.VERBOSE).Info(bs)
+	if bs == "null" {
+		// API return null if stream does not exists
+		return nil, ErrNotExists
+	}
+	r := &CreateStreamResp{}
+	err = json.Unmarshal(b, r)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
 }

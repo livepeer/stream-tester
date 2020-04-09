@@ -74,6 +74,7 @@ jobs:
         make testdriver
         make lapi
         make mapi
+        make connector
 
     - name: Compress Posix
       if: matrix.os != 'windows-latest'
@@ -82,6 +83,7 @@ jobs:
         gzip -9 -S .${{runner.os}}.gz lapi
         gzip -9 -S .${{runner.os}}.gz testdriver
         gzip -9 -S .${{runner.os}}.gz mapi
+        gzip -9 -S .${{runner.os}}.gz mist-api-connector
         
     - name: Compress Windows
       if: matrix.os == 'windows-latest'
@@ -98,6 +100,7 @@ jobs:
             lapi.${{runner.os}}.gz
             mapi.${{runner.os}}.gz
             testdriver.${{runner.os}}.gz
+            mist-api-connector.${{runner.os}}.gz
           # body_path: ${{ github.workflow }}-CHANGELOG.txt
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

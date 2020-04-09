@@ -21,6 +21,10 @@ lapi:
 mapi:
 	go build -ldflags="$(ldflags)" cmd/mapi/mapi.go
 
+.PHONY: connector
+connector:
+	go build -ldflags="$(ldflags)" cmd/mist-api-connector/mist-api-connector.go
+
 .PHONY: docker
 docker:
 	docker build -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .
