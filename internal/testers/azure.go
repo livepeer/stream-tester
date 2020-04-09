@@ -56,7 +56,11 @@ func save2Azure(fileName string, data []byte) (string, error) {
 }
 
 func shouldSave(verr error) bool {
-	return (azure != nil || Bucket != "" || model.FailHardOnBadSegments) && !(IgnoreNoCodecError && (errors.Is(verr, jerrors.ErrNoAudioInfoFound) || errors.Is(verr, jerrors.ErrNoVideoInfoFound)))
+	return (azure != nil || Bucket != "" || model.FailHardOnBadSegments) && !(IgnoreNoCodecError && isNoCodecError(verr))
+}
+
+func isNoCodecError(verr error) bool {
+	return errors.Is(verr, jerrors.ErrNoAudioInfoFound) || errors.Is(verr, jerrors.ErrNoVideoInfoFound)
 }
 
 func saveToExternalStorage(fileName string, data []byte) (string, string, error) {

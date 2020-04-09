@@ -709,7 +709,11 @@ func (mt *m3utester) workerLoop() {
 					emsg.URL = fr.uri
 					// emsg.SetColorBySuccess(0.0)
 					emsg.Color = 0xE1E412
-					messenger.SendFatalRichMessage(emsg)
+					if !(IgnoreNoCodecError && isNoCodecError(fr.videoParseError)) {
+						messenger.SendFatalRichMessage(emsg)
+					} else {
+						messenger.SendRichMessage(emsg)
+					}
 					lastVideoParseErrorSent[mt.initialURL.String()] = time.Now()
 				}
 			}
