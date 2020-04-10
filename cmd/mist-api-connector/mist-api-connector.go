@@ -151,6 +151,9 @@ func (mc *mac) setupTriggers(ownURI string) error {
 		glog.Error(err)
 		return err
 	}
+	if triggers == nil {
+		triggers = make(mistapi.TriggersMap)
+	}
 	added := mc.addTrigger(triggers, "RTMP_PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000")
 	added = mc.addTrigger(triggers, "DEFAULT_STREAM", ownURI, "false") || added
 	if added {
