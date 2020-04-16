@@ -249,6 +249,12 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		panic(err)
 		return
 	}
+	glog.V(model.VERBOSE).Infof("mediaType=%s params=%+v", mediaType, params)
+	if glog.V(model.VVERBOSE) {
+		for k, v := range resp.Header {
+			glog.Infof("Header '%s': '%s'", k, v)
+		}
+	}
 	var segments [][]byte
 	var urls []string
 	if "multipart/mixed" == mediaType {
@@ -266,6 +272,9 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 			mediaType, _, err := mime.ParseMediaType(p.Header.Get("Content-Type"))
 			if err != nil {
 				glog.Error("Error getting mime type ", err, manifestID)
+				for k, v := range p.Header {
+					glog.Infof("Header '%s': '%s'", k, v)
+				}
 			}
 			body, merr := ioutil.ReadAll(p)
 			if merr != nil {
