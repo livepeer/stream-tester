@@ -173,7 +173,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			}
 			manifestID := fmt.Sprintf("%s_%d_%d", baseManfistID, repeatNum, i)
 			if sr.mapi != nil {
-				err := sr.mapi.CreateStream(manifestID, "P720p30fps16x9", "1", "")
+				err := sr.mapi.CreateStream(manifestID, []string{"P720p30fps16x9"}, nil, "1", "")
 				if err != nil {
 					messenger.SendFatalMessage(fmt.Sprintf("Error creating stream %s on Mist", manifestID))
 				}

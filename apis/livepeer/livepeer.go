@@ -76,12 +76,22 @@ type (
 
 	// CreateStreamResp returned by API
 	CreateStreamResp struct {
-		ID      string   `json:"id,omitempty"`
-		Name    string   `json:"name,omitempty"`
-		Presets []string `json:"presets,omitempty"`
-		Kind    string   `json:"kind,omitempty"`
-		UserID  string   `json:"userId,omitempty"`
-		// renditions []struct
+		ID       string    `json:"id,omitempty"`
+		Name     string    `json:"name,omitempty"`
+		Presets  []string  `json:"presets,omitempty"`
+		Kind     string    `json:"kind,omitempty"`
+		UserID   string    `json:"userId,omitempty"`
+		StreamID string    `json:"streamId,omitempty"`
+		Profiles []Profile `json:"profiles,omitempty"`
+	}
+
+	// Profile ...
+	Profile struct {
+		Fps     int    `json:"fps,omitempty"`
+		Name    string `json:"name,omitempty"`
+		Width   int    `json:"width,omitempty"`
+		Height  int    `json:"height,omitempty"`
+		Bitrate int    `json:"bitrate,omitempty"`
 	}
 
 	addressResp struct {
@@ -106,7 +116,7 @@ func addScheme(uri string) string {
 	if strings.HasPrefix(luri, "http://") || strings.HasPrefix(luri, "https://") {
 		return uri
 	}
-	if strings.Contains(luri, ".local") {
+	if strings.Contains(luri, ".local") || strings.HasPrefix(luri, "localhost") {
 		return "http://" + uri
 	}
 	return "https://" + uri

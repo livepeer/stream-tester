@@ -25,6 +25,23 @@ type mac struct {
 	mistHot string
 }
 
+// LivepeerProfiles2MistProfiles converts Livepeer's API profiles to Mist's ones
+func LivepeerProfiles2MistProfiles(lps []livepeer.Profile) []mist.Profile {
+	var res []mist.Profile
+	for _, p := range lps {
+		mp := mist.Profile{
+			Name:      p.Name,
+			HumanName: p.Name,
+			Width:     p.Width,
+			Height:    p.Height,
+			Fps:       p.Fps,
+			Bitrate:   p.Bitrate,
+		}
+		res = append(res, mp)
+	}
+	return res
+}
+
 func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -62,6 +79,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}
 	glog.V(model.VVERBOSE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
 	pu, err := url.Parse(lines[0])
+	responseURL := lines[0]
 	if err != nil {
 		glog.Errorf("Error parsing url=%s err=%v", lines[0], err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -89,19 +107,25 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}
 	glog.V(model.DEBUG).Infof("For stream %s got info %+v", streamName, stream)
 
-	streamName = strings.ReplaceAll(streamName, "-", "")
-	preset := "P144p30fps16x9"
-	if len(stream.Presets) > 0 {
-		preset = stream.Presets[0]
+	if stream.StreamID != "" {
+		streamName = stream.StreamID
+		pp[2] = streamName
+		pu.Path = strings.Join(pp, "/")
+		responseURL = pu.String()
+	} else {
+		streamName = strings.ReplaceAll(streamName, "-", "")
 	}
-	err = mc.mapi.CreateStream(streamName, preset, "1", mc.lapi.GetServer()+"/api")
+	if len(stream.Presets) == 0 && len(stream.Profiles) == 0 {
+		stream.Presets = append(stream.Presets, "P144p30fps16x9")
+	}
+	err = mc.mapi.CreateStream(streamName, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api")
 	if err != nil {
 		glog.Errorf("Error creating stream on the Mist server: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Write([]byte(lines[0]))
-	glog.Infof("Responded with '%s'", lines[0])
+	w.Write([]byte(responseURL))
+	glog.Infof("Responded with '%s'", responseURL)
 }
 
 func (mc *mac) webServerHandlers() *http.ServeMux {

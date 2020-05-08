@@ -26,6 +26,40 @@ var httpClient = &http.Client{
 	Timeout: httpTimeout,
 }
 
+var (
+	P720p60fps16x9 = Profile{Name: "P720p60fps16x9", Bitrate: 6000000, Fps: 60, Width: 1280, Height: 720}
+	P720p30fps16x9 = Profile{Name: "P720p30fps16x9", Bitrate: 4000000, Fps: 30, Width: 1280, Height: 720}
+	P720p25fps16x9 = Profile{Name: "P720p25fps16x9", Bitrate: 3500000, Fps: 25, Width: 1280, Height: 720}
+	P720p30fps4x3  = Profile{Name: "P720p30fps4x3", Bitrate: 3500000, Fps: 30, Width: 960, Height: 720}
+	P576p30fps16x9 = Profile{Name: "P576p30fps16x9", Bitrate: 1500000, Fps: 30, Width: 1024, Height: 576}
+	P576p25fps16x9 = Profile{Name: "P576p25fps16x9", Bitrate: 1500000, Fps: 25, Width: 1024, Height: 576}
+	P360p30fps16x9 = Profile{Name: "P360p30fps16x9", Bitrate: 1200000, Fps: 30, Width: 640, Height: 360}
+	P360p25fps16x9 = Profile{Name: "P360p25fps16x9", Bitrate: 1000000, Fps: 25, Width: 640, Height: 360}
+	P360p30fps4x3  = Profile{Name: "P360p30fps4x3", Bitrate: 1000000, Fps: 30, Width: 480, Height: 360}
+	P240p30fps16x9 = Profile{Name: "P240p30fps16x9", Bitrate: 600000, Fps: 30, Width: 426, Height: 240}
+	P240p25fps16x9 = Profile{Name: "P240p25fps16x9", Bitrate: 600000, Fps: 25, Width: 426, Height: 240}
+	P240p30fps4x3  = Profile{Name: "P240p30fps4x3", Bitrate: 600000, Fps: 30, Width: 320, Height: 240}
+	P144p30fps16x9 = Profile{Name: "P144p30fps16x9", Bitrate: 400000, Fps: 30, Width: 256, Height: 144}
+	P144p25fps16x9 = Profile{Name: "P144p25fps16x9", Bitrate: 400000, Fps: 25, Width: 256, Height: 144}
+)
+
+// ProfileLookup presets
+var ProfileLookup = map[string]Profile{
+	"P720p60fps16x9": P720p60fps16x9,
+	"P720p30fps16x9": P720p30fps16x9,
+	"P720p25fps16x9": P720p25fps16x9,
+	"P720p30fps4x3":  P720p30fps4x3,
+	"P576p30fps16x9": P576p30fps16x9,
+	"P576p25fps16x9": P576p25fps16x9,
+	"P360p30fps16x9": P360p30fps16x9,
+	"P360p25fps16x9": P360p25fps16x9,
+	"P360p30fps4x3":  P360p30fps4x3,
+	"P240p30fps16x9": P240p30fps16x9,
+	"P240p25fps16x9": P240p25fps16x9,
+	"P240p30fps4x3":  P240p30fps4x3,
+	"P144p30fps16x9": P144p30fps16x9,
+}
+
 type (
 
 	// API object incapsulating Mist's server API
@@ -76,21 +110,32 @@ type (
 		Sync    bool     `json:"sync"`
 	}
 
+	Profile struct {
+		Bitrate   int    `json:"bitrate,omitempty"` // 4000000
+		Fps       int    `json:"fps,omitempty"`
+		Width     int    `json:"width,omitempty"`
+		Height    int    `json:"height,omitempty"`
+		Name      string `json:"name,omitempty"`
+		HumanName string `json:"x-LSP-name,omitempty"`
+	}
+
 	Process struct {
-		AccessToken   string `json:"access_token,omitempty"`
-		Process       string `json:"process,omitempty"`
-		TargetProfile string `json:"target_profile,omitempty"`
-		HumanName     string `json:"x-LSP-name,omitempty"`
-		Leastlive     string `json:"leastlive,omitempty"`
-		CustomURL     string `json:"custom_url,omitempty"`
+		AccessToken    string    `json:"access_token,omitempty"`
+		Process        string    `json:"process,omitempty"`
+		TargetProfiles []Profile `json:"target_profiles,omitempty"`
+		HumanName      string    `json:"x-LSP-name,omitempty"`
+		Leastlive      string    `json:"leastlive,omitempty"`
+		CustomURL      string    `json:"custom_url,omitempty"`
 	}
 
 	Stream struct {
-		Name        string     `json:"name,omitempty"`
-		Online      int        `json:"online,omitempty"`
-		Source      string     `json:"source,omitempty"`
-		Segmentsize string     `json:"segmentsize,omitempty"` // ms
-		Processes   []*Process `json:"processes,omitempty"`
+		Name         string     `json:"name,omitempty"`
+		Online       int        `json:"online,omitempty"`
+		Source       string     `json:"source,omitempty"`
+		Segmentsize  string     `json:"segmentsize,omitempty"` // ms
+		StopSessions bool       `json:"stop_sessions,omitempty"`
+		Realtime     bool       `json:"realtime,omitempty"`
+		Processes    []*Process `json:"processes,omitempty"`
 	}
 
 	authorize struct {
@@ -109,6 +154,7 @@ type (
 	}
 
 	addStreamReq struct {
+		Authorize *authReq           `json:"authorize,omitempty"`
 		Minimal   int                `json:"minimal"`
 		Addstream map[string]*Stream `json:"addstream,omitempty"`
 	}
@@ -204,17 +250,27 @@ func (mapi *API) Login() error {
 }
 
 // CreateStream creates new stream in Mist server
-func (mapi *API) CreateStream(name, profile, segmentSize, customURL string) error {
-	glog.Infof("Creating Mist stream '%s' with profile '%s'", name, profile)
+func (mapi *API) CreateStream(name string, presets []string, profiles []Profile, segmentSize, customURL string) error {
+	glog.Infof("Creating Mist stream '%s' with presets '%+v' profiles %+v", name, presets, profiles)
 	reqs := &addStreamReq{
 		Minimal:   1,
 		Addstream: make(map[string]*Stream),
+		Authorize: &authReq{
+			Username: mapi.login,
+			Password: mapi.challengeRepsonse,
+		},
+	}
+	var targetProfiles []Profile
+	if len(profiles) > 0 {
+		targetProfiles = profiles
+	} else if len(presets) > 0 {
+		targetProfiles = Presets2Profiles(presets)
 	}
 	reqs.Addstream[name] = &Stream{
 		Name:        name,
 		Source:      "push://",
 		Segmentsize: segmentSize,
-		Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfile: profile, Leastlive: "1", CustomURL: customURL}},
+		Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfiles: targetProfiles, Leastlive: "1", CustomURL: customURL}},
 	}
 	_, err := mapi.post(reqs, false)
 	return err
@@ -385,8 +441,24 @@ func (st *Stream) String() string {
 		r += fmt.Sprintf("Segment size: %sms\n", st.Segmentsize)
 	}
 	for _, pro := range st.Processes {
-		r += fmt.Sprintf("  Process %s type %s profile %s token %s leastlive %s\n",
-			pro.HumanName, pro.Process, pro.TargetProfile, pro.AccessToken, pro.Leastlive)
+		r += fmt.Sprintf("  Process %s type %s profiles %+v token %s leastlive %s\n",
+			pro.HumanName, pro.Process, pro.TargetProfiles, pro.AccessToken, pro.Leastlive)
 	}
 	return r
+}
+
+// PresetsStr2Profiles takes comma-separated presets list and returns according profiles
+func PresetsStr2Profiles(presets string) []Profile {
+	return Presets2Profiles(strings.Split(presets, ","))
+}
+
+// Presets2Profiles takes comma-separated presets list and returns according profiles
+func Presets2Profiles(presets []string) []Profile {
+	var res []Profile
+	for _, preset := range presets {
+		if profile, has := ProfileLookup[preset]; has {
+			res = append(res, profile)
+		}
+	}
+	return res
 }

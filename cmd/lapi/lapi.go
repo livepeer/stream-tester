@@ -39,6 +39,8 @@ var http2Client = &http.Client{
 	Timeout:   httpTimeout,
 }
 
+var server = livepeer.ACServer
+
 func main() {
 	flag.Set("logtostderr", "true")
 	vFlag := flag.Lookup("v")
@@ -48,6 +50,7 @@ func main() {
 
 	token := rootFlagSet.String("token", "", "Livepeer API's access token")
 	presets := rootFlagSet.String("presets", "P240p30fps16x9", "Transcoding profiles")
+	fServer := rootFlagSet.String("server", livepeer.ACServer, "API server to use")
 
 	create := &ffcli.Command{
 		Name:       "create",
@@ -88,7 +91,7 @@ func main() {
 			if *token == "" {
 				return fmt.Errorf("Token should be provided")
 			}
-			lapi := livepeer.NewLivepeer(*token, livepeer.ACServer, nil) // hardcode AC server for now
+			lapi := livepeer.NewLivepeer(*token, server, nil) // hardcode AC server for now
 			lapi.Init()
 			bs, err := lapi.Broadcasters()
 			if err != nil {
@@ -118,6 +121,7 @@ func main() {
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
 	// flag.Parse()
+	server = *fServer
 
 	if err := root.Run(context.Background()); err != nil {
 		log.Fatal(err)
@@ -128,7 +132,7 @@ func createStream(token, presets, name string) (string, *livepeer.API, error) {
 	fmt.Printf("Creating new stream with name %s profiles %s\n", name, presets)
 	profiles := strings.Split(presets, ",")
 
-	lapi := livepeer.NewLivepeer(token, livepeer.ACServer, nil) // hardcode AC server for now
+	lapi := livepeer.NewLivepeer(token, server, nil) // hardcode AC server for now
 	lapi.Init()
 	sid, err := lapi.CreateStream(name, profiles...)
 	if err != nil {
