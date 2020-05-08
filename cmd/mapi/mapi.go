@@ -174,7 +174,7 @@ func createStream(host, creds, token, name string) error {
 
 	mapi := mist.NewMist(host, credsp[0], credsp[1], token)
 	mapi.Login()
-	mapi.CreateStream(name, "P240p30fps16x9", "", "")
+	mapi.CreateStream(name, []string{"P240p30fps16x9"}, nil, "", "")
 
 	return nil
 }
