@@ -76,13 +76,20 @@ type (
 
 	// CreateStreamResp returned by API
 	CreateStreamResp struct {
-		ID       string    `json:"id,omitempty"`
-		Name     string    `json:"name,omitempty"`
-		Presets  []string  `json:"presets,omitempty"`
-		Kind     string    `json:"kind,omitempty"`
-		UserID   string    `json:"userId,omitempty"`
-		StreamID string    `json:"streamId,omitempty"`
-		Profiles []Profile `json:"profiles,omitempty"`
+		ID                 string    `json:"id,omitempty"`
+		Name               string    `json:"name,omitempty"`
+		Presets            []string  `json:"presets,omitempty"`
+		Kind               string    `json:"kind,omitempty"`
+		UserID             string    `json:"userId,omitempty"`
+		StreamKey          string    `json:"streamKey,omitempty"`
+		PlaybackID         string    `json:"playbackId,omitempty"`
+		ParentID           string    `json:"parentId,omitempty"`
+		CreatedAt          int64     `json:"createdAt,omitempty"`
+		LastSeen           int64     `json:"lastSeen,omitempty"`
+		SourceSegments     int64     `json:"sourceSegments,omitempty"`
+		TranscodedSegments int64     `json:"transcodedSegments,omitempty"`
+		Deleted            bool      `json:"deleted,omitempty"`
+		Profiles           []Profile `json:"profiles,omitempty"`
 	}
 
 	// Profile ...
@@ -236,12 +243,25 @@ func (lapi *API) DefaultPresets() []string {
 	return lapi.presets
 }
 
+// GetStreamByKey gets stream by streamKey
+func (lapi *API) GetStreamByKey(key string) (*CreateStreamResp, error) {
+	if key == "" {
+		return nil, errors.New("empty key")
+	}
+	u := fmt.Sprintf("%s/api/stream/key/%s", lapi.choosenServer, key)
+	return lapi.getStream(u)
+}
+
 // GetStream gets stream by id
 func (lapi *API) GetStream(id string) (*CreateStreamResp, error) {
 	if id == "" {
 		return nil, errors.New("empty id")
 	}
 	u := fmt.Sprintf("%s/api/stream/%s", lapi.choosenServer, id)
+	return lapi.getStream(u)
+}
+
+func (lapi *API) getStream(u string) (*CreateStreamResp, error) {
 	req := uhttp.GetRequest(u)
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
 	resp, err := httpClient.Do(req)
@@ -253,6 +273,9 @@ func (lapi *API) GetStream(id string) (*CreateStreamResp, error) {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		glog.Errorf("Status error getting stream by id Livpeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, ErrNotExists
+		}
 		return nil, errors.New(http.StatusText(resp.StatusCode))
 	}
 	b, err := ioutil.ReadAll(resp.Body)

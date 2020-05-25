@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,9 @@ func main() {
 	token := rootFlagSet.String("token", "", "Livepeer API's access token")
 	presets := rootFlagSet.String("presets", "P240p30fps16x9", "Transcoding profiles")
 	fServer := rootFlagSet.String("server", livepeer.ACServer, "API server to use")
+	streamID := rootFlagSet.String("stream-id", "", "ID of existing stream to use for transcoding")
+	seq := rootFlagSet.String("seq", "0", "Use as name when transcoding and saving results")
+	outFmt := rootFlagSet.String("out-fmt", "ts", "Output format (ts or mp4)")
 
 	create := &ffcli.Command{
 		Name:       "create",
@@ -76,10 +80,10 @@ func main() {
 			if len(args) == 0 {
 				return fmt.Errorf("File name should be provided")
 			}
-			if *token == "" {
-				return fmt.Errorf("Token should be provided")
+			if *token == "" && *streamID == "" {
+				return fmt.Errorf("Token or stream id should be provided")
 			}
-			return transcodeSegment(*token, *presets, args[0])
+			return transcodeSegment(*token, *presets, *streamID, *seq, *outFmt, args[0])
 		},
 	}
 
@@ -143,23 +147,31 @@ func createStream(token, presets, name string) (string, *livepeer.API, error) {
 	return sid, lapi, nil
 }
 
-func transcodeSegment(token, presets, name string) error {
-	profiles := strings.Split(presets, ",")
-	sid, lapi, _ := createStream(token, presets, "lapi_stream")
+func transcodeSegment(token, presets, sid, seq, outFmt, name string) error {
+	var err error
+	// profiles := strings.Split(presets, ",")
+	lapi := livepeer.NewLivepeer(token, server, nil)
+	lapi.Init()
+	if sid == "" {
+		sid, _, err = createStream(token, presets, "lapi_stream")
+		if err != nil {
+			panic(err)
+		}
+	}
 	bs, err := lapi.Broadcasters()
 	if err != nil {
 		panic(err)
 	}
+	sort.Strings(bs)
 	fmt.Printf("Got broadcasters list: %+v\n", bs)
 	if len(bs) == 0 {
 		return errors.New("Broadcasters list are empty")
 	}
-	fmt.Println(sid)
-	base := filepath.Base(name)
-	d, f := filepath.Split(name)
+	// base := filepath.Base(name)
+	_, f := filepath.Split(name)
 	ext := filepath.Ext(f)
 	fn := strings.TrimSuffix(f, ext)
-	fmt.Printf("base : %s d: %s f: %s ext: %s fn: %s\n", base, d, f, ext, fn)
+	// fmt.Printf("base : %s d: %s f: %s ext: %s fn: %s\n", base, d, f, ext, fn)
 	burl := bs[0]
 	// burl = "http://localhost:8935"
 	data, err := ioutil.ReadFile(name)
@@ -167,7 +179,8 @@ func transcodeSegment(token, presets, name string) error {
 		return err
 	}
 
-	httpIngestURL := fmt.Sprintf("%s/live/%s/0.ts", burl, sid)
+	httpIngestURL := fmt.Sprintf("%s/live/%s/%s.%s", burl, sid, seq, outFmt)
+	fmt.Printf("POSTing %s\n", httpIngestURL)
 	var body io.Reader
 	body = bytes.NewReader(data)
 	req, err := uhttp.NewRequest("POST", httpIngestURL, body)
@@ -195,9 +208,11 @@ func transcodeSegment(token, presets, name string) error {
 		return fmt.Errorf("Error getting mime type %v", err)
 	}
 	var segments [][]byte
+	var segmentsNames []string
 	var urls []string
 	if "multipart/mixed" == mediaType {
 		mr := multipart.NewReader(resp.Body, params["boundary"])
+		i := 0
 		for {
 			p, merr := mr.NextPart()
 			if merr == io.EOF {
@@ -210,6 +225,12 @@ func transcodeSegment(token, presets, name string) error {
 			if err != nil {
 				return fmt.Errorf("Error getting mime type %v", err)
 			}
+			disposition, dispParams, err := mime.ParseMediaType(p.Header.Get("Content-Disposition"))
+			if err != nil {
+				return fmt.Errorf("Error getting content disposition %v", err)
+			}
+			fmt.Printf("Response number %d content length %s, type %s rendition name %s disposition %s file name %s\n",
+				i, p.Header.Get("Content-Length"), mediaType, p.Header.Get("Rendition-Name"), disposition, dispParams["filename"])
 			body, merr := ioutil.ReadAll(p)
 			if merr != nil {
 				return fmt.Errorf("Error reading body err=%v", merr)
@@ -217,9 +238,11 @@ func transcodeSegment(token, presets, name string) error {
 			if mediaType == "application/vnd+livepeer.uri" {
 				urls = append(urls, string(body))
 			} else {
-				fmt.Printf("Read back segment for profile=%d len=%d bytes", len(segments), len(body))
+				fmt.Printf("Read back segment for profile=%d len=%d bytes\n", len(segments), len(body))
 				segments = append(segments, body)
+				segmentsNames = append(segmentsNames, dispParams["filename"])
 			}
+			i++
 		}
 	}
 	took := time.Since(postStarted)
@@ -227,7 +250,8 @@ func transcodeSegment(token, presets, name string) error {
 	resp.Body.Close()
 	if len(segments) > 0 {
 		for i, tseg := range segments {
-			ofn := fmt.Sprintf("%s_%s.ts", fn, profiles[i])
+			// ofn := fmt.Sprintf("%s_%s.ts", fn, profiles[i])
+			ofn := fmt.Sprintf("%s_%s_%s", fn, seq, segmentsNames[i])
 			err = ioutil.WriteFile(ofn, tseg, 0644)
 			if err != nil {
 				return err
