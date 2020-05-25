@@ -111,12 +111,13 @@ type (
 	}
 
 	Profile struct {
-		Bitrate   int    `json:"bitrate,omitempty"` // 4000000
-		Fps       int    `json:"fps,omitempty"`
-		Width     int    `json:"width,omitempty"`
-		Height    int    `json:"height,omitempty"`
-		Name      string `json:"name,omitempty"`
-		HumanName string `json:"x-LSP-name,omitempty"`
+		Bitrate     int    `json:"bitrate,omitempty"` // 4000000
+		Fps         int    `json:"fps,omitempty"`
+		Width       int    `json:"width,omitempty"`
+		Height      int    `json:"height,omitempty"`
+		Name        string `json:"name,omitempty"`
+		HumanName   string `json:"x-LSP-name,omitempty"`
+		CustomField string `json:"custom_field,omitempty"`
 	}
 
 	Process struct {

@@ -39,6 +39,9 @@ func init() {
 // using -ldflags, using output of the `git describe` command.
 var Version = "undefined"
 
+// AppName used `User-Agent` string
+var AppName = "stream-tester"
+
 // ProfilesNum number of transcoding profiles
 var ProfilesNum = 2
 

@@ -87,38 +87,48 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}
 	pp := strings.Split(pu.Path, "/")
 	if len(pp) != 3 {
-		glog.Errorf("URL wrongly formatted - should be in format rtmp://host/live/streamname")
+		glog.Errorf("URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	streamName := pp[2]
-	glog.V(model.SHORT).Infof("Requested stream name is '%s'", streamName)
+	streamKey := pp[2]
+	glog.V(model.SHORT).Infof("Requested stream key is '%s'", streamKey)
 	// ask API
-	stream, err := mc.lapi.GetStream(streamName)
+	stream, err := mc.lapi.GetStreamByKey(streamKey)
 	if err != nil || stream == nil {
 		glog.Errorf("Error getting stream info from Livepeer API err=%v", err)
-		if err == livepeer.ErrNotExists {
-			mc.mapi.DeleteStreams(streamName)
-			w.Write([]byte(lines[0]))
-		} else {
-			w.WriteHeader(http.StatusNotFound)
-		}
+		/*
+			if err == livepeer.ErrNotExists {
+				// mc.mapi.DeleteStreams(streamKey)
+				w.Write([]byte(lines[0]))
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+			}
+		*/
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	glog.V(model.DEBUG).Infof("For stream %s got info %+v", streamName, stream)
+	glog.V(model.DEBUG).Infof("For stream %s got info %+v", streamKey, stream)
 
-	if stream.StreamID != "" {
-		streamName = stream.StreamID
-		pp[2] = streamName
+	if stream.PlaybackID != "" {
+		streamKey = stream.PlaybackID
+		streamKey = strings.ReplaceAll(streamKey, "-", "")
+		pp[2] = streamKey
 		pu.Path = strings.Join(pp, "/")
 		responseURL = pu.String()
 	} else {
-		streamName = strings.ReplaceAll(streamName, "-", "")
+		streamKey = strings.ReplaceAll(streamKey, "-", "")
+	}
+	if stream.Deleted {
+		mc.mapi.DeleteStreams(streamKey)
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
 	if len(stream.Presets) == 0 && len(stream.Profiles) == 0 {
 		stream.Presets = append(stream.Presets, "P144p30fps16x9")
 	}
-	err = mc.mapi.CreateStream(streamName, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api")
+	// err = mc.mapi.CreateStream(streamName, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/" + stream.ID)
+	err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
 	if err != nil {
 		glog.Errorf("Error creating stream on the Mist server: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -195,6 +205,7 @@ func newMac(mistHost string, mapi *mist.API, lapi *livepeer.API) *mac {
 }
 
 func main() {
+	model.AppName = "mist-api-connector"
 	flag.Set("logtostderr", "true")
 	vFlag := flag.Lookup("v")
 	fs := flag.NewFlagSet("testdriver", flag.ExitOnError)

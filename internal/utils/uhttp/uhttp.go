@@ -14,7 +14,7 @@ func NewRequest(method, url string, body io.Reader) (*http.Request, error) {
 	if err != nil {
 		return req, err
 	}
-	req.Header.Add("User-Agent", "stream-tester/"+model.Version)
+	req.Header.Add("User-Agent", model.AppName+"/"+model.Version)
 	return req, err
 }
 
@@ -24,7 +24,7 @@ func RequireRequest(method, url string, body io.Reader) *http.Request {
 	if err != nil {
 		glog.Fatal(err)
 	}
-	req.Header.Add("User-Agent", "stream-tester/"+model.Version)
+	req.Header.Add("User-Agent", model.AppName+"/"+model.Version)
 	return req
 }
 
@@ -34,6 +34,6 @@ func GetRequest(url string) *http.Request {
 	if err != nil {
 		glog.Fatal(err)
 	}
-	req.Header.Add("User-Agent", "stream-tester/"+model.Version)
+	req.Header.Add("User-Agent", model.AppName+"/"+model.Version)
 	return req
 }
