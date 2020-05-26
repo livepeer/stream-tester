@@ -127,8 +127,8 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	if len(stream.Presets) == 0 && len(stream.Profiles) == 0 {
 		stream.Presets = append(stream.Presets, "P144p30fps16x9")
 	}
-	// err = mc.mapi.CreateStream(streamName, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/" + stream.ID)
-	err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
+	err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID)
+	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
 	if err != nil {
 		glog.Errorf("Error creating stream on the Mist server: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
