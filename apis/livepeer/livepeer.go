@@ -104,6 +104,10 @@ type (
 	addressResp struct {
 		Address string `json:"address,omitempty"`
 	}
+
+	setActiveReq struct {
+		Active bool `json:"active,omitempty"`
+	}
 )
 
 // NewLivepeer creates new Livepeer API object
@@ -259,6 +263,36 @@ func (lapi *API) GetStream(id string) (*CreateStreamResp, error) {
 	}
 	u := fmt.Sprintf("%s/api/stream/%s", lapi.choosenServer, id)
 	return lapi.getStream(u)
+}
+
+// SetActive set isActive
+func (lapi *API) SetActive(id string, active bool) error {
+	if id == "" {
+		return errors.New("empty id")
+	}
+	u := fmt.Sprintf("%s/api/stream/%s/setactive", lapi.choosenServer, id)
+	ar := setActiveReq{
+		Active: active,
+	}
+	b, _ := json.Marshal(&ar)
+	req, err := uhttp.NewRequest("PUT", u, bytes.NewBuffer(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error set active %v", err)
+		return err
+	}
+	b, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error set active (body) %v", err)
+		return err
+	}
+	resp.Body.Close()
+	return nil
 }
 
 func (lapi *API) getStream(u string) (*CreateStreamResp, error) {

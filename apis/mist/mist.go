@@ -104,10 +104,11 @@ type (
 	TriggersMap map[string][]Trigger
 
 	Trigger struct {
-		Default string   `json:"default"`
+		Default string   `json:"default,omitempty"`
 		Handler string   `json:"handler"`
 		Streams []string `json:"streams"`
 		Sync    bool     `json:"sync"`
+		Params  string   `json:"params,omitempty"`
 	}
 
 	Profile struct {

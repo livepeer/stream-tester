@@ -22,6 +22,7 @@ import (
 type mac struct {
 	mapi    *mist.API
 	lapi    *livepeer.API
+	pub2id  map[string]string // public key to stream id
 	mistHot string
 }
 
@@ -66,12 +67,36 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
+	if trigger == "LIVE_BANDWIDTH" {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("yes"))
+		return
+	}
+	lines := strings.Split(bs, "\n")
+	if trigger == "CONN_CLOSE" {
+		if len(lines) < 3 {
+			glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), bs)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if lines[2] == "RTMP" {
+			playbackID := lines[0]
+			if id, has := mc.pub2id[playbackID]; has {
+				err := mc.lapi.SetActive(id, false)
+				if err != nil {
+					glog.Error(err)
+				}
+				delete(mc.pub2id, playbackID)
+			}
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	if trigger != "RTMP_PUSH_REWRITE" {
 		glog.Errorf("Got unsupported trigger: '%s'", trigger)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	lines := strings.Split(bs, "\n")
 	if len(lines) < 2 {
 		glog.Errorf("Expected 2 lines, got %d, request \n%s", len(lines), bs)
 		w.WriteHeader(http.StatusBadRequest)
@@ -111,11 +136,16 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	glog.V(model.DEBUG).Infof("For stream %s got info %+v", streamKey, stream)
 
 	if stream.PlaybackID != "" {
+		mc.pub2id[stream.PlaybackID] = stream.ID
 		streamKey = stream.PlaybackID
 		streamKey = strings.ReplaceAll(streamKey, "-", "")
 		pp[2] = streamKey
 		pu.Path = strings.Join(pp, "/")
 		responseURL = pu.String()
+		err := mc.lapi.SetActive(stream.ID, true)
+		if err != nil {
+			glog.Error(err)
+		}
 	} else {
 		streamKey = strings.ReplaceAll(streamKey, "-", "")
 	}
@@ -127,8 +157,8 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	if len(stream.Presets) == 0 && len(stream.Profiles) == 0 {
 		stream.Presets = append(stream.Presets, "P144p30fps16x9")
 	}
-	err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID)
-	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
+	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID)
+	err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
 	if err != nil {
 		glog.Errorf("Error creating stream on the Mist server: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -158,16 +188,17 @@ func (mc *mac) startServer(bindAddr string) {
 	srv.ListenAndServe()
 }
 
-func (mc *mac) addTrigger(triggers mistapi.TriggersMap, name, ownURI, def string) bool {
+func (mc *mac) addTrigger(triggers mistapi.TriggersMap, name, ownURI, def, params string, sync bool) bool {
 	nt := mistapi.Trigger{
 		Default: def,
 		Handler: ownURI,
-		Sync:    true,
+		Sync:    sync,
+		Params:  params,
 	}
 	pr := triggers[name]
 	found := false
 	for _, trig := range pr {
-		if trig.Default == nt.Default && trig.Handler == nt.Handler && trig.Sync == nt.Sync {
+		if trig.Default == nt.Default && trig.Handler == nt.Handler && trig.Sync == nt.Sync && trig.Params == params {
 			found = true
 			break
 		}
@@ -188,8 +219,10 @@ func (mc *mac) setupTriggers(ownURI string) error {
 	if triggers == nil {
 		triggers = make(mistapi.TriggersMap)
 	}
-	added := mc.addTrigger(triggers, "RTMP_PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000")
-	added = mc.addTrigger(triggers, "DEFAULT_STREAM", ownURI, "false") || added
+	added := mc.addTrigger(triggers, "RTMP_PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000", "", true)
+	added = mc.addTrigger(triggers, "DEFAULT_STREAM", ownURI, "false", "", true) || added
+	added = mc.addTrigger(triggers, "LIVE_BANDWIDTH", ownURI, "false", "100000", true) || added
+	added = mc.addTrigger(triggers, "CONN_CLOSE", ownURI, "", "", false) || added
 	if added {
 		err = mc.mapi.SetTriggers(triggers)
 	}
@@ -201,6 +234,7 @@ func newMac(mistHost string, mapi *mist.API, lapi *livepeer.API) *mac {
 		mistHot: mistHost,
 		mapi:    mapi,
 		lapi:    lapi,
+		pub2id:  make(map[string]string), // public key to stream id
 	}
 }
 
