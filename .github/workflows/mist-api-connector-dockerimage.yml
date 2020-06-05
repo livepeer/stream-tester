@@ -1,0 +1,36 @@
+name: Mist API Connector Docker Image CI
+
+on:
+  push:
+    branches:
+      - mist-api-connector
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Docker Registry
+      env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD 
+    - name: Build the Docker image
+      # run: docker build . --file Dockerfile --tag livepeer/streamtester:$(date +%s)
+      run: docker build . --file Dockerfile.mist-api-connector --tag livepeer/streamtester:mist-api-connector --build-arg version=$(git describe --dirty)
+    - name: Get tag name
+      id: get_version
+      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+    - name: Tag version
+      if: startsWith(github.ref, 'refs/tags/v')
+      run: |
+        docker tag livepeer/streamtester:mist-api-connector livepeer/streamtester:mist-api-connector${{ steps.get_version.outputs.VERSION }}
+        docker push livepeer/streamtester:mistapiconnector${{ steps.get_version.outputs.VERSION }}
+    - name: Push Docker Container to Registry
+      run: docker push livepeer/streamtester:mist-api-connector
+
+    - name: Notify that new build has been uploaded
+      run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
