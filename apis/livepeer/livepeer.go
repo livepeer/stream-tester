@@ -70,7 +70,7 @@ type (
 			Width   int    `json:"width,omitempty"`
 			Height  int    `json:"height,omitempty"`
 			Bitrate int    `json:"bitrate,omitempty"`
-			Fps     int    `json:"fps,omitempty"`
+			Fps     int    `json:"fps"`
 		} `json:"profiles,omitempty"`
 	}
 
@@ -94,7 +94,7 @@ type (
 
 	// Profile ...
 	Profile struct {
-		Fps     int    `json:"fps,omitempty"`
+		Fps     int    `json:"fps"`
 		Name    string `json:"name,omitempty"`
 		Width   int    `json:"width,omitempty"`
 		Height  int    `json:"height,omitempty"`
