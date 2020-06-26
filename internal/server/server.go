@@ -31,10 +31,11 @@ type StreamerServer struct {
 	wowzaMode bool
 	lapiToken string
 	mistCreds []string
+	mistPort  uint
 }
 
 // NewStreamerServer creates new StreamerServer
-func NewStreamerServer(wowzaMode bool, lapiToken, mistCreds string) *StreamerServer {
+func NewStreamerServer(wowzaMode bool, lapiToken, mistCreds string, mistPort uint) *StreamerServer {
 	var mcreds []string
 	if mistCreds != "" {
 		mcreds = strings.Split(mistCreds, ":")
@@ -47,6 +48,7 @@ func NewStreamerServer(wowzaMode bool, lapiToken, mistCreds string) *StreamerSer
 		wowzaMode: wowzaMode,
 		lapiToken: lapiToken,
 		mistCreds: mcreds,
+		mistPort:  mistPort,
 	}
 }
 
@@ -213,7 +215,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		} else {
 			var mapi *mistapi.API
 			if ssr.Mist {
-				mapi = mistapi.NewMist(ssr.Host, ss.mistCreds[0], ss.mistCreds[1], ss.lapiToken)
+				mapi = mistapi.NewMist(ssr.Host, ss.mistCreds[0], ss.mistCreds[1], ss.lapiToken, ss.mistPort)
 				mapi.Login()
 			}
 			ss.streamer = testers.NewStreamer(ctx, cancel, ss.wowzaMode, ssr.Mist, mapi, nil)

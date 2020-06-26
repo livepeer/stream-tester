@@ -28,6 +28,7 @@ func main() {
 	ownURI := fs.String("own-uri", "http://localhost:7933/", "URL at wich service will be accessible by MistServer")
 
 	mistHost := fs.String("mist-host", "localhost", "Hostname of the Mist server")
+	mistPort := fs.Uint("mist-port", 4242, "Port of the Mist server")
 	mistCreds := fs.String("mist-creds", "", "login:password of the Mist server")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
@@ -53,7 +54,7 @@ func main() {
 	lapi := livepeer.NewLivepeer(*apiToken, *apiServer, nil)
 	lapi.Init()
 
-	mapi = mistapi.NewMist(*mistHost, mcreds[0], mcreds[1], *apiToken)
+	mapi = mistapi.NewMist(*mistHost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 	mapi.Login()
 
 	mc := mistapiconnector.NewMac(*mistHost, mapi, lapi, false)

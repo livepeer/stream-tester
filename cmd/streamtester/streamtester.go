@@ -71,6 +71,7 @@ func main() {
 	fileArg := flag.String("file", "", "File to stream")
 	failHard := flag.Bool("fail-hard", false, "Panic if can't parse downloaded segments")
 	mistCreds := flag.String("mist-creds", "", "login:password of the Mist server")
+	mistPort := flag.Uint("mist-port", 4242, "Port of the Mist server")
 	apiToken := flag.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	lapiFlag := flag.Bool("lapi", false, "Use Livepeer API to create streams. api-token should be specified")
 	presets := flag.String("presets", "", "Comma separate list of transcoding profiels to use along with Livepeer API")
@@ -123,7 +124,7 @@ func main() {
 			fmt.Println("Got Ctrl-C, cancelling")
 			gcancel()
 		}()
-		s := server.NewStreamerServer(*wowza, *apiToken, *mistCreds)
+		s := server.NewStreamerServer(*wowza, *apiToken, *mistCreds, *mistPort)
 		s.StartWebServer(gctx, *serverAddr)
 	}
 
@@ -184,7 +185,7 @@ func main() {
 			glog.Fatal("Mist server's credentials should be in form 'login:password'")
 		}
 
-		mapi = mistapi.NewMist(*bhost, mcreds[0], mcreds[1], *apiToken)
+		mapi = mistapi.NewMist(*bhost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 		mapi.Login()
 
 		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, *save, mapi,
@@ -259,7 +260,7 @@ func main() {
 			glog.Fatal("Mist server's credentials should be in form 'login:password'")
 		}
 
-		mapi = mistapi.NewMist(*bhost, mcreds[0], mcreds[1], *apiToken)
+		mapi = mistapi.NewMist(*bhost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 		mapi.Login()
 		// mapi.CreateStream("dark1", "P720p30fps16x9")
 		// mapi.DeleteStreams("dark1")
@@ -365,7 +366,7 @@ func main() {
 		fmt.Println(msg)
 	}
 	if *noExit {
-		s := server.NewStreamerServer(*wowza, "", "")
+		s := server.NewStreamerServer(*wowza, "", "", *mistPort)
 		s.StartWebServer(gctx, *serverAddr)
 	}
 	// messenger.SendMessage(sr.AnalyzeFormatted(true))

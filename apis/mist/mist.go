@@ -169,9 +169,9 @@ type (
 )
 
 // NewMist creates new MistAPI object
-func NewMist(host, login, password, livepeerToken string) *API {
-	url := fmt.Sprintf("http://%s:4242/api2", host)
-	urlv := fmt.Sprintf("http://%s:4242/api", host)
+func NewMist(host, login, password, livepeerToken string, port uint) *API {
+	url := fmt.Sprintf("http://%s:%d/api2", host, port)
+	urlv := fmt.Sprintf("http://%s:%d/api", host, port)
 	return &API{
 		host:          host,
 		login:         login,

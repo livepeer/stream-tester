@@ -24,6 +24,7 @@ import (
 )
 
 const httpTimeout = 16 * time.Second
+const mistPort = 4242
 
 var httpClient = &http.Client{
 	Timeout: httpTimeout,
@@ -172,7 +173,7 @@ func createStream(host, creds, token, name string) error {
 
 	credsp := strings.Split(creds, ":")
 
-	mapi := mist.NewMist(host, credsp[0], credsp[1], token)
+	mapi := mist.NewMist(host, credsp[0], credsp[1], token, mistPort)
 	mapi.Login()
 	mapi.CreateStream(name, []string{"P240p30fps16x9"}, nil, "", "")
 
@@ -183,7 +184,7 @@ func ls(host, creds string) error {
 	fmt.Printf("Getting list of streams from %s\n", host)
 	credsp := strings.Split(creds, ":")
 
-	mapi := mist.NewMist(host, credsp[0], credsp[1], "")
+	mapi := mist.NewMist(host, credsp[0], credsp[1], "", mistPort)
 	mapi.Login()
 	streams, activeStreams, err := mapi.Streams()
 	if err != nil {
@@ -206,7 +207,7 @@ func rm(host, creds, streamName string) error {
 	}
 	credsp := strings.Split(creds, ":")
 
-	mapi := mist.NewMist(host, credsp[0], credsp[1], "")
+	mapi := mist.NewMist(host, credsp[0], credsp[1], "", mistPort)
 	mapi.Login()
 	streams, _, err := mapi.Streams()
 	if err != nil {
