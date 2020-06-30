@@ -1,6 +1,7 @@
 package mistapiconnector
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -13,6 +14,8 @@ import (
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
 )
+
+const streamPlaybackPrefix = "playback_"
 
 type (
 	// IMac creates new Mist API Connector application
@@ -36,6 +39,7 @@ type (
 		opts           *MacOptions
 		mapi           *mist.API
 		lapi           *livepeer.API
+		balancerHost   string
 		pub2id         map[string]string // public key to stream id
 		mistHot        string
 		checkBandwidth bool
@@ -43,12 +47,16 @@ type (
 )
 
 // NewMac ...
-func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, checkBandwidth bool) IMac {
+func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool) IMac {
+	if balancerHost != "" && !strings.Contains(balancerHost, ":") {
+		balancerHost = balancerHost + ":8042" // must set default port for Mist's Load Balancer
+	}
 	return &mac{
 		mistHot:        mistHost,
 		mapi:           mapi,
 		lapi:           lapi,
 		checkBandwidth: checkBandwidth,
+		balancerHost:   balancerHost,
 		pub2id:         make(map[string]string), // public key to stream id
 	}
 }
@@ -86,6 +94,58 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	glog.V(model.VERBOSE).Infof("User agent: %s", r.UserAgent())
 	glog.V(model.VERBOSE).Infof("Mist version: %s", r.Header.Get("X-Version"))
 	if trigger == "DEFAULT_STREAM" {
+		if mc.balancerHost == "" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		lines := strings.Split(bs, "\n")
+		if len(lines) == 5 {
+			protocol := lines[3] // HLS
+			uri := lines[4]      // /hls/h5rfoaiqoafbsq44/index.m3u8?stream=h5rfoaiqoafbsq44
+			if protocol == "HLS" {
+				urip := strings.Split(uri, "/")
+				if len(urip) > 2 {
+					glog.Infof("proto: %s uri parts: %+v", protocol, urip)
+					// urip[2] = streamPlaybackPrefix + urip[2]
+					playbackID := urip[2]
+					streamNameInMist := streamPlaybackPrefix + playbackID
+					// check if such stream already exists in Mist's config
+					streams, _, err := mc.mapi.Streams()
+					if err != nil {
+						glog.Warningf("Error getting streams list from Mist: %v", err)
+						w.WriteHeader(http.StatusOK)
+						w.Write([]byte(streamNameInMist))
+						return
+					}
+					if _, has := streams[streamNameInMist]; has {
+						glog.Infof("Requested stream '%s' already exists in Mist config, just returning it's name", streamNameInMist)
+						w.WriteHeader(http.StatusOK)
+						w.Write([]byte(streamNameInMist))
+						return
+					}
+					// if not, create new stream object
+					stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
+					if err != nil || stream == nil {
+						glog.Errorf("Error getting stream info from Livepeer API err=%v", err)
+						w.WriteHeader(http.StatusNotFound)
+						return
+					}
+					glog.V(model.DEBUG).Infof("For stream %s got info %+v", playbackID, stream)
+					if stream.Deleted {
+						mc.mapi.DeleteStreams(streamNameInMist)
+						w.WriteHeader(http.StatusNotFound)
+						return
+					}
+					err = mc.createMistStream(streamNameInMist, stream)
+					if err != nil {
+						glog.Errorf("Error creating stream on the Mist server: %v", err)
+					}
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(streamNameInMist))
+					return
+				}
+			}
+		}
 		// We should get this in two cases:
 		// 1. When in RTMP_PUSH_REWRITE we got request for unknown stream and thus
 		//    haven't created new stream in Mist
@@ -162,10 +222,19 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}
 	glog.V(model.DEBUG).Infof("For stream %s got info %+v", streamKey, stream)
 
+	if stream.Deleted {
+		mc.mapi.DeleteStreams(streamKey)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
 	if stream.PlaybackID != "" {
 		mc.pub2id[stream.PlaybackID] = stream.ID
 		streamKey = stream.PlaybackID
 		streamKey = strings.ReplaceAll(streamKey, "-", "")
+		if mc.balancerHost != "" {
+			streamKey = streamPlaybackPrefix + streamKey
+		}
 		pp[2] = streamKey
 		pu.Path = strings.Join(pp, "/")
 		responseURL = pu.String()
@@ -176,16 +245,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	} else {
 		streamKey = strings.ReplaceAll(streamKey, "-", "")
 	}
-	if stream.Deleted {
-		mc.mapi.DeleteStreams(streamKey)
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	if len(stream.Presets) == 0 && len(stream.Profiles) == 0 {
-		stream.Presets = append(stream.Presets, "P144p30fps16x9")
-	}
-	err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID)
-	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
+	err = mc.createMistStream(streamKey, stream)
 	if err != nil {
 		glog.Errorf("Error creating stream on the Mist server: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -193,6 +253,20 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}
 	w.Write([]byte(responseURL))
 	glog.Infof("Responded with '%s'", responseURL)
+}
+
+func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStreamResp) error {
+	if len(stream.Presets) == 0 && len(stream.Profiles) == 0 {
+		stream.Presets = append(stream.Presets, "P144p30fps16x9")
+	}
+	source := ""
+	if mc.balancerHost != "" {
+		source = fmt.Sprintf("balance:http://%s/?fallback=push://", mc.balancerHost)
+	}
+	err := mc.mapi.CreateStream(streamName, stream.Presets,
+		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source)
+	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
+	return err
 }
 
 func (mc *mac) webServerHandlers() *http.ServeMux {

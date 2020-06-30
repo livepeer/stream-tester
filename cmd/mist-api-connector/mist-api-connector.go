@@ -27,6 +27,7 @@ func main() {
 	port := fs.Uint("port", 7933, "Own port")
 	ownURI := fs.String("own-uri", "http://localhost:7933/", "URL at wich service will be accessible by MistServer")
 
+	balancerHost := fs.String("balancer-host", "", "Mist's Load Balancer host")
 	mistHost := fs.String("mist-host", "localhost", "Hostname of the Mist server")
 	mistPort := fs.Uint("mist-port", 4242, "Port of the Mist server")
 	mistCreds := fs.String("mist-creds", "", "login:password of the Mist server")
@@ -57,7 +58,7 @@ func main() {
 	mapi = mistapi.NewMist(*mistHost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 	mapi.Login()
 
-	mc := mistapiconnector.NewMac(*mistHost, mapi, lapi, false)
+	mc := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false)
 	if err := mc.SetupTriggers(*ownURI); err != nil {
 		glog.Fatal(err)
 	}

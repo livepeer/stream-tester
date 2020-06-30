@@ -256,6 +256,15 @@ func (lapi *API) GetStreamByKey(key string) (*CreateStreamResp, error) {
 	return lapi.getStream(u)
 }
 
+// GetStreamByPlaybackID gets stream by playbackID
+func (lapi *API) GetStreamByPlaybackID(playbackID string) (*CreateStreamResp, error) {
+	if playbackID == "" {
+		return nil, errors.New("empty playbackID")
+	}
+	u := fmt.Sprintf("%s/api/stream/playback/%s", lapi.choosenServer, playbackID)
+	return lapi.getStream(u)
+}
+
 // GetStream gets stream by id
 func (lapi *API) GetStream(id string) (*CreateStreamResp, error) {
 	if id == "" {
