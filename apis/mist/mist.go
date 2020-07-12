@@ -252,7 +252,8 @@ func (mapi *API) Login() error {
 }
 
 // CreateStream creates new stream in Mist server
-func (mapi *API) CreateStream(name string, presets []string, profiles []Profile, segmentSize, customURL, source string) error {
+// func (mapi *API) CreateStream(name string, presets []string, profiles []Profile, segmentSize, customURL, source string) error
+func (mapi *API) CreateStream(name string, presets []string, profiles []Profile, segmentSize, customURL, source string, skipTranscoding bool) error {
 	glog.Infof("Creating Mist stream '%s' with presets '%+v' profiles %+v", name, presets, profiles)
 	reqs := &addStreamReq{
 		Minimal:   1,
@@ -275,8 +276,12 @@ func (mapi *API) CreateStream(name string, presets []string, profiles []Profile,
 		Name:        name,
 		Source:      source,
 		Segmentsize: segmentSize,
-		Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfiles: targetProfiles, Leastlive: "1", CustomURL: customURL}},
+		// Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfiles: targetProfiles, Leastlive: "1", CustomURL: customURL}},
 	}
+	if !skipTranscoding {
+		reqs.Addstream[name].Processes = []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfiles: targetProfiles, Leastlive: "1", CustomURL: customURL}}
+	}
+
 	_, err := mapi.post(reqs, false)
 	return err
 }

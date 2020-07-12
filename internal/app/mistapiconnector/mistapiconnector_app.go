@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
@@ -41,6 +42,7 @@ type (
 		lapi           *livepeer.API
 		balancerHost   string
 		pub2id         map[string]string // public key to stream id
+		mu             sync.Mutex
 		mistHot        string
 		checkBandwidth bool
 	}
@@ -109,21 +111,45 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 					// urip[2] = streamPlaybackPrefix + urip[2]
 					playbackID := urip[2]
 					streamNameInMist := streamPlaybackPrefix + playbackID
+					// check if stream is in our map of currently playing streams
+					mc.mu.Lock()
+					defer mc.mu.Unlock() // hold the lock until exit so that trigger to RTMP_REWRITE can't create
+					// another Mist stream in the same time
+					if _, has := mc.pub2id[playbackID]; has {
+						// that means that RTMP stream is currently gets streamed into our Mist node
+						// and so no changes needed to the Mist configuration
+						glog.Infof("Already in the playing map, returning %s", streamNameInMist)
+						w.WriteHeader(http.StatusOK)
+						w.Write([]byte(streamNameInMist))
+						return
+					}
+
 					// check if such stream already exists in Mist's config
-					streams, _, err := mc.mapi.Streams()
+					streams, activeStreams, err := mc.mapi.Streams()
 					if err != nil {
 						glog.Warningf("Error getting streams list from Mist: %v", err)
 						w.WriteHeader(http.StatusOK)
 						w.Write([]byte(streamNameInMist))
 						return
 					}
-					if _, has := streams[streamNameInMist]; has {
-						glog.Infof("Requested stream '%s' already exists in Mist config, just returning it's name", streamNameInMist)
+					if utils.StringsSliceContains(activeStreams, streamNameInMist) {
+						glog.Infof("Stream is in active map, returning %s", streamNameInMist)
 						w.WriteHeader(http.StatusOK)
 						w.Write([]byte(streamNameInMist))
 						return
 					}
-					// if not, create new stream object
+					if mstream, has := streams[streamNameInMist]; has {
+						if len(mstream.Processes) == 0 {
+							// Stream exists and has transcoding turned off
+							glog.Infof("Requested stream '%s' already exists in Mist config, just returning it's name", streamNameInMist)
+							w.WriteHeader(http.StatusOK)
+							w.Write([]byte(streamNameInMist))
+							return
+						}
+					}
+					// Looks like there is no RTMP stream on our Mist server, so probably it is on other
+					// (load balanced) server. So we need to create Mist's stream configuration without
+					// transcoding
 					stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
 					if err != nil || stream == nil {
 						glog.Errorf("Error getting stream info from Livepeer API err=%v", err)
@@ -132,11 +158,12 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 					}
 					glog.V(model.DEBUG).Infof("For stream %s got info %+v", playbackID, stream)
 					if stream.Deleted {
-						mc.mapi.DeleteStreams(streamNameInMist)
+						glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", playbackID)
+						go mc.mapi.DeleteStreams(streamNameInMist)
 						w.WriteHeader(http.StatusNotFound)
 						return
 					}
-					err = mc.createMistStream(streamNameInMist, stream)
+					err = mc.createMistStream(streamNameInMist, stream, true)
 					if err != nil {
 						glog.Errorf("Error creating stream on the Mist server: %v", err)
 					}
@@ -168,6 +195,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		}
 		if lines[2] == "RTMP" {
 			playbackID := lines[0]
+			mc.mu.Lock()
 			if id, has := mc.pub2id[playbackID]; has {
 				err := mc.lapi.SetActive(id, false)
 				if err != nil {
@@ -175,6 +203,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 				}
 				delete(mc.pub2id, playbackID)
 			}
+			mc.mu.Unlock()
 		}
 		w.WriteHeader(http.StatusOK)
 		return
@@ -223,12 +252,20 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	glog.V(model.DEBUG).Infof("For stream %s got info %+v", streamKey, stream)
 
 	if stream.Deleted {
+		glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", streamKey)
+		streamKey = stream.PlaybackID
+		streamKey = strings.ReplaceAll(streamKey, "-", "")
+		if mc.balancerHost != "" {
+			streamKey = streamPlaybackPrefix + streamKey
+		}
 		mc.mapi.DeleteStreams(streamKey)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	if stream.PlaybackID != "" {
+		mc.mu.Lock()
+		defer mc.mu.Unlock()
 		mc.pub2id[stream.PlaybackID] = stream.ID
 		streamKey = stream.PlaybackID
 		streamKey = strings.ReplaceAll(streamKey, "-", "")
@@ -245,7 +282,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	} else {
 		streamKey = strings.ReplaceAll(streamKey, "-", "")
 	}
-	err = mc.createMistStream(streamKey, stream)
+	err = mc.createMistStream(streamKey, stream, false)
 	if err != nil {
 		glog.Errorf("Error creating stream on the Mist server: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -255,7 +292,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	glog.Infof("Responded with '%s'", responseURL)
 }
 
-func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStreamResp) error {
+func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStreamResp, skipTranscoding bool) error {
 	if len(stream.Presets) == 0 && len(stream.Profiles) == 0 {
 		stream.Presets = append(stream.Presets, "P144p30fps16x9")
 	}
@@ -264,7 +301,7 @@ func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStream
 		source = fmt.Sprintf("balance:http://%s/?fallback=push://", mc.balancerHost)
 	}
 	err := mc.mapi.CreateStream(streamName, stream.Presets,
-		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source)
+		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, skipTranscoding)
 	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
 	return err
 }
