@@ -128,6 +128,7 @@ type (
 		HumanName      string    `json:"x-LSP-name,omitempty"`
 		Leastlive      string    `json:"leastlive,omitempty"`
 		CustomURL      string    `json:"custom_url,omitempty"`
+		AudioSelect    string    `json:"audio_select,omitempty"`
 	}
 
 	Stream struct {
@@ -279,7 +280,7 @@ func (mapi *API) CreateStream(name string, presets []string, profiles []Profile,
 		// Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfiles: targetProfiles, Leastlive: "1", CustomURL: customURL}},
 	}
 	if !skipTranscoding {
-		reqs.Addstream[name].Processes = []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfiles: targetProfiles, Leastlive: "1", CustomURL: customURL}}
+		reqs.Addstream[name].Processes = []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfiles: targetProfiles, Leastlive: "1", CustomURL: customURL, AudioSelect: "maxbps"}}
 	}
 
 	_, err := mapi.post(reqs, false)
