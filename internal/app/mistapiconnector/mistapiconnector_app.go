@@ -194,7 +194,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			return
 		}
 		if lines[2] == "RTMP" {
-			playbackID := lines[0]
+			playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
 			mc.mu.Lock()
 			if id, has := mc.pub2id[playbackID]; has {
 				err := mc.lapi.SetActive(id, false)
