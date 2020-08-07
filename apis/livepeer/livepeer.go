@@ -102,11 +102,11 @@ type (
 	}
 
 	addressResp struct {
-		Address string `json:"address,omitempty"`
+		Address string `json:"address"`
 	}
 
 	setActiveReq struct {
-		Active bool `json:"active,omitempty"`
+		Active bool `json:"active"`
 	}
 )
 
