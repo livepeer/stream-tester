@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -343,6 +344,11 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 				// fn := fmt.Sprintf("%s-%05d.ts", upts[ind], task.seqNo)
 				fn = fmt.Sprintf("%s-%s", upts[ind], fn)
 			}
+			fullpath := path.Join(md.saveDir, fn)
+			fulldir := filepath.Dir(fullpath)
+			if _, err := os.Stat(fulldir); os.IsNotExist(err) {
+				os.MkdirAll(fulldir, 0755)
+			}
 			glog.V(model.INSANE).Infof("Saving segment url=%s fsurl=%s saveDir=%s fn=%s livepeerNameSchema=%v", task.url, fsurl, md.saveDir, fn, md.livepeerNameSchema)
 			// playListFileName := md.name
 			// if md.wowzaMode {
@@ -353,7 +359,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			// 	fn = path.Join(dn, upts[len(upts)-1])
 			// 	playListFileName = path.Join(dn, playListFileName)
 			// }
-			err = ioutil.WriteFile(path.Join(md.saveDir, fn), b, 0644)
+			err = ioutil.WriteFile(fullpath, b, 0644)
 			if err != nil {
 				glog.Fatal(err)
 			}
