@@ -275,9 +275,9 @@ func (lapi *API) GetStream(id string) (*CreateStreamResp, error) {
 }
 
 // SetActive set isActive
-func (lapi *API) SetActive(id string, active bool) error {
+func (lapi *API) SetActive(id string, active bool) (bool, error) {
 	if id == "" {
-		return errors.New("empty id")
+		return true, errors.New("empty id")
 	}
 	u := fmt.Sprintf("%s/api/stream/%s/setactive", lapi.choosenServer, id)
 	ar := setActiveReq{
@@ -286,22 +286,22 @@ func (lapi *API) SetActive(id string, active bool) error {
 	b, _ := json.Marshal(&ar)
 	req, err := uhttp.NewRequest("PUT", u, bytes.NewBuffer(b))
 	if err != nil {
-		return err
+		return true, err
 	}
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		glog.Errorf("Error set active %v", err)
-		return err
+		return true, err
 	}
 	b, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		glog.Errorf("Error set active (body) %v", err)
-		return err
+		return true, err
 	}
 	resp.Body.Close()
-	return nil
+	return resp.StatusCode >= 200 && resp.StatusCode < 300, nil
 }
 
 func (lapi *API) getStream(u string) (*CreateStreamResp, error) {

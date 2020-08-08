@@ -197,7 +197,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
 			mc.mu.Lock()
 			if id, has := mc.pub2id[playbackID]; has {
-				err := mc.lapi.SetActive(id, false)
+				_, err := mc.lapi.SetActive(id, false)
 				if err != nil {
 					glog.Error(err)
 				}
@@ -275,9 +275,14 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		pp[2] = streamKey
 		pu.Path = strings.Join(pp, "/")
 		responseURL = pu.String()
-		err := mc.lapi.SetActive(stream.ID, true)
+		ok, err := mc.lapi.SetActive(stream.ID, true)
 		if err != nil {
 			glog.Error(err)
+		} else if !ok {
+			glog.Infof("Stream %s (%s) forbidden by webhook, rejecting", stream.ID, stream.StreamKey)
+			delete(mc.pub2id, stream.PlaybackID)
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 	} else {
 		streamKey = strings.ReplaceAll(streamKey, "-", "")
