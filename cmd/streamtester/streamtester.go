@@ -138,6 +138,7 @@ func main() {
 		time.Sleep(*delayStart)
 	}
 	if *infinitePull != "" {
+		model.ProfilesNum = 0
 		puller := testers.NewInfinitePuller(*infinitePull, *save)
 		puller.Start()
 		runtime.Goexit()
