@@ -216,21 +216,10 @@ func (mapi *API) Login() error {
 		return fmt.Errorf("Unexpected status: %s", auth.Authorize.Status)
 	}
 
-	mh := md5.New()
-	h1 := md5.Sum([]byte(mapi.password))
-	mh.Write([]byte(hex.EncodeToString(h1[:])))
-	mh.Write([]byte(auth.Authorize.Challenge))
-
-	hashRes := hex.EncodeToString(mh.Sum(nil))
-	glog.Infof("Challenge response: %s", hashRes)
 	mapi.challenge = auth.Authorize.Challenge
-	mapi.challengeRepsonse = hashRes
-	// mac := hmac.New(md5.New, []byte(secret))
-	// mac.Write([]byte(message))
-	// expectedMAC := mac.Sum(nil)
-	// return hex.EncodeToString(expectedMAC)
+	mapi.challengeRepsonse = mapi.caclChallengeResponse(mapi.password, mapi.challenge)
 
-	u := mapi.apiURL + "?minimal=0&command=" + url.QueryEscape(fmt.Sprintf(`{"authorize":{"username":"%s","password":"%s"}}`, mapi.login, hashRes))
+	u := mapi.apiURL + "?minimal=0&command=" + url.QueryEscape(fmt.Sprintf(`{"authorize":{"username":"%s","password":"%s"}}`, mapi.login, mapi.challengeRepsonse))
 	resp, err = httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
 		glog.Errorf("Error authenticating to Mist server (%s) error: %v", u, err)
@@ -250,6 +239,16 @@ func (mapi *API) Login() error {
 	}
 	glog.Info(string(b))
 	return nil
+}
+
+func (mapi *API) caclChallengeResponse(password, challenge string) string {
+	mh := md5.New()
+	h1 := md5.Sum([]byte(password))
+	mh.Write([]byte(hex.EncodeToString(h1[:])))
+	mh.Write([]byte(challenge))
+	hashRes := hex.EncodeToString(mh.Sum(nil))
+	glog.Infof("Challenge response: %s", hashRes)
+	return hashRes
 }
 
 // CreateStream creates new stream in Mist server
@@ -432,17 +431,22 @@ func (mapi *API) post(commandi interface{}, verbose bool) ([]byte, error) {
 	}
 	glog.Info("Mist response: " + string(b))
 
-	/*
-		auth := &authResp{}
-		err = json.Unmarshal(b, auth)
-		if err != nil {
-			return b
+	auth := &authResp{}
+	err = json.Unmarshal(b, auth)
+	if err != nil {
+		return b, nil
+	}
+	glog.Infof("challenge: %s, status: %s", auth.Authorize.Challenge, auth.Authorize.Status)
+	if auth.Authorize.Status == "CHALL" {
+		// need to re-authenticate
+		if auth.Authorize.Challenge == mapi.challenge {
+			glog.Errorf("Error authenticating to Mist")
+		} else {
+			mapi.challenge = auth.Authorize.Challenge
+			mapi.challengeRepsonse = mapi.caclChallengeResponse(mapi.password, mapi.challenge)
+			return mapi.post(commandi, verbose)
 		}
-		glog.Infof("challenge: %s, status: %s", auth.Authorize.Challenge, auth.Authorize.Status)
-		if auth.Authorize.Status == "CHALL" {
-			// need to re-authenticate
-		}
-	*/
+	}
 	return b, nil
 }
 
