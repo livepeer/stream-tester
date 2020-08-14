@@ -292,15 +292,16 @@ func (lapi *API) SetActive(id string, active bool) (bool, error) {
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		glog.Errorf("Error set active %v", err)
+		glog.Errorf("id=%s/setactive Error set active %v", id, err)
 		return true, err
 	}
 	b, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.Errorf("Error set active (body) %v", err)
+		glog.Errorf("id=%s/setactive Error set active (body) %v", err)
 		return true, err
 	}
 	resp.Body.Close()
+	glog.Infof("%s/setactive response status code %d status %s resp %+v", resp.StatusCode, resp.Status, resp)
 	return resp.StatusCode >= 200 && resp.StatusCode < 300, nil
 }
 
