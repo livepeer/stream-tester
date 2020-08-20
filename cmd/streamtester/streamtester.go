@@ -139,9 +139,8 @@ func main() {
 	}
 	if *infinitePull != "" {
 		model.ProfilesNum = 0
-		puller := testers.NewInfinitePuller(*infinitePull, *save)
+		puller := testers.NewInfinitePuller(gctx, *infinitePull, *save, *wowza)
 		puller.Start()
-		runtime.Goexit()
 		return
 	}
 	var lapi *livepeer.API

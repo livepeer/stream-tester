@@ -9,15 +9,19 @@ import (
 )
 
 type infinitePuller struct {
-	url  string
-	save bool
+	url   string
+	save  bool
+	wowza bool
+	ctx   context.Context
 }
 
 // NewInfinitePuller ...
-func NewInfinitePuller(url string, save bool) model.InfinitePuller {
+func NewInfinitePuller(ctx context.Context, url string, save, wowza bool) model.InfinitePuller {
 	return &infinitePuller{
-		url:  url,
-		save: save,
+		ctx:   ctx,
+		url:   url,
+		save:  save,
+		wowza: wowza,
 	}
 }
 
@@ -33,10 +37,11 @@ func (ip *infinitePuller) Start() {
 	*/
 
 	// var sentTimesMap *utils.SyncedTimesMap
-	down := newM3UTester(context.Background(), nil, true, false, false, true, ip.save, nil, nil, "")
+	down := newM3UTester(ip.ctx, nil, ip.wowza, false, false, true, ip.save, nil, nil, "")
 	// go findSkippedSegmentsNumber(up, down)
 	// sr.downloaders = append(sr.downloaders, down)
 	msg := fmt.Sprintf("Starting to pull infinite stream from %s", ip.url)
 	messenger.SendMessage(msg)
 	down.Start(ip.url)
+	<-down.ctx.Done()
 }

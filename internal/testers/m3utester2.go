@@ -43,6 +43,8 @@ type (
 		cancel context.CancelFunc
 	}
 	// m3utester2 tests one stream, reading all the media streams
+	// was designed for use with non-go-livepeer node RTMP ingesters
+	// like Wowza and Mist
 	m3utester2 struct {
 		finite
 		initialURL      *url.URL

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/golang/glog"
@@ -23,6 +24,8 @@ import (
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 )
+
+const simultaneousDownloads = 4
 
 type downloadStats struct {
 	success    int
@@ -71,6 +74,9 @@ type mediaDownloader struct {
 	sentTimesMap       *utils.SyncedTimesMap
 	latencies          []time.Duration // latencies stored as segments get downloaded
 	latenciesPerStream []time.Duration // here index is seqNo, so if segment is failed download then value will be zero
+	isFinite           bool            // true if playlist is VOD
+	segmentsToDownload int32
+	segmentsDownloaded int32
 	source             bool
 	wowzaMode          bool
 	picartoMode        bool
@@ -113,7 +119,7 @@ func newMediaDownloader(ctx context.Context, parentName, name, u, resolution str
 	}
 	md.ctx, md.cancel = context.WithCancel(ctx)
 	if save {
-		mpl, err := m3u8.NewMediaPlaylist(10000, 10000)
+		mpl, err := m3u8.NewMediaPlaylist(0, 1024)
 		mpl.MediaType = m3u8.VOD
 		mpl.Live = false
 		if err != nil {
@@ -126,10 +132,10 @@ func newMediaDownloader(ctx context.Context, parentName, name, u, resolution str
 		if strings.Contains(name, baseSaveDir) {
 			md.savePlayListName = name
 		} else {
-			base, _ := path.Split(md.savePlayListName)
-			md.savePlayListName = path.Join(baseSaveDir, name)
+			base, _ := filepath.Split(md.savePlayListName)
+			md.savePlayListName = filepath.Join(baseSaveDir, name)
 			if base != "" {
-				md.saveDir = path.Join(baseSaveDir, base)
+				md.saveDir = filepath.Join(baseSaveDir, base)
 			}
 		}
 		glog.V(model.DEBUG).Infof("Media stream %s (%s) save dir %s palylist name %s", name, resolution, md.saveDir, md.savePlayListName)
@@ -153,8 +159,12 @@ func newMediaDownloader(ctx context.Context, parentName, name, u, resolution str
 		// md.savePlayListName = path.Join(baseSaveDir, dirName, md.savePlayListName)
 	}
 	// md.saveSegmentsToDisk = true
-	go md.downloadLoop()
-	go md.workerLoop()
+	go md.manifestDownloadLoop()
+	resultsChan := make(chan downloadResult, 32) // http status or excpetion
+	go md.workerLoop(resultsChan)
+	for i := 0; i < simultaneousDownloads; i++ {
+		go md.segmentDownloadWorker(i, resultsChan)
+	}
 	return md
 }
 
@@ -255,10 +265,6 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 		glog.V(model.DEBUG).Infof("Download %s result: %s len %d timeStart %s segment duration %s keyframes %d (%+v)",
 			fsurl, resp.Status, len(b), fsttim, dur, keyFrames, skeyFrames)
 		if !md.firstSegmentParsed && task.seqNo == 0 {
-			// fst, err := utils.GetVideoStartTime(b)
-			// if err != nil {
-			// 	glog.Fatal(err)
-			// }
 			md.firstSegmentTime = fsttim
 			md.firstSegmentParsed = true
 		}
@@ -269,12 +275,6 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			md.mu.Unlock()
 		}
 		if md.segmentsMatcher != nil {
-			// fsttim, dur, err := utils.GetVideoStartTimeAndDur(b)
-			// if err != nil {
-			// 	if err != io.EOF {
-			// 		glog.Fatal(err)
-			// 	}
-			// } else {
 			if verr == nil {
 				latency, speedRatio, merr := md.segmentsMatcher.matchSegment(fsttim, dur, now)
 				src := "    source"
@@ -321,10 +321,9 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			seg.SeqId = task.seqNo
 			seg.Duration = task.duration
 			seg.Title = task.title
-			// md.savePlayList.AppendSegment(seg)
-			md.mu.Lock()
-			md.savePlayList.InsertSegment(task.seqNo, seg)
-			md.mu.Unlock()
+			if err = md.insertSegmentToSavePlaylist(task.seqNo, seg); err != nil {
+				glog.Fatal(err)
+			}
 
 			// glog.Infof("url: %s", task.url)
 			upts := strings.Split(fsurl, "/")
@@ -344,12 +343,16 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 				// fn := fmt.Sprintf("%s-%05d.ts", upts[ind], task.seqNo)
 				fn = fmt.Sprintf("%s-%s", upts[ind], fn)
 			}
-			fullpath := path.Join(md.saveDir, fn)
+			fullpath := filepath.Join(md.saveDir, fn)
 			fulldir := filepath.Dir(fullpath)
 			if _, err := os.Stat(fulldir); os.IsNotExist(err) {
-				os.MkdirAll(fulldir, 0755)
+				err = os.MkdirAll(fulldir, 0755)
+				if err != nil {
+					glog.Fatal(err)
+				}
 			}
-			glog.V(model.INSANE).Infof("Saving segment url=%s fsurl=%s saveDir=%s fn=%s livepeerNameSchema=%v", task.url, fsurl, md.saveDir, fn, md.livepeerNameSchema)
+			// glog.V(model.INSANE).Infof("Saving segment url=%s fsurl=%s saveDir=%s fn=%s livepeerNameSchema=%v", task.url, fsurl, md.saveDir, fn, md.livepeerNameSchema)
+			glog.V(model.DEBUG).Infof("Saving segment url=%s fsurl=%s saveDir=%s fn=%s livepeerNameSchema=%v len=%d bytes", task.url, fsurl, md.saveDir, fn, md.livepeerNameSchema, len(b))
 			// playListFileName := md.name
 			// if md.wowzaMode {
 			// 	dn := upts[len(upts)-2]
@@ -369,7 +372,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			if err != nil {
 				glog.Fatal(err)
 			}
-			glog.V(model.DEBUG).Infof("Segment %s saved to %s", seg.URI, path.Join(md.saveDir, fn))
+			glog.V(model.DEBUG).Infof("Segment %s saved to %s", seg.URI, filepath.Join(md.saveDir, fn))
 		}
 		res <- downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url, seqNo: task.seqNo, downloadCompetedAt: now,
 			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime, keyFrames: keyFrames}
@@ -377,14 +380,34 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 	}
 }
 
-func (md *mediaDownloader) workerLoop() {
-	// seen := newStringRing(128 * 1024)
-	resultsCahn := make(chan downloadResult, 32) // http status or excpetion
+func (md *mediaDownloader) segmentDownloadWorker(num int, overallResultsChan chan downloadResult) {
+	resultsChan := make(chan downloadResult)
 	for {
 		select {
 		case <-md.ctx.Done():
 			return
-		case res := <-resultsCahn:
+		case task := <-md.downTasks:
+			glog.V(model.VERBOSE).Infof("Worker %d got task to download: seqNo=%d url=%s", num, task.seqNo, task.url)
+			go md.downloadSegment(&task, resultsChan)
+			res := <-resultsChan
+			overallResultsChan <- res
+			atomic.AddInt32(&md.segmentsDownloaded, 1)
+		}
+	}
+}
+
+func (md *mediaDownloader) IsFiniteDownloadsFinished() bool {
+	return md.isFinite && md.segmentsToDownload > 0 && md.segmentsToDownload == atomic.LoadInt32(&md.segmentsDownloaded)
+}
+
+func (md *mediaDownloader) workerLoop(resultsChan chan downloadResult) {
+	// seen := newStringRing(128 * 1024)
+	// resultsCahn := make(chan downloadResult, 32) // http status or excpetion
+	for {
+		select {
+		case <-md.ctx.Done():
+			return
+		case res := <-resultsChan:
 			md.mu.Lock()
 			glog.V(model.VERBOSE).Infof("Got result %+v", res)
 			glog.V(model.DEBUG).Infof("Got download result seqNo=%d start time=%s dur=%s keys=%d res=%s name=%s", res.seqNo,
@@ -404,18 +427,37 @@ func (md *mediaDownloader) workerLoop() {
 				md.stats.errors[res.status] = md.stats.errors[res.status] + 1
 			}
 			md.mu.Unlock()
-		case task := <-md.downTasks:
-			// if seen.Contains(task.url) {
-			// 	continue
-			// }
-			glog.V(model.VERBOSE).Infof("Got task to download: seqNo=%d url=%s", task.seqNo, task.url)
-			// seen.Add(task.url)
-			go md.downloadSegment(&task, resultsCahn)
 		}
 	}
 }
 
-func (md *mediaDownloader) downloadLoop() {
+func (md *mediaDownloader) insertSegmentToSavePlaylist(seqNo uint64, seg *m3u8.MediaSegment) error {
+	var err error
+	md.mu.Lock()
+	err = md.savePlayList.InsertSegment(seqNo, seg)
+	if err == m3u8.ErrPlaylistFull {
+		mpl, err := m3u8.NewMediaPlaylist(0, uint(len(md.savePlayList.Segments)*2))
+		if err != nil {
+			glog.Fatal(err)
+		}
+		mpl.TargetDuration = md.savePlayList.TargetDuration
+		mpl.SeqNo = md.savePlayList.SeqNo
+		mpl.MediaType = m3u8.VOD
+		mpl.Live = false
+		for _, oseg := range md.savePlayList.Segments {
+			if oseg != nil {
+				if err = mpl.InsertSegment(oseg.SeqId, oseg); err != nil {
+					glog.Fatal(err)
+				}
+			}
+		}
+		err = md.savePlayList.InsertSegment(seqNo, seg)
+	}
+	md.mu.Unlock()
+	return err
+}
+
+func (md *mediaDownloader) manifestDownloadLoop() {
 	surl := md.u.String()
 	gotManifest := false
 	var mySeqNo uint64
@@ -467,6 +509,11 @@ func (md *mediaDownloader) downloadLoop() {
 		if err != nil {
 			glog.Fatal(err)
 		}
+		if !pl.Live || pl.MediaType == m3u8.EVENT {
+			// VoD and Event's should show the entire playlist
+			pl.SetWinSize(0)
+			md.isFinite = true
+		}
 		glog.V(model.INSANE).Infof("Got media playlist %s with %d (really %d) segments of url %s:", md.resolution, len(pl.Segments), countSegments(pl), surl)
 		glog.V(model.INSANE).Info(pl)
 		if !gotManifest && md.saveSegmentsToDisk {
@@ -474,7 +521,7 @@ func (md *mediaDownloader) downloadLoop() {
 			md.savePlayList.SeqNo = pl.SeqNo
 			gotManifest = true
 		}
-		// for i := len(pl.Segments) - 1; i >= 0; i-- {
+		// for i := len(pl.Segments) - 1; i >= 0; i--
 		now := time.Now()
 		for i, segment := range pl.Segments {
 			// segment := pl.Segments[i]
@@ -508,9 +555,17 @@ func (md *mediaDownloader) downloadLoop() {
 					seqNo = parsedSeq
 				}
 				md.downTasks <- downloadTask{url: segment.URI, seqNo: seqNo, title: segment.Title, duration: segment.Duration, mySeqNo: mySeqNo, appTime: now}
+				md.segmentsToDownload++
 				now = now.Add(time.Millisecond)
 				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
 			}
+		}
+		if md.isFinite {
+			// VOD playlist will not change, does not need to download it again
+			if md.segmentsToDownload == 0 {
+				panic(fmt.Errorf("Playlist %s is VOD, but has no segments", surl))
+			}
+			return
 		}
 		delay := 1 * time.Second
 		if md.sentTimesMap != nil || md.segmentsMatcher != nil {

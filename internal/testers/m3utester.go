@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -229,15 +229,16 @@ func (mt *m3utester) Start(u string) {
 		upl := len(up)
 		mt.saveDirName = ""
 		mt.savePlayListName = up[upl-1]
+		dashes := strings.Count(up[upl-2], "-")
 		if upl > 1 {
 			if up[upl-2] == "stream" {
 				mt.saveDirName = strings.Split(up[upl-1], ".")[0] + "/"
-			} else if mt.wowzaMode || mt.mistMode {
+			} else if mt.wowzaMode || mt.mistMode || dashes == 4 {
 				mt.saveDirName = up[upl-2]
 			}
 		}
 		if mt.saveDirName != "" {
-			mt.savePlayListName = path.Join(mt.saveDirName, mt.savePlayListName)
+			mt.savePlayListName = filepath.Join(mt.saveDirName, mt.savePlayListName)
 			if _, err := os.Stat(mt.saveDirName); os.IsNotExist(err) {
 				os.Mkdir(mt.saveDirName, 0755)
 			}
@@ -245,7 +246,7 @@ func (mt *m3utester) Start(u string) {
 		glog.Infof("Save dir name: '%s', save playlist name %s", mt.saveDirName, mt.savePlayListName)
 	}
 	mt.downStats2.url = u
-	go mt.downloadLoop()
+	go mt.manifestDownloadLoop()
 	go mt.workerLoop()
 	// if mt.infiniteMode {
 	// 	go mt.anaylysePrintingLoop()
@@ -739,7 +740,42 @@ func (mt *m3utester) workerLoop() {
 	}
 }
 
-func (mt *m3utester) downloadLoop() {
+func (mt *m3utester) absVariantURI(variantURI string) string {
+	pvrui, err := url.Parse(variantURI)
+	if err != nil {
+		glog.Error(err)
+		panic(err)
+	}
+	// glog.Infof("Parsed uri: %+v", pvrui, pvrui.IsAbs)
+	if !pvrui.IsAbs() {
+		pvrui = mt.initialURL.ResolveReference(pvrui)
+	}
+	// glog.Info(pvrui)
+	return pvrui.String()
+}
+
+func (mt *m3utester) waitForVODdownloads() {
+	for {
+		select {
+		case <-mt.ctx.Done():
+			return
+		default:
+		}
+		allFinished := true
+		for _, md := range mt.downloads {
+			allFinished = allFinished && md.IsFiniteDownloadsFinished()
+		}
+		if allFinished {
+			break
+		}
+		time.Sleep(4 * time.Second)
+	}
+	// todo run analysis here
+	glog.Infof("Finished downloading VOD for %s", mt.initialURL.String())
+	mt.cancel()
+}
+
+func (mt *m3utester) manifestDownloadLoop() {
 	surl := mt.initialURL.String()
 	// loops := 0
 	// var gotPlaylistWaitingForEnd bool
@@ -759,6 +795,16 @@ func (mt *m3utester) downloadLoop() {
 		case <-mt.ctx.Done():
 			return
 		default:
+		}
+		if len(mt.downloadsKeys) > 0 {
+			mt.mu.Lock()
+			md := mt.downloads[mt.downloadsKeys[0]]
+			if md.isFinite {
+				go mt.waitForVODdownloads()
+				mt.mu.Unlock()
+				return
+			}
+			mt.mu.Unlock()
 		}
 		/*
 			if gotPlaylistWaitingForEnd {
@@ -841,17 +887,7 @@ func (mt *m3utester) downloadLoop() {
 					}
 				}
 				glog.Infof("variant URI=%s", variant.URI)
-				pvrui, err := url.Parse(variant.URI)
-				if err != nil {
-					glog.Error(err)
-					panic(err)
-				}
-				// glog.Infof("Parsed uri: %+v", pvrui, pvrui.IsAbs)
-				if !pvrui.IsAbs() {
-					pvrui = mt.initialURL.ResolveReference(pvrui)
-				}
-				// glog.Info(pvrui)
-				mediaURL := pvrui.String()
+				mediaURL := mt.absVariantURI(variant.URI)
 				currentURLs[mediaURL] = true
 				// Wowza changes media manifests on each fetch, so indentifying streams by
 				// bandwitdh and
