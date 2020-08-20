@@ -301,7 +301,7 @@ func (lapi *API) SetActive(id string, active bool) (bool, error) {
 		return true, err
 	}
 	resp.Body.Close()
-	glog.Infof("%s/setactive response status code %d status %s resp %+v", resp.StatusCode, resp.Status, resp)
+	glog.Infof("%s/setactive response status code %d status %s resp %+v body=%s", id, resp.StatusCode, resp.Status, resp, string(b))
 	return resp.StatusCode >= 200 && resp.StatusCode < 300, nil
 }
 
