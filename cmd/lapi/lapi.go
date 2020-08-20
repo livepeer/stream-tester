@@ -106,10 +106,36 @@ func main() {
 		},
 	}
 
+	setActive := &ffcli.Command{
+		Name:       "setactive",
+		ShortUsage: "lapi setactive streamId [true|false]",
+		ShortHelp:  "makes /setactive call",
+		Exec: func(_ context.Context, args []string) error {
+			if *token == "" {
+				return fmt.Errorf("Token should be provided")
+			}
+			if len(args) == 0 {
+				return fmt.Errorf("Stream ID should be provided")
+			}
+			lapi := livepeer.NewLivepeer(*token, server, nil)
+			lapi.Init()
+			active := false
+			if len(args) > 1 && args[1] == "true" {
+				active = true
+			}
+			ok, err := lapi.SetActive(args[0], active)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("SetActive response: %v", ok)
+			return nil
+		},
+	}
+
 	root := &ffcli.Command{
 		ShortUsage:  "lapi [flags] <subcommand>",
 		FlagSet:     rootFlagSet,
-		Subcommands: []*ffcli.Command{create, transcode, ls},
+		Subcommands: []*ffcli.Command{create, transcode, ls, setActive},
 	}
 
 	// if err := root.ParseAndRun(context.Background(), os.Args[1:]); err != nil {
