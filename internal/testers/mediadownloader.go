@@ -362,17 +362,19 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			// 	fn = path.Join(dn, upts[len(upts)-1])
 			// 	playListFileName = path.Join(dn, playListFileName)
 			// }
-			err = ioutil.WriteFile(fullpath, b, 0644)
-			if err != nil {
-				glog.Fatal(err)
-			}
-			md.mu.Lock()
-			err = ioutil.WriteFile(md.savePlayListName, md.savePlayList.Encode().Bytes(), 0644)
-			md.mu.Unlock()
-			if err != nil {
-				glog.Fatal(err)
-			}
-			glog.V(model.DEBUG).Infof("Segment %s saved to %s", seg.URI, filepath.Join(md.saveDir, fn))
+			go func(fn, fullpath string, b []byte) {
+				err := ioutil.WriteFile(fullpath, b, 0644)
+				if err != nil {
+					glog.Fatal(err)
+				}
+				md.mu.Lock()
+				err = ioutil.WriteFile(md.savePlayListName, md.savePlayList.Encode().Bytes(), 0644)
+				md.mu.Unlock()
+				if err != nil {
+					glog.Fatal(err)
+				}
+				glog.V(model.DEBUG).Infof("Segment %s saved to %s", seg.URI, filepath.Join(md.saveDir, fn))
+			}(fn, fullpath, b)
 		}
 		res <- downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url, seqNo: task.seqNo, downloadCompetedAt: now,
 			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime, keyFrames: keyFrames}
