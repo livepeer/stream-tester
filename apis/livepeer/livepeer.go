@@ -89,6 +89,7 @@ type (
 		SourceSegments     int64     `json:"sourceSegments,omitempty"`
 		TranscodedSegments int64     `json:"transcodedSegments,omitempty"`
 		Deleted            bool      `json:"deleted,omitempty"`
+		Record             bool      `json:"record"`
 		Profiles           []Profile `json:"profiles,omitempty"`
 	}
 

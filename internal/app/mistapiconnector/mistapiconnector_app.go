@@ -306,7 +306,7 @@ func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStream
 		source = fmt.Sprintf("balance:http://%s/?fallback=push://", mc.balancerHost)
 	}
 	err := mc.mapi.CreateStream(streamName, stream.Presets,
-		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, skipTranscoding)
+		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, skipTranscoding, stream.Record)
 	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
 	return err
 }
