@@ -645,9 +645,12 @@ func (mt *m3utester) workerLoop() {
 			if len(mt.downloadsKeys) == 0 {
 				continue
 			}
+			sourceKey := mt.downloadsKeys[0]
+			if mt.downloads[sourceKey].isFinite {
+				continue
+			}
 			mt.succ2mu.Lock()
 			now := time.Now()
-			sourceKey := mt.downloadsKeys[0]
 			glog.V(model.INSANE).Infof("=====>>>>>>>>>>>>>>>>>>>>>>>>>")
 			glog.V(model.VVERBOSE).Infof("source key = %s, down stats2 %+v", sourceKey, mt.downStats2)
 			// glog.Infof("%+v", mt.downSegs)
@@ -772,6 +775,45 @@ func (mt *m3utester) waitForVODdownloads() {
 	}
 	// todo run analysis here
 	glog.Infof("Finished downloading VOD for %s", mt.initialURL.String())
+	glog.V(model.SHORT).Infof("=====>>>>>>>>>>>>>>>>>>>>>>>>>")
+	sourceKey := mt.downloadsKeys[0]
+	glog.V(model.SHORT).Infof("source key = %s, down stats2 %+v", sourceKey, mt.downStats2)
+	// glog.Infof("%+v", mt.downSegs)
+	for dk, dr := range mt.downSegs[sourceKey] {
+		mt.downStats2.downSource++
+		mt.downStats2.sourceBytes += int64(dr.bytes)
+		mt.downStats2.sourceDuration += dr.duration
+		glog.V(model.INSANE).Infof("Checking source seg %s  pts %s down at %s", dk, dr.startTime, dr.downloadCompetedAt)
+		someFound := false
+		for i, transKey := range mt.downloadsKeys[1:] {
+			transDM := mt.downSegs[transKey]
+			found := false
+			for transSegName, transSeg := range transDM {
+				glog.V(model.INSANE2).Infof("Checking %s pts %s down at %s", transSegName, transSeg.startTime, transSeg.downloadCompetedAt)
+				if absTimeTiff(dr.startTime, transSeg.startTime) < 210*time.Millisecond {
+					// match found
+					mt.downStats2.downTransAll++
+					mt.downStats2.downTrans[i]++
+					mt.downStats2.transAllBytes += int64(transSeg.bytes)
+					mt.downStats2.transcodedDuration += transSeg.duration
+					delete(transDM, transSegName)
+					found = true
+					someFound = true
+					break
+				}
+			}
+			if !found {
+				glog.V(model.SHORT).Infof("Not found pair for %s seg in %s", dr.name, transKey)
+			}
+		}
+		if someFound {
+			mt.downStats2.sourceTranscodedBytes += int64(dr.bytes)
+		} else {
+			glog.V(model.SHORT).Infof("Source segment without matching transcoded one: name=%s uri=%s resolution=%s", dr.name, dr.uri, dr.resolution)
+		}
+		delete(mt.downSegs[sourceKey], dk)
+		mt.downStats2.successRate = float64(mt.downStats2.downTransAll) / float64(mt.downStats2.downSource*mt.downStats2.numProfiles) * 100.0
+	}
 	mt.cancel()
 }
 

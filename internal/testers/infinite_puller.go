@@ -44,4 +44,6 @@ func (ip *infinitePuller) Start() {
 	messenger.SendMessage(msg)
 	down.Start(ip.url)
 	<-down.ctx.Done()
+	msg = fmt.Sprintf("Done pulling from %s", ip.url)
+	messenger.SendMessage(msg)
 }
