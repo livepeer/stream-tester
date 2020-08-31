@@ -48,6 +48,9 @@ var ProfilesNum = 2
 // FailHardOnBadSegments if true then panic if can't parse downloaded segments
 var FailHardOnBadSegments bool
 
+// ExitCode exit code
+var ExitCode int
+
 // InfinitePuller interface
 type InfinitePuller interface {
 	// Start blocks
@@ -56,7 +59,7 @@ type InfinitePuller interface {
 
 // Streamer2 interface
 type Streamer2 interface {
-	StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget time.Duration)
+	StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget, timeToStream time.Duration)
 	// StartPulling pull arbitrary HLS stream and report found errors
 	StartPulling(mediaURL string)
 }

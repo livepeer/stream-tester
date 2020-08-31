@@ -207,6 +207,15 @@ func main() {
 		time.Sleep(time.Second)
 		return
 	}
+	var streamDuration time.Duration
+	if *stime != "" {
+		if streamDuration, err = server.ParseStreamDurationArgument(*stime); err != nil {
+			panic(err)
+		}
+		if *repeat > 1 {
+			// glog.Fatal("Can't set both -time and -repeat.")
+		}
+	}
 
 	if *mediaURL != "" && *rtmpURL == "" {
 		msg := fmt.Sprintf(`Starting infinite pull from %s`, *mediaURL)
@@ -222,11 +231,12 @@ func main() {
 		msg := fmt.Sprintf(`Starting infinite stream to %s`, *mediaURL)
 		messenger.SendMessage(msg)
 		sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
-		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget)
+		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, streamDuration)
 		if *wowza {
 			// let Wowza remove session
 			time.Sleep(3 * time.Minute)
 		}
+		os.Exit(model.ExitCode)
 		// to not exit
 		// s := server.NewStreamerServer(*wowza)
 		// s.StartWebServer("localhost:7933")
@@ -238,15 +248,6 @@ func main() {
 		mHost = *bhost
 	}
 
-	var streamDuration time.Duration
-	if *stime != "" {
-		if streamDuration, err = server.ParseStreamDurationArgument(*stime); err != nil {
-			panic(err)
-		}
-		if *repeat > 1 {
-			// glog.Fatal("Can't set both -time and -repeat.")
-		}
-	}
 	if *mist && (*mistCreds == "" || *apiToken == "") {
 		glog.Fatal("If Mist server should be load-tested, then -mist-creds and -api-token should be specified. It is needed to create streams on Mist server using API.")
 	}

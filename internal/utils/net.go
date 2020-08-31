@@ -120,14 +120,16 @@ func WaitForTCP(waitForTarget time.Duration, uri string) error {
 	}
 	dailer := net.Dialer{Timeout: 2 * time.Second}
 	started := time.Now()
+	var conn net.Conn
 	for {
-		if _, err = dailer.Dial("tcp", u.Host); err != nil {
+		if conn, err = dailer.Dial("tcp", u.Host); err != nil {
 			time.Sleep(4 * time.Second)
 			if time.Since(started) > waitForTarget {
 				return fmt.Errorf("Can't connect to '%s' for more than %s", uri, waitForTarget)
 			}
 			continue
 		}
+		conn.Close()
 		break
 	}
 	return nil

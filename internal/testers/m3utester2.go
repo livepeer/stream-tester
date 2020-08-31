@@ -284,6 +284,7 @@ func (mut *m3utester2) workerLoop() {
 }
 
 func (f *finite) fatalEnd(msg string) {
+	model.ExitCode = 127
 	glog.Error(msg)
 	messenger.SendFatalMessage(msg)
 	f.cancel()

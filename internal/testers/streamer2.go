@@ -39,7 +39,7 @@ func NewStreamer2(ctx context.Context, cancel context.CancelFunc, wowzaMode, mis
 // StartStreaming starts streaming into rtmpIngestURL and reading back from mediaURL.
 // Will stream indefinitely, until error occurs.
 // Does not exit until error.
-func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget time.Duration) {
+func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget, timeToStream time.Duration) {
 	if sr.uploader != nil {
 		glog.Fatal("Already streaming")
 	}
@@ -54,8 +54,11 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	// sr.uploader = newRtmpStreamer(rtmpIngestURL, sourceFileName, nil, nil, sr.eof, sr.wowzaMode)
 	sctx, scancel := context.WithCancel(sr.ctx)
 	sr.uploader = newRtmpStreamer(sctx, scancel, rtmpIngestURL, sourceFileName, sourceFileName, nil, nil, false, sm)
+	if timeToStream == 0 {
+		timeToStream = -1
+	}
 	go func() {
-		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, -1, waitForTarget)
+		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, timeToStream, waitForTarget)
 	}()
 	sr.downloader = newM3utester2(sr.ctx, sr.cancel, mediaURL, sr.wowzaMode, sr.mistMode, waitForTarget, sm) // starts to download at creation
 	started := time.Now()
