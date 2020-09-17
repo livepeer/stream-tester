@@ -271,25 +271,58 @@ func main() {
 			glog.Fatalf("-api-token should be specified")
 		}
 		if !*httpIngest {
-			glog.Fatal("Using Livepeer API currently only implemented for HTTP ingest")
+			// glog.Fatal("Using Livepeer API currently only implemented for HTTP ingest")
+			// glog.Fatal("Using Livepeer API currently only implemented for RTMP ingest")
 			// API webhook doesn't authenicate RTMP streams
 		}
 		if *presets == "" {
-			glog.Fatal("Presets should be specified")
+			// glog.Fatal("Presets should be specified")
 		}
-		presetsParts := strings.Split(*presets, ",")
-		model.ProfilesNum = len(presetsParts)
-		lapi = livepeer.NewLivepeer(*apiToken, livepeer.ACServer, presetsParts) // hardcode AC server for now
+		hostName, _ := os.Hostname()
+		// presetsParts := strings.Split(*presets, ",")
+		// model.ProfilesNum = len(presetsParts)
+		lapi = livepeer.NewLivepeer(*apiToken, livepeer.ProdServer, nil)
 		lapi.Init()
-		// lapi.CreateStream("st01", "P144p30fps16x9")
-		bds, err := lapi.Broadcasters()
+		glog.Infof("Choosen server: %s", lapi.GetServer())
+		ingests, err := lapi.Ingest(false)
 		if err != nil {
 			panic(err)
 		}
-		glog.Infof("Got broadcasters to use: %v", bds)
-		if len(bds) == 0 {
-			glog.Fatal("Got empty list of broadcasterf from Livepeer API")
+		glog.Infof("Got ingests: %+v", ingests)
+		streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format(time.RFC3339Nano))
+		stream, err := lapi.CreateStreamEx(streamName)
+		if err != nil {
+			panic(err)
 		}
+		glog.Infof("Created stream %s", stream.ID)
+		*rtmpURL = ingests[0].Ingest + "/" + stream.StreamKey
+		*mediaURL = ingests[0].Playback + "/" + stream.PlaybackID + "/index.m3u8"
+		dur := "infinite"
+		if streamDuration > 0 {
+			dur = streamDuration.String()
+		}
+		msg := fmt.Sprintf(`Starting %s stream to %s`, dur, *rtmpURL)
+		glog.Info(msg)
+
+		sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
+		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, streamDuration)
+		if *wowza {
+			// let Wowza remove session
+			time.Sleep(3 * time.Minute)
+		}
+		os.Exit(model.ExitCode)
+		// lapi.Broadcasters()
+		/*
+			bds, err := lapi.Broadcasters()
+			if err != nil {
+				panic(err)
+			}
+			glog.Infof("Got broadcasters to use: %v", bds)
+			if len(bds) == 0 {
+				glog.Fatal("Got empty list of broadcasterf from Livepeer API")
+			}
+		*/
+		return
 	}
 	// fmt.Printf("Args: %+v\n", flag.Args())
 	glog.Infof("Starting stream tester %s, file %s number of streams is %d, repeat %d times no bar %v", model.Version, fn, *sim, *repeat, *noBar)

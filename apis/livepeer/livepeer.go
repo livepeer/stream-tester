@@ -34,6 +34,7 @@ const (
 	ACServer = "chi.livepeer-ac.live"
 
 	livepeerAPIGeolocateURL = "http://livepeer.live/api/geolocate"
+	ProdServer              = "livepeer.com"
 )
 
 type (
@@ -65,13 +66,19 @@ type (
 		// - P240p30fps16x9
 		// - P240p30fps4x3
 		// - P144p30fps16x9
-		Profiles []struct {
-			Name    string `json:"name,omitempty"`
-			Width   int    `json:"width,omitempty"`
-			Height  int    `json:"height,omitempty"`
-			Bitrate int    `json:"bitrate,omitempty"`
-			Fps     int    `json:"fps"`
-		} `json:"profiles,omitempty"`
+		Profiles []Profile `json:"profiles,omitempty"`
+	}
+
+	// Profile transcoding profile
+	Profile struct {
+		Name    string `json:"name,omitempty"`
+		Width   int    `json:"width,omitempty"`
+		Height  int    `json:"height,omitempty"`
+		Bitrate int    `json:"bitrate,omitempty"`
+		Fps     int    `json:"fps"`
+		FpsDen  int    `json:"fpsDen,omitempty"`
+		Gop     string `json:"gop,omitempty"`
+		Profile string `json:"profile,omitempty"` // enum: - H264Baseline - H264Main - H264High - H264ConstrainedHigh
 	}
 
 	// CreateStreamResp returned by API
@@ -91,16 +98,17 @@ type (
 		Deleted            bool      `json:"deleted,omitempty"`
 		Record             bool      `json:"record"`
 		Profiles           []Profile `json:"profiles,omitempty"`
+		Errors             []string  `json:"errors,omitempty"`
 	}
 
-	// Profile ...
-	Profile struct {
-		Fps     int    `json:"fps"`
-		Name    string `json:"name,omitempty"`
-		Width   int    `json:"width,omitempty"`
-		Height  int    `json:"height,omitempty"`
-		Bitrate int    `json:"bitrate,omitempty"`
-	}
+	// // Profile ...
+	// Profile struct {
+	// 	Fps     int    `json:"fps"`
+	// 	Name    string `json:"name,omitempty"`
+	// 	Width   int    `json:"width,omitempty"`
+	// 	Height  int    `json:"height,omitempty"`
+	// 	Bitrate int    `json:"bitrate,omitempty"`
+	// }
 
 	addressResp struct {
 		Address string `json:"address"`
@@ -148,16 +156,16 @@ func (lapi *API) Init() {
 
 	resp, err := httpClient.Do(uhttp.GetRequest(livepeerAPIGeolocateURL))
 	if err != nil {
-		glog.Fatalf("Error geolocating Livpeer API server (%s) error: %v", livepeerAPIGeolocateURL, err)
+		glog.Fatalf("Error geolocating Livepeer API server (%s) error: %v", livepeerAPIGeolocateURL, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
-		glog.Fatalf("Status error contacting Livpeer API server (%s) status %d body: %s", livepeerAPIGeolocateURL, resp.StatusCode, string(b))
+		glog.Fatalf("Status error contacting Livepeer API server (%s) status %d body: %s", livepeerAPIGeolocateURL, resp.StatusCode, string(b))
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.Fatalf("Error geolocating Livpeer API server (%s) error: %v", livepeerAPIGeolocateURL, err)
+		glog.Fatalf("Error geolocating Livepeer API server (%s) error: %v", livepeerAPIGeolocateURL, err)
 	}
 	glog.Info(string(b))
 	geo := &geoResp{}
@@ -174,17 +182,17 @@ func (lapi *API) Broadcasters() ([]string, error) {
 	u := fmt.Sprintf("%s/api/broadcaster", lapi.choosenServer)
 	resp, err := httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
-		glog.Errorf("Error getting broadcasters from Livpeer API server (%s) error: %v", u, err)
+		glog.Errorf("Error getting broadcasters from Livepeer API server (%s) error: %v", u, err)
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
-		glog.Fatalf("Status error contacting Livpeer API server (%s) status %d body: %s", livepeerAPIGeolocateURL, resp.StatusCode, string(b))
+		glog.Fatalf("Status error contacting Livepeer API server (%s) status %d body: %s", livepeerAPIGeolocateURL, resp.StatusCode, string(b))
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.Fatalf("Error geolocating Livpeer API server (%s) error: %v", livepeerAPIGeolocateURL, err)
+		glog.Fatalf("Error geolocating Livepeer API server (%s) error: %v", livepeerAPIGeolocateURL, err)
 	}
 	glog.Info(string(b))
 	broadcasters := []addressResp{}
@@ -199,8 +207,88 @@ func (lapi *API) Broadcasters() ([]string, error) {
 	return bs, nil
 }
 
+// Ingest object
+type Ingest struct {
+	Base     string `json:"base,omitempty"`
+	Playback string `json:"playback,omitempty"`
+	Ingest   string `json:"ingest,omitempty"`
+}
+
+// Ingest returns ingest object
+func (lapi *API) Ingest(all bool) ([]Ingest, error) {
+	u := fmt.Sprintf("%s/api/ingest", lapi.choosenServer)
+	if all {
+		u += "?first=false"
+	}
+	resp, err := httpClient.Do(uhttp.GetRequest(u))
+	if err != nil {
+		glog.Errorf("Error getting ingests from Livepeer API server (%s) error: %v", u, err)
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		glog.Fatalf("Status error contacting Livepeer API server (%s) status %d body: %s", lapi.choosenServer, resp.StatusCode, string(b))
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Fatalf("Error reading from Livepeer API server (%s) error: %v", lapi.choosenServer, err)
+	}
+	glog.Info(string(b))
+	ingests := []Ingest{}
+	err = json.Unmarshal(b, &ingests)
+	if err != nil {
+		return nil, err
+	}
+	return ingests, nil
+}
+
+var standardProfiles = []Profile{
+	{
+		Name:    "240p0",
+		Fps:     0,
+		Bitrate: 250000,
+		Width:   426,
+		Height:  240,
+		Gop:     "2.0",
+	},
+	{
+		Name:    "360p0",
+		Fps:     0,
+		Bitrate: 800000,
+		Width:   640,
+		Height:  360,
+		Gop:     "2.0",
+	},
+	{
+		Name:    "480p0",
+		Fps:     0,
+		Bitrate: 1600000,
+		Width:   854,
+		Height:  480,
+		Gop:     "2.0",
+	},
+	{
+		Name:    "720p0",
+		Fps:     0,
+		Bitrate: 3000000,
+		Width:   1280,
+		Height:  720,
+		Gop:     "2.0",
+	},
+}
+
 // CreateStream creates stream with specified name and profiles
 func (lapi *API) CreateStream(name string, profiles ...string) (string, error) {
+	csr, err := lapi.CreateStreamEx(name, profiles...)
+	if err != nil {
+		return "", err
+	}
+	return csr.ID, err
+}
+
+// CreateStreamEx creates stream with specified name and profiles
+func (lapi *API) CreateStreamEx(name string, profiles ...string) (*CreateStreamResp, error) {
 	presets := profiles
 	if len(presets) == 0 {
 		presets = lapi.presets
@@ -210,37 +298,44 @@ func (lapi *API) CreateStream(name string, profiles ...string) (string, error) {
 		Name:    name,
 		Presets: presets,
 	}
+	if len(presets) == 0 {
+		reqs.Profiles = standardProfiles
+	}
 	b, err := json.Marshal(reqs)
 	if err != nil {
 		glog.V(model.SHORT).Infof("Error marshalling create stream request %v", err)
-		return "", err
+		return nil, err
 	}
+	glog.Infof("Sending: %s", b)
 	u := fmt.Sprintf("%s/api/stream", lapi.choosenServer)
 	req, err := uhttp.NewRequest("POST", u, bytes.NewBuffer(b))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		glog.Errorf("Error creating Livepeer stream %v", err)
-		return "", err
+		return nil, err
 	}
 	b, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		glog.Errorf("Error creating Livepeer stream (body) %v", err)
-		return "", err
+		return nil, err
 	}
 	resp.Body.Close()
 	glog.Info(string(b))
 	r := &CreateStreamResp{}
 	err = json.Unmarshal(b, r)
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	if len(r.Errors) > 0 {
+		return nil, fmt.Errorf("Error creating stream: %+v", r.Errors)
 	}
 	glog.Infof("Stream %s created with id %s", name, r.ID)
-	return r.ID, nil
+	return r, nil
 }
 
 // DefaultPresets returns default presets
@@ -311,13 +406,13 @@ func (lapi *API) getStream(u string) (*CreateStreamResp, error) {
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		glog.Errorf("Error getting stream by id from Livpeer API server (%s) error: %v", u, err)
+		glog.Errorf("Error getting stream by id from Livepeer API server (%s) error: %v", u, err)
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
-		glog.Errorf("Status error getting stream by id Livpeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		glog.Errorf("Status error getting stream by id Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
 		if resp.StatusCode == http.StatusNotFound {
 			return nil, ErrNotExists
 		}
@@ -325,7 +420,7 @@ func (lapi *API) getStream(u string) (*CreateStreamResp, error) {
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.Errorf("Error getting stream by id Livpeer API server (%s) error: %v", u, err)
+		glog.Errorf("Error getting stream by id Livepeer API server (%s) error: %v", u, err)
 		return nil, err
 	}
 	bs := string(b)
