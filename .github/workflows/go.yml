@@ -75,11 +75,13 @@ jobs:
         make lapi
         make mapi
         make connector
+        make loadtester
 
     - name: Compress Posix
       if: matrix.os != 'windows-latest'
       run: |
         gzip -9 -S .${{runner.os}}.gz streamtester
+        gzip -9 -S .${{runner.os}}.gz loadtester
         gzip -9 -S .${{runner.os}}.gz lapi
         gzip -9 -S .${{runner.os}}.gz testdriver
         gzip -9 -S .${{runner.os}}.gz mapi
@@ -97,6 +99,7 @@ jobs:
       with:
         files: |
             streamtester.${{runner.os}}.gz
+            loadtester.${{runner.os}}.gz
             lapi.${{runner.os}}.gz
             mapi.${{runner.os}}.gz
             testdriver.${{runner.os}}.gz

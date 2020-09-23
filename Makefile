@@ -9,6 +9,10 @@ ldflags := -X 'github.com/livepeer/stream-tester/model.Version=$(shell git descr
 streamtester:
 	go build -ldflags="$(ldflags)" cmd/streamtester/streamtester.go
 
+.PHONY: loadtester
+loadtester:
+	go build -ldflags="$(ldflags)" cmd/loadtester/loadtester.go
+
 .PHONY: testdriver
 testdriver:
 	go build -ldflags="$(ldflags)" cmd/testdriver/testdriver.go

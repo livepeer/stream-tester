@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
@@ -51,8 +52,10 @@ func httpDo(req *http.Request, sourceIP string) (*http.Response, error) {
 
 func getExternalIP(iip string) string {
 	// TODO probably should put this (along w wizard GETs) into common code
-	req, _ := http.NewRequest("GET", "https://api.ipify.org?format=text", nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://api.ipify.org?format=text", nil)
 	resp, err := httpDo(req, iip)
+	cancel()
 	if err != nil {
 		glog.Error("Could not look up public IP address")
 		return ""

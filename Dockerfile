@@ -27,6 +27,7 @@ RUN echo $version
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" -tags h264 cmd/streamtester/streamtester.go
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/testdriver/testdriver.go
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/mist-api-connector/mist-api-connector.go
+RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/loadtester/loadtester.go
 # RUN ls -a /usr
 # RUN find / -name libavformat.so.58
 
@@ -42,6 +43,7 @@ COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflowe
 COPY --from=builder /root/streamtester streamtester
 COPY --from=builder /root/testdriver testdriver
 COPY --from=builder /root/mist-api-connector mist-api-connector
+COPY --from=builder /root/loadtester loadtester
 # COPY --from=builder /usr/lib/libavformat.so.58 /usr/lib/libavformat.so.58
 # COPY --from=builder /usr/lib/libavutil.so.56 /usr/lib/libavutil.so.56
 # COPY --from=builder /usr/lib/libavcodec.so.58 /usr/lib/libavcodec.so.58
