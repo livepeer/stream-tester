@@ -73,6 +73,7 @@ func main() {
 	mistCreds := flag.String("mist-creds", "", "login:password of the Mist server")
 	mistPort := flag.Uint("mist-port", 4242, "Port of the Mist server")
 	apiToken := flag.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
+	apiServer := flag.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
 	lapiFlag := flag.Bool("lapi", false, "Use Livepeer API to create streams. api-token should be specified")
 	presets := flag.String("presets", "", "Comma separate list of transcoding profiels to use along with Livepeer API")
 	skipTime := flag.Duration("skip-time", 0, "Skips first x(s|m)")
@@ -281,7 +282,7 @@ func main() {
 		hostName, _ := os.Hostname()
 		// presetsParts := strings.Split(*presets, ",")
 		// model.ProfilesNum = len(presetsParts)
-		lapi = livepeer.NewLivepeer(*apiToken, livepeer.ProdServer, nil)
+		lapi = livepeer.NewLivepeer(*apiToken, *apiServer, nil)
 		lapi.Init()
 		glog.Infof("Choosen server: %s", lapi.GetServer())
 		ingests, err := lapi.Ingest(false)
@@ -295,24 +296,8 @@ func main() {
 			panic(err)
 		}
 		glog.Infof("Created stream %s", stream.ID)
-		*rtmpURL = ingests[0].Ingest + "/" + stream.StreamKey
-		*mediaURL = ingests[0].Playback + "/" + stream.PlaybackID + "/index.m3u8"
-		dur := "infinite"
-		if streamDuration > 0 {
-			dur = streamDuration.String()
-		}
-		msg := fmt.Sprintf(`Starting %s stream to %s`, dur, *rtmpURL)
-		glog.Info(msg)
-
-		sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
-		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, streamDuration)
-		if *wowza {
-			// let Wowza remove session
-			time.Sleep(3 * time.Minute)
-		}
-		os.Exit(model.ExitCode)
-		// lapi.Broadcasters()
-		/*
+		model.ProfilesNum = 4 // number of profiles that is created by CreateStreamEx
+		if *httpIngest {
 			bds, err := lapi.Broadcasters()
 			if err != nil {
 				panic(err)
@@ -321,7 +306,32 @@ func main() {
 			if len(bds) == 0 {
 				glog.Fatal("Got empty list of broadcasterf from Livepeer API")
 			}
-		*/
+			up := testers.NewHTTPtreamer(gctx, true, "baseManifestID")
+			up.StartUpload(fn, bds[0]+"/live/"+stream.ID, stream.ID, 0, 0, streamDuration, 0)
+			stats, err := up.Stats()
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("========= Stats: =========")
+			fmt.Println(stats.FormatForConsole())
+			fmt.Println(stats.FormatErrorsForConsole())
+			if stats.SuccessRate != 1.0 {
+				model.ExitCode = 127
+			}
+		} else {
+			*rtmpURL = ingests[0].Ingest + "/" + stream.StreamKey
+			*mediaURL = ingests[0].Playback + "/" + stream.PlaybackID + "/index.m3u8"
+			dur := "infinite"
+			if streamDuration > 0 {
+				dur = streamDuration.String()
+			}
+			msg := fmt.Sprintf(`Starting %s stream to %s`, dur, *rtmpURL)
+			glog.Info(msg)
+
+			sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
+			sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, streamDuration)
+		}
+		os.Exit(model.ExitCode)
 		return
 	}
 	// fmt.Printf("Args: %+v\n", flag.Args())

@@ -148,7 +148,7 @@ func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, r
 		// 	bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
 		// }
 
-		up := newHTTPtreamer(hlt.ctx, measureLatency, baseManifestID)
+		up := NewHTTPtreamer(hlt.ctx, measureLatency, baseManifestID)
 		wg.Add(1)
 		go func() {
 			up.StartUpload(sourceFileName, httpIngestURL, manifestID, 0, waitForTarget, stopAfter, hlt.skipFirst)

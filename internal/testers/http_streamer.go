@@ -59,7 +59,8 @@ type httpStats struct {
 	started           time.Time
 }
 
-func newHTTPtreamer(ctx context.Context, saveLatencies bool, baseManifestID string) *httpStreamer {
+// NewHTTPtreamer ...
+func NewHTTPtreamer(ctx context.Context, saveLatencies bool, baseManifestID string) *httpStreamer {
 	hs := &httpStreamer{ctx: ctx, saveLatencies: saveLatencies, baseManifestID: baseManifestID}
 	hs.dstats.errors = make(map[string]int)
 	return hs
@@ -391,6 +392,11 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	}
 }
 
+func (hs *httpStreamer) Stats() (*model.Stats, error) {
+	s := hs.stats()
+	return s.Stats()
+}
+
 func (hs *httpStreamer) stats() httpStats {
 	hs.mu.RLock()
 	stats := hs.dstats.clone()
@@ -409,4 +415,45 @@ func (hs *httpStats) clone() httpStats {
 		copy(r.latencies, hs.latencies)
 	}
 	return r
+}
+
+func (hs *httpStats) Stats() (*model.Stats, error) {
+	stats := &model.Stats{
+		RTMPstreams:         0,
+		MediaStreams:        1,
+		TotalSegmentsToSend: 0,
+		Finished:            true,
+	}
+	transcodedLatencies := utils.LatenciesCalculator{}
+	if stats.StartTime.IsZero() {
+		stats.StartTime = hs.started
+	} else if !hs.started.IsZero() && stats.StartTime.After(hs.started) {
+		stats.StartTime = hs.started
+	}
+	stats.SentSegments += hs.triedToSend
+	stats.DownloadedSegments += hs.success
+	stats.FailedToDownloadSegments += hs.downloadFailures
+	stats.BytesDownloaded += hs.bytes
+	transcodedLatencies.Add(hs.latencies)
+	if hs.errors != nil {
+		if stats.Errors == nil {
+			stats.Errors = make(map[string]int)
+		}
+		for e, i := range hs.errors {
+			stats.Errors[e] = i
+		}
+	}
+	if !hs.finished {
+		stats.Finished = false
+	}
+	transcodedLatencies.Prepare()
+	avg, p50, p95, p99 := transcodedLatencies.Calc()
+	stats.TranscodedLatencies = model.Latencies{Avg: avg, P50: p50, P95: p95, P99: p99}
+	if stats.SentSegments > 0 {
+		stats.SuccessRate = float64(stats.DownloadedSegments) / (float64(model.ProfilesNum) * float64(stats.SentSegments)) * 100
+	}
+	stats.ShouldHaveDownloadedSegments = model.ProfilesNum * stats.SentSegments
+	stats.ProfilesNum = model.ProfilesNum
+	stats.RawTranscodedLatencies = transcodedLatencies.Raw()
+	return stats, nil
 }
