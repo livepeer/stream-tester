@@ -503,7 +503,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 			for i, r := range results {
 				problem = ""
 				tillNext = 0
-				if i < len(results)-2 {
+				if i < len(results)-10 {
 					ns := results[i+1]
 					tillNext = ns.startTime - r.startTime
 					if tillNext > 0 && !isTimeEqualM(r.duration, tillNext) {
