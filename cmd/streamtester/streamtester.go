@@ -331,6 +331,12 @@ func main() {
 			sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
 			sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, streamDuration)
 		}
+		if model.ExitCode == 0 {
+			err = lapi.DeleteStream(stream.ID)
+			if err != nil {
+				glog.Errorf("Error deleting stream %s: %v", stream.ID, err)
+			}
+		}
 		os.Exit(model.ExitCode)
 		return
 	}

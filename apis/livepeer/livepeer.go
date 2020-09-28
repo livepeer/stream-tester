@@ -287,6 +287,32 @@ func (lapi *API) CreateStream(name string, profiles ...string) (string, error) {
 	return csr.ID, err
 }
 
+// DeleteStream deletes stream
+func (lapi *API) DeleteStream(id string) error {
+	glog.Infof("Deleting Livepeer stream '%s' ", id)
+	u := fmt.Sprintf("%s/api/stream/%s", lapi.choosenServer, id)
+	req, err := uhttp.NewRequest("DELETE", u, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error deleting Livepeer stream %v", err)
+		return err
+	}
+	_, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error deleting Livepeer stream (body) %v", err)
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 204 {
+		return fmt.Errorf("Error deleting stream %s: status is %s", id, resp.Status)
+	}
+	return nil
+}
+
 // CreateStreamEx creates stream with specified name and profiles
 func (lapi *API) CreateStreamEx(name string, profiles ...string) (*CreateStreamResp, error) {
 	presets := profiles
