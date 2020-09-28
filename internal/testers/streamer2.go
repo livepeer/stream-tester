@@ -63,6 +63,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	sr.downloader = newM3utester2(sr.ctx, sr.cancel, mediaURL, sr.wowzaMode, sr.mistMode, waitForTarget, sm) // starts to download at creation
 	started := time.Now()
 	<-sctx.Done()
+	sr.cancel()
 	msg := fmt.Sprintf(`Streaming stopped after %s`, time.Since(started))
 	messenger.SendMessage(msg)
 }
