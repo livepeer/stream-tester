@@ -148,8 +148,8 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 		mhost, nMediaPort)
 	messenger.SendMessage(msg)
 	fmt.Println(msg)
-	rtmpURLTemplate := "rtmp://%s:%d/%s"
-	mediaURLTemplate := "http://%s:%d/stream/%s.m3u8"
+	rtmpURLTemplate := "rtmp://%s:%d/dwcf-52e1-zbdr/z6lu+%s"
+	mediaURLTemplate := "https://%s:%d/origin/hls/z6lu+%s/index.m3u8"
 	if sr.wowzaMode {
 		rtmpURLTemplate = "rtmp://%s:%d/live/%s"
 		mediaURLTemplate = "http://%s:%d/live/ngrp:%s_all/playlist.m3u8"
@@ -165,7 +165,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 	go func() {
 		for i := 0; i < int(simStreams); i++ {
 			if groupStartBy > 0 && i%groupStartBy == 0 {
-				startDelayBetweenGroups = 2*time.Second + time.Duration(rand.Intn(4000))*time.Millisecond
+				startDelayBetweenGroups = 30*time.Second + time.Duration(rand.Intn(4000))*time.Millisecond
 				glog.Infof("Waiting for %s before starting stream %d", startDelayBetweenGroups, i)
 				if model.Production {
 					time.Sleep(startDelayBetweenGroups)

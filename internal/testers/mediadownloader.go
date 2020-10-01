@@ -211,7 +211,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 		resp.Body.Close()
 		now := time.Now()
 		if err != nil {
-			glog.Errorf("Error downloading reading body %s: %v", fsurl, err)
+			glog.V(model.VVERBOSE).Infof("Error downloading reading body %s: %v", fsurl, err)
 			if try < 4 {
 				try++
 				continue
@@ -220,7 +220,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			return
 		}
 		if resp.StatusCode != http.StatusOK {
-			glog.Errorf("Error status downloading segment %s result status code %d status %s", fsurl, resp.StatusCode, resp.Status)
+			glog.V(model.VVERBOSE).Infof("Error status downloading segment %s result status code %d status %s", fsurl, resp.StatusCode, resp.Status)
 			if try < 8 && resp.StatusCode != http.StatusNotFound {
 				try++
 				time.Sleep(time.Second)
