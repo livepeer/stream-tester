@@ -658,8 +658,8 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 	}
 	try := 0
 	for {
-		// glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
-		glog.Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
+		glog.V(model.VERBOSE).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
+		// glog.Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
 		resp, err := httpClient.Do(uhttp.GetRequest(fsurl))
 		if err != nil {
 			glog.Errorf("Error downloading %s: %v", fsurl, err)
@@ -672,7 +672,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 		}
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			glog.Errorf("Error downloading reading body %s: %v", fsurl, err)
+			glog.V(model.VERBOSE).Infof("Error downloading reading body %s: %v", fsurl, err)
 			if try < 4 {
 				try++
 				resp.Body.Close()
@@ -685,7 +685,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 		resp.Body.Close()
 		completedAt := time.Now()
 		if resp.StatusCode != http.StatusOK {
-			glog.Errorf("Error status downloading segment %s result status %s", fsurl, resp.Status)
+			glog.V(model.VERBOSE).Infof("Error status downloading segment %s result status %s", fsurl, resp.Status)
 			if try < 8 {
 				try++
 				time.Sleep(time.Second)
@@ -701,7 +701,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 				fsurl, resp.Status, len(b), verr)
 			messenger.SendFatalMessage(msg)
 			_, sn := path.Split(fsurl)
-			glog.Infof("==============>>>>>>>>>>>>>  Saving segment %s", sn)
+			glog.V(model.VVERBOSE).Infof("==============>>>>>>>>>>>>>  Saving segment %s", sn)
 			ioutil.WriteFile(sn, b, 0644)
 			sid := strconv.FormatInt(time.Now().Unix(), 10)
 			if savedName, service, serr := saveToExternalStorage(sid+"_"+task.url, b); serr != nil {
@@ -714,7 +714,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 		// glog.Infof("==============>>>>>>>>>>>>>  Saving segment %s", sn)
 		// ioutil.WriteFile(sn, b, 0644)
 		// glog.V(model.DEBUG).Infof("Download %s result: %s len %d timeStart %s segment duration %s", fsurl, resp.Status, len(b), fsttim, dur)
-		glog.Infof("Download %s result: %s len %d timeStart %s segment duration %s", fsurl, resp.Status, len(b), fsttim, dur)
+		glog.V(model.VVERBOSE).Infof("Download %s result: %s len %d timeStart %s segment duration %s took=%s", fsurl, resp.Status, len(b), fsttim, dur, completedAt)
 		res <- &downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url, seqNo: task.seqNo,
 			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime, downloadCompetedAt: completedAt}
 		// glog.Infof("Download %s result: %s len %d timeStart %s segment duration %s sent to channel", fsurl, resp.Status, len(b), fsttim, dur)

@@ -921,21 +921,21 @@ func (mt *m3utester) manifestDownloadLoop() {
 				}
 				if mt.mistMode {
 					vURIClean := mistSessionRE.ReplaceAllString(variant.URI, "")
-					glog.Infof("Raw variant URI %s clean %s", variant.URI, vURIClean)
+					glog.V(model.VVERBOSE).Infof("Raw variant URI %s clean %s", variant.URI, vURIClean)
 					if firstURI, has := mistMediaStreams[vURIClean]; has {
 						variant.URI = firstURI
 					} else {
 						mistMediaStreams[vURIClean] = variant.URI
 					}
 				}
-				glog.Infof("variant URI=%s", variant.URI)
+				glog.V(model.VVERBOSE).Infof("variant URI=%s", variant.URI)
 				mediaURL := mt.absVariantURI(variant.URI)
 				currentURLs[mediaURL] = true
 				// Wowza changes media manifests on each fetch, so indentifying streams by
 				// bandwitdh and
 				// variantID := strconv.Itoa(variant.Bandwidth) + variant.Resolution
 				mt.mu.Lock()
-				glog.Infof("mediaURL=%s downloads=%+v", mediaURL, mt.getDownloadsKeys())
+				glog.V(model.VERBOSE).Infof("mediaURL=%s downloads=%+v", mediaURL, mt.getDownloadsKeys())
 				if _, ok := mt.downloads[mediaURL]; !ok {
 					var shouldSkip []string
 					if len(mt.shouldSkip) > i {
