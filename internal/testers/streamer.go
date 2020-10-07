@@ -40,12 +40,14 @@ type streamer struct {
 	mistMode            bool
 	mapi                *mist.API
 	lapi                *livepeer.API
+	lapiIngest          string
+	lapiPlayback        string
 	createdMistStreams  []string
 }
 
 // NewStreamer returns new streamer
 func NewStreamer(ctx context.Context, cancel context.CancelFunc, wowzaMode, mistMode bool, mapi *mist.API, lapi *livepeer.API) model.Streamer {
-	return &streamer{
+	str := &streamer{
 		ctx:       ctx,
 		cancel:    cancel,
 		wowzaMode: wowzaMode,
@@ -53,6 +55,19 @@ func NewStreamer(ctx context.Context, cancel context.CancelFunc, wowzaMode, mist
 		mapi:      mapi,
 		lapi:      lapi,
 	}
+	if lapi != nil {
+		ingests, err := lapi.Ingest(false)
+		if err != nil {
+			panic(err)
+		}
+		glog.Infof("Got ingests: %+v", ingests)
+		if len(ingests) == 0 {
+			panic("Empty ingests list returned from Livepeer API")
+		}
+		str.lapiIngest = ingests[0].Ingest
+		str.lapiPlayback = ingests[0].Playback
+	}
+	return str
 }
 
 func (sr *streamer) Done() <-chan struct{} {
@@ -179,17 +194,18 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 				}
 				sr.createdMistStreams = append(sr.createdMistStreams, manifestID)
 			}
+			rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifestID)
+			mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifestID)
 			if sr.lapi != nil {
-				sid, err := sr.lapi.CreateStream(manifestID)
+				stream, err := sr.lapi.CreateStreamEx(manifestID)
 				if err != nil {
 					glog.Fatalf("Error creating stream using Livepeer API: %v", err)
 					// return err
 				}
-				glog.V(model.SHORT).Infof("Create Livepeer stream %s", sid)
-				manifestID = sid
+				glog.V(model.SHORT).Infof("Create Livepeer stream id=%s streamKey=%s playbackId=%s", stream.ID, stream.StreamKey, stream.PlaybackID)
+				rtmpURL = fmt.Sprintf("%s/%s", sr.lapiIngest, stream.StreamKey)
+				mediaURL = fmt.Sprintf("%s/%s/index.m3u8", sr.lapiPlayback, stream.PlaybackID)
 			}
-			rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifestID)
-			mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifestID)
 			glog.Infof("RTMP: %s", rtmpURL)
 			glog.Infof("MEDIA: %s", mediaURL)
 			if sr.mistMode {

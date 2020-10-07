@@ -42,6 +42,7 @@ func main() {
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
+	httpIngest := fs.Bool("http-ingest", false, "Use Livepeer HTTP HLS ingest")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -58,8 +59,6 @@ func main() {
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
 	fmt.Printf("Production: %v\n", model.Production)
-
-	fmt.Printf("\nCurrently only HTTP push is supported\n\n")
 
 	if *version {
 		return
@@ -97,8 +96,15 @@ func main() {
 	glog.Infof("Got broadcasters: %+v", broadcasters)
 
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
-	sr := testers.NewHTTPLoadTester(gctx, gcancel, lapi, 0)
-	baseManifesID, err := sr.StartStreams(*fileArg, "", "", "", "443", *sim, 1, *streamDuration, false, true, true, 3, 5*time.Second, 0)
+
+	// sr := testers.NewHTTPLoadTester(gctx, gcancel, lapi, 0)
+	var sr model.Streamer
+	if !*httpIngest {
+		sr = testers.NewStreamer(gctx, gcancel, false, true, nil, lapi)
+	} else {
+		sr = testers.NewHTTPLoadTester(gctx, gcancel, lapi, 0)
+	}
+	baseManifesID, err := sr.StartStreams(*fileArg, "", "1935", "", "443", *sim, 1, *streamDuration, false, true, true, 3, 5*time.Second, 0)
 	if err != nil {
 		panic(err)
 	}
