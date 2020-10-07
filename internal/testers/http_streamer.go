@@ -20,6 +20,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/m3u8"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/messenger"
@@ -136,6 +137,7 @@ func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToSt
 		glog.Infof("Error starting segmenter: %v", err)
 		panic(err)
 	}
+	metrics.StartStream()
 	var seg *hlsSegment
 	lastSeg := time.Now()
 outloop:
@@ -158,13 +160,16 @@ outloop:
 	}
 	hs.mu.Lock()
 	hs.dstats.finished = true
+	metrics.StopStream(hs.dstats.failedToSend == 0)
 	hs.mu.Unlock()
 }
 
 func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment) {
 	hs.mu.Lock()
+	var firstOne bool
 	if hs.dstats.started.IsZero() {
 		hs.dstats.started = time.Now()
+		firstOne = true
 	}
 	hs.mu.Unlock()
 	purl, _ := url.Parse(httpURL)
@@ -238,6 +243,10 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		glog.V(model.DEBUG).Infof("Got manifest=%s seqNo=%d resp status=%s error in body $%s", manifestID, seg.seqNo, resp.Status, string(b))
 		return
 	}
+	if firstOne {
+		metrics.StartupLatency(postTook)
+	}
+	metrics.TranscodeLatency(postTook)
 	if hs.saveLatencies {
 		hs.mu.Lock()
 		hs.dstats.latencies = append(hs.dstats.latencies, postTook)
