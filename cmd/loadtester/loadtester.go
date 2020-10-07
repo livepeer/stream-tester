@@ -14,6 +14,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/stream-tester/apis/livepeer"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
@@ -63,6 +64,8 @@ func main() {
 	if *version {
 		return
 	}
+	metrics.InitCensus(hostName, model.Version)
+
 	if _, err := os.Stat(*fileArg); os.IsNotExist(err) {
 		fmt.Printf("File '%s' does not exists", *fileArg)
 		os.Exit(1)

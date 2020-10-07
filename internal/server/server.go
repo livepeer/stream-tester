@@ -17,6 +17,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	mistapi "github.com/livepeer/stream-tester/apis/mist"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
@@ -74,7 +75,8 @@ func (ss *StreamerServer) StartWebServer(ctx context.Context, bindAddr string) {
 func (ss *StreamerServer) webServerHandlers(bindAddr string) *http.ServeMux {
 	mux := http.NewServeMux()
 	utils.AddPProfHandlers(mux)
-	mux.Handle("/metrics", utils.InitPrometheusExporter("streamtester"))
+	// mux.Handle("/metrics", utils.InitPrometheusExporter("streamtester"))
+	mux.Handle("/metrics", metrics.Exporter)
 
 	mux.HandleFunc("/start_streams", ss.handleStartStreams)
 	mux.HandleFunc("/stats", ss.handleStats)

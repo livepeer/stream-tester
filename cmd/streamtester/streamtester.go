@@ -21,6 +21,7 @@ import (
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	mistapi "github.com/livepeer/stream-tester/apis/mist"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/internal/utils"
@@ -113,6 +114,7 @@ func main() {
 	if *latencyThreshold > 0 {
 		*latency = true
 	}
+	metrics.InitCensus(hostName, model.Version)
 	// codec.MTest()
 	// return
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
@@ -279,6 +281,7 @@ func main() {
 		if *presets == "" {
 			// glog.Fatal("Presets should be specified")
 		}
+		go startWebServer() // needed for /metrics endpoint
 		hostName, _ := os.Hostname()
 		// presetsParts := strings.Split(*presets, ",")
 		// model.ProfilesNum = len(presetsParts)
