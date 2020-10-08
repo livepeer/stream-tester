@@ -117,19 +117,11 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 	baseManfistID := strings.ReplaceAll(path.Base(sourceFileName), ".", "") + "_" + randName()
 
 	go func() {
-		for i := 0; i < int(repeat); i++ {
-			if repeat > 1 {
-				glog.Infof("Starting %d streaming session", i)
-			}
-			err := sr.startStreams(baseManfistID, sourceFileName, i, bhost, ohost, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
-				streamDuration, groupStartBy, startDelayBetweenGroups, waitForTarget)
-			if err != nil {
-				glog.Fatal(err)
-				return
-			}
-			if sr.stopSignal {
-				break
-			}
+		err := sr.startStreams(baseManfistID, sourceFileName, int(repeat), bhost, ohost, nRtmpPort, nMediaPort, simStreams, showProgress, measureLatency,
+			streamDuration, groupStartBy, startDelayBetweenGroups, waitForTarget)
+		if err != nil {
+			glog.Fatal(err)
+			return
 		}
 		// messenger.SendMessage(sr.AnalyzeFormatted(true))
 		// fmt.Printf(sr.AnalyzeFormatted(false))
@@ -140,11 +132,11 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 	return baseManfistID, nil
 }
 
-func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum int, bhost, mhost string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
+func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeat int, bhost, mhost string, nRtmpPort, nMediaPort int, simStreams uint, showProgress,
 	measureLatency bool, streamDuration time.Duration, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) error {
 
 	// fmt.Printf("Starting streaming %s to %s:%d, number of streams is %d\n", sourceFileName, bhost, nRtmpPort, simStreams)
-	msg := fmt.Sprintf("Starting streaming %s (repeat %d) to %s:%d, number of streams is %d, reading back from %s:%d\n", baseManfistID, repeatNum, bhost, nRtmpPort, simStreams,
+	msg := fmt.Sprintf("Starting streaming %s (repeat %d) to %s:%d, number of streams is %d, reading back from %s:%d\n", baseManfistID, repeat, bhost, nRtmpPort, simStreams,
 		mhost, nMediaPort)
 	messenger.SendMessage(msg)
 	fmt.Println(msg)
@@ -164,78 +156,81 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 	started := make(chan interface{})
 	go func() {
 		for i := 0; i < int(simStreams); i++ {
-			if groupStartBy > 0 && i%groupStartBy == 0 {
-				startDelayBetweenGroups = 30*time.Second + time.Duration(rand.Intn(4000))*time.Millisecond
+			startDelayBetweenGroups = 30*time.Second + time.Duration(rand.Intn(4000))*time.Millisecond
+			if model.Production && i != 0 {
 				glog.Infof("Waiting for %s before starting stream %d", startDelayBetweenGroups, i)
-				if model.Production {
-					time.Sleep(startDelayBetweenGroups)
-				}
+				time.Sleep(startDelayBetweenGroups)
 			}
-			manifestID := fmt.Sprintf("%s_%d_%d", baseManfistID, repeatNum, i)
-			if sr.mapi != nil {
-				err := sr.mapi.CreateStream(manifestID, []string{"P720p30fps16x9"}, nil, "1", "", "", false, false)
-				if err != nil {
-					messenger.SendFatalMessage(fmt.Sprintf("Error creating stream %s on Mist", manifestID))
-				}
-				sr.createdMistStreams = append(sr.createdMistStreams, manifestID)
-			}
-			if sr.lapi != nil {
-				sid, err := sr.lapi.CreateStream(manifestID)
-				if err != nil {
-					glog.Fatalf("Error creating stream using Livepeer API: %v", err)
-					// return err
-				}
-				glog.V(model.SHORT).Infof("Create Livepeer stream %s", sid)
-				manifestID = sid
-			}
-			rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifestID)
-			mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifestID)
-			glog.Infof("RTMP: %s", rtmpURL)
-			glog.Infof("MEDIA: %s", mediaURL)
-			if sr.mistMode {
-				time.Sleep(50 * time.Millisecond)
-				messenger.SendMessage(mediaURL)
-			}
-			var bar *uiprogress.Bar
-			if showProgress {
-				/*
-					bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
-				*/
-			}
-			/*
-				status, err := broadcaster.Status(fmt.Sprintf("http://%s:7935/status", bhost))
-				if err != nil {
-					glog.Fatal(err)
-				}
-				glog.Infof("Got this status: %+v", status)
-			*/
-			if false {
-				// SaveNewStreams(ctx, bhost)
-				SaveNewStreams(ctx, "localhost", "10.140.19.178", "10.140.21.136")
-			}
-
-			sctx, scancel := context.WithCancel(ctx)
-			var sentTimesMap *utils.SyncedTimesMap
-			var segmentsMatcher *segmentsMatcher
-			if measureLatency {
-				// sentTimesMap = utils.NewSyncedTimesMap()
-				segmentsMatcher = newsementsMatcher()
-			}
-			up := newRtmpStreamer(sctx, scancel, rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, sr.wowzaMode, segmentsMatcher)
-			wg.Add(1)
 			go func() {
-				up.StartUpload(sourceFileName, rtmpURL, streamDuration, waitForTarget)
-				wg.Done()
+				for repeatNum := 0; repeatNum < int(repeat); repeatNum++ {
+					manifestID := fmt.Sprintf("%s_%d_%d", baseManfistID, repeatNum, i)
+					if sr.mapi != nil {
+						err := sr.mapi.CreateStream(manifestID, []string{"P720p30fps16x9"}, nil, "1", "", "", false, false)
+						if err != nil {
+							messenger.SendFatalMessage(fmt.Sprintf("Error creating stream %s on Mist", manifestID))
+						}
+						sr.createdMistStreams = append(sr.createdMistStreams, manifestID)
+					}
+					if sr.lapi != nil {
+						sid, err := sr.lapi.CreateStream(manifestID)
+						if err != nil {
+							glog.Fatalf("Error creating stream using Livepeer API: %v", err)
+							// return err
+						}
+						glog.V(model.SHORT).Infof("Create Livepeer stream %s", sid)
+						manifestID = sid
+					}
+					rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifestID)
+					mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifestID)
+					glog.Infof("RTMP: %s", rtmpURL)
+					glog.Infof("MEDIA: %s", mediaURL)
+					time.Sleep(500 * time.Millisecond)
+					if sr.mistMode {
+						time.Sleep(50 * time.Millisecond)
+						messenger.SendMessage(mediaURL)
+					}
+					var bar *uiprogress.Bar
+					if showProgress {
+						/*
+							bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
+						*/
+					}
+					/*
+						status, err := broadcaster.Status(fmt.Sprintf("http://%s:7935/status", bhost))
+						if err != nil {
+							glog.Fatal(err)
+						}
+						glog.Infof("Got this status: %+v", status)
+					*/
+					if false {
+						// SaveNewStreams(ctx, bhost)
+						SaveNewStreams(ctx, "localhost", "10.140.19.178", "10.140.21.136")
+					}
+
+					sctx, scancel := context.WithCancel(ctx)
+					var sentTimesMap *utils.SyncedTimesMap
+					var segmentsMatcher *segmentsMatcher
+					if measureLatency {
+						// sentTimesMap = utils.NewSyncedTimesMap()
+						segmentsMatcher = newsementsMatcher()
+					}
+					up := newRtmpStreamer(sctx, scancel, rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, sr.wowzaMode, segmentsMatcher)
+					wg.Add(1)
+
+					sr.uploaders = append(sr.uploaders, up)
+					down := newM3UTester(sctx, sentTimesMap, sr.wowzaMode, sr.mistMode, false, false, saveDownloaded, segmentsMatcher, nil, "")
+					go findSkippedSegmentsNumber(up, down)
+					sr.downloaders = append(sr.downloaders, down)
+					go func() {
+						down.Start(mediaURL)
+					}()
+					up.StartUpload(sourceFileName, rtmpURL, streamDuration, waitForTarget)
+					wg.Done()
+					// put random delay before start of next stream
+					// time.Sleep(time.Duration(rand.Intn(2)+2) * time.Second)
+				}
 			}()
-			sr.uploaders = append(sr.uploaders, up)
-			down := newM3UTester(sctx, sentTimesMap, sr.wowzaMode, sr.mistMode, false, false, saveDownloaded, segmentsMatcher, nil, "")
-			go findSkippedSegmentsNumber(up, down)
-			sr.downloaders = append(sr.downloaders, down)
-			down.Start(mediaURL)
-			// put random delay before start of next stream
-			// time.Sleep(time.Duration(rand.Intn(2)+2) * time.Second)
 		}
-		started <- nil
 	}()
 	<-started
 	glog.Info("Streams started, waiting.")

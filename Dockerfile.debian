@@ -39,7 +39,7 @@ COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4
 COPY --from=builder /root/streamtester streamtester
 
-CMD /bin/bash -c 'mv bbb_sunflower_1080p_30fps_normal_t02.mp4 $(hostname).mp4 && exec /root/streamtester -host=89.187.181.249 -media-host=d18q4pgr7252ew.cloudfront.net -media=443 -profiles=3 -sim=100 -repeat=999 $(hostname).mp4'
+CMD /bin/bash -c 'mv bbb_sunflower_1080p_30fps_normal_t02.mp4 $(hostname).mp4 && exec /root/streamtester -host=mdw-mist-meridix-origin.livepeer.live -media-host=mdw-mist-meridix.livepeer.live -media=443 -profiles=3 -sim=100 -repeat=999 $(hostname).mp4'
 
 # docker build -t livepeer/streamtester:latest .
 # docker build -t livepeer/streamtester:latest --build-arg version=$(git describe --dirty) .

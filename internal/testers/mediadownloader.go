@@ -565,7 +565,7 @@ func (md *mediaDownloader) manifestDownloadLoop() {
 		if md.isFinite {
 			// VOD playlist will not change, does not need to download it again
 			if md.segmentsToDownload == 0 {
-				panic(fmt.Errorf("Playlist %s is VOD, but has no segments", surl))
+				// panic(fmt.Errorf("Playlist %s is VOD, but has no segments", surl))
 			}
 			return
 		}
