@@ -11,11 +11,13 @@ import (
 	"path"
 	"sort"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/jerrors"
 	"github.com/livepeer/m3u8"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/messenger"
@@ -60,12 +62,15 @@ type (
 	// (must be notified about new url by m3utester2)
 	m3uMediaStream struct {
 		finite
-		name             string // usually medial playlist relative name
-		resolution       string
-		u                *url.URL
-		downloadResults  chan *downloadResult
-		streamSwitchedTo chan nameAndURI
-		segmentsMatcher  *segmentsMatcher
+		name               string // usually medial playlist relative name
+		resolution         string
+		u                  *url.URL
+		downloadResults    chan *downloadResult
+		streamSwitchedTo   chan nameAndURI
+		segmentsMatcher    *segmentsMatcher
+		downTasks          chan downloadTask
+		segmentsToDownload int32
+		segmentsDownloaded int32
 	}
 
 	nameAndURI struct {
@@ -121,9 +126,13 @@ func newM3uMediaStream(ctx context.Context, cancel context.CancelFunc, name, res
 		downloadResults:  make(chan *downloadResult, 32),
 		streamSwitchedTo: make(chan nameAndURI),
 		segmentsMatcher:  sm,
+		downTasks:        make(chan downloadTask, 256),
 	}
 	go ms.workerLoop(masterDR, latencyResults)
 	go ms.manifestPullerLoop(wowzaMode)
+	for i := 0; i < simultaneousDownloads; i++ {
+		go ms.segmentDownloadWorker(i)
+	}
 	return ms
 }
 
@@ -436,6 +445,26 @@ func (p downloadResultsByAtFirstTime) Less(i, j int) bool {
 }
 func (p downloadResultsByAtFirstTime) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
+func (ms *m3uMediaStream) segmentDownloadWorker(num int) {
+	resultsChan := make(chan *downloadResult)
+	for {
+		select {
+		case <-ms.ctx.Done():
+			return
+		case task := <-ms.downTasks:
+			segmentsDownloading := metrics.Census.IncSegmentsDownloading()
+			glog.V(model.VERBOSE).Infof("Worker %d got task to download: seqNo=%d downloading=%d url=%s", num, task.seqNo, segmentsDownloading, task.url)
+			// go md.downloadSegment(&task, resultsChan)
+			go downloadSegment(&task, resultsChan)
+			res := <-resultsChan
+			segmentsDownloading = metrics.Census.SegmentDownloaded()
+			glog.V(model.VERBOSE).Infof("Worker %d FINISHED download task: seqNo=%d downloading=%d url=%s", num, task.seqNo, segmentsDownloading, task.url)
+			ms.downloadResults <- res
+			atomic.AddInt32(&ms.segmentsDownloaded, 1)
+		}
+	}
+}
+
 func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResults chan *latencyResult) {
 	results := make(downloadResultsByAppTime, 0, 128)
 	var lastPrintTime, lastMessageSentAt time.Time
@@ -636,8 +665,10 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 				if time.Since(lastTimeDownloadStarted) < 50*time.Millisecond {
 					time.Sleep(50 * time.Millisecond)
 				}
-				dTask := &downloadTask{baseURL: ms.u, url: segment.URI, seqNo: pl.SeqNo + uint64(i), title: segment.Title, duration: segment.Duration, appTime: now}
-				go downloadSegment(dTask, ms.downloadResults)
+				ms.downTasks <- downloadTask{baseURL: ms.u, url: segment.URI, seqNo: pl.SeqNo + uint64(i), title: segment.Title, duration: segment.Duration, appTime: now}
+				ms.segmentsToDownload++
+				metrics.Census.IncSegmentsToDownload()
+				// go downloadSegment(dTask, ms.downloadResults)
 				lastTimeDownloadStarted = time.Now()
 				now = now.Add(time.Millisecond)
 				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
