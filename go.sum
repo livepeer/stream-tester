@@ -110,6 +110,8 @@ github.com/livepeer/joy4 v0.1.2-0.20200329092453-ef3fe842bfa5 h1:i2FKiudzVai0zwR
 github.com/livepeer/joy4 v0.1.2-0.20200329092453-ef3fe842bfa5/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
 github.com/livepeer/joy4 v0.1.2-0.20201012094723-a5f514865714 h1:hedx0pMUwdIuQZQ3iBhGnfnzd8H3UTcUJyN4IvUJ8Vo=
 github.com/livepeer/joy4 v0.1.2-0.20201012094723-a5f514865714/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
+github.com/livepeer/joy4 v0.1.2-0.20201012105652-5e59a21dd0ba h1:qyRv5HHRRk0dKnpHR7twxsSsKaTXAT5EfGjCNmw4BMQ=
+github.com/livepeer/joy4 v0.1.2-0.20201012105652-5e59a21dd0ba/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
 github.com/livepeer/m3u8 v0.11.0 h1:aI2hLXV5h5VqxjjmAOs55TpUR35KzNL2XWLkbETql5g=
 github.com/livepeer/m3u8 v0.11.0/go.mod h1:IUqAtwWPAG2CblfQa4SVzTQoDcEMPyfNOaBSxqHMS04=
 github.com/mattn/go-ieproxy v0.0.0-20190610004146-91bb50d98149 h1:HfxbT6/JcvIljmERptWhwa8XzP7H3T+Z2N26gTsaDaA=
