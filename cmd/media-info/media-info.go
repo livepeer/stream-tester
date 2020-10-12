@@ -5,7 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"path"
 	"runtime"
 
 	"github.com/golang/glog"
@@ -14,7 +16,9 @@ import (
 	"github.com/livepeer/joy4/av"
 	"github.com/livepeer/joy4/av/avutil"
 	"github.com/livepeer/joy4/format"
+	"github.com/livepeer/joy4/format/mp4"
 	"github.com/livepeer/joy4/jerrors"
+	"github.com/livepeer/stream-tester/internal/utils"
 )
 
 func init() {
@@ -44,9 +48,26 @@ func main() {
 	}
 	fileName := flag.Arg(0)
 	fmt.Printf("Gathering info about %s\n", fileName)
-	file, err := avutil.Open(fileName)
-	if err != nil {
-		glog.Fatal(err)
+
+	var ext string
+	var err error
+	var u *url.URL
+	// var file av.DemuxCloser
+	var file av.Demuxer
+	if u, _ = url.Parse(fileName); u != nil && u.Scheme != "" {
+		ext = path.Ext(u.Path)
+	} else {
+		ext = path.Ext(fileName)
+	}
+	if u.Scheme != "" && ext == ".mp4" {
+		sh := utils.NewSeekingHTTP(fileName)
+
+		file = mp4.NewDemuxer(sh)
+	} else {
+		file, err = avutil.Open(fileName)
+		if err != nil {
+			glog.Fatal(err)
+		}
 	}
 	var streams []av.CodecData
 	var videoidx, audioidx int8
