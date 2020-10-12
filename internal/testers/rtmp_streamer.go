@@ -14,6 +14,7 @@ import (
 	"github.com/livepeer/joy4/av/avutil"
 	"github.com/livepeer/joy4/av/pktque"
 	"github.com/livepeer/joy4/format/rtmp"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
@@ -224,6 +225,7 @@ func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, streamDuration, waitForT
 		onError(err)
 		return
 	}
+	metrics.StartStream()
 outloop:
 	for {
 		lastSegments := 0
@@ -244,6 +246,7 @@ outloop:
 			if pkt, err = demuxer.ReadPacket(); err != nil {
 				if err != io.EOF {
 					onError(err)
+					metrics.StopStream(false)
 					return
 				} else if rs.wowzaMode {
 					// in Wowza mode can't really loop, just stopping at EOF
@@ -273,6 +276,7 @@ outloop:
 			start := time.Now()
 			if err = conn.WritePacket(pkt); err != nil {
 				onError(err)
+				metrics.StopStream(false)
 				return
 			}
 			took := time.Since(start)
@@ -309,6 +313,7 @@ outloop:
 	glog.V(model.DEBUG).Info("Writing trailer")
 	if err = conn.WriteTrailer(); err != nil {
 		onError(err)
+		metrics.StopStream(false)
 		return
 	}
 
@@ -333,6 +338,7 @@ outloop:
 	// time.Sleep(8 * time.Second)
 	rs.closeDone()
 	glog.V(model.DEBUG).Info("---------- done channel closed", err)
+	metrics.StopStream(true)
 }
 
 func (rs *rtmpStreamer) closeDone() {
