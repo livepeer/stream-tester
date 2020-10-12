@@ -12,7 +12,7 @@ require (
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
 	// github.com/livepeer/joy4 v0.1.2-0.20191220171501-3d0cd11ebf39
-	github.com/livepeer/joy4 v0.1.2-0.20200329092453-ef3fe842bfa5
+	github.com/livepeer/joy4 v0.1.2-0.20201012094723-a5f514865714
 	github.com/livepeer/m3u8 v0.11.0
 	github.com/mattn/go-isatty v0.0.8 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
