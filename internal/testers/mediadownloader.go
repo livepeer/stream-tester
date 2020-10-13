@@ -513,6 +513,8 @@ func (md *mediaDownloader) manifestDownloadLoop() {
 		}
 		if !pl.Live || pl.MediaType == m3u8.EVENT {
 			// VoD and Event's should show the entire playlist
+			glog.Infoln("VOD -----################")
+			glog.Infoln(string(b))
 			pl.SetWinSize(0)
 			md.isFinite = true
 		}
@@ -565,9 +567,10 @@ func (md *mediaDownloader) manifestDownloadLoop() {
 		if md.isFinite {
 			// VOD playlist will not change, does not need to download it again
 			if md.segmentsToDownload == 0 {
-				panic(fmt.Errorf("Playlist %s is VOD, but has no segments", surl))
+				// panic(fmt.Errorf("Playlist %s is VOD, but has no segments", surl))
+				glog.Error(fmt.Errorf("Playlist %s is VOD, but has no segments", surl))
 			}
-			return
+			// return
 		}
 		delay := 1 * time.Second
 		if md.sentTimesMap != nil || md.segmentsMatcher != nil {
