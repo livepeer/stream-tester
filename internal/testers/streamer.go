@@ -43,6 +43,7 @@ type streamer struct {
 	lapiIngest          string
 	lapiPlayback        string
 	createdMistStreams  []string
+	createdLAPIStreams  []string
 }
 
 // NewStreamer returns new streamer
@@ -205,6 +206,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 				glog.V(model.SHORT).Infof("Create Livepeer stream id=%s streamKey=%s playbackId=%s", stream.ID, stream.StreamKey, stream.PlaybackID)
 				rtmpURL = fmt.Sprintf("%s/%s", sr.lapiIngest, stream.StreamKey)
 				mediaURL = fmt.Sprintf("%s/%s/index.m3u8", sr.lapiPlayback, stream.PlaybackID)
+				sr.createdLAPIStreams = append(sr.createdLAPIStreams, stream.ID)
 			}
 			glog.Infof("RTMP: %s", rtmpURL)
 			glog.Infof("MEDIA: %s", mediaURL)
@@ -266,6 +268,13 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			messenger.SendFatalMessage(fmt.Sprintf("Error deleting streams %+v from Mist", sr.createdMistStreams))
 		}
 		sr.createdMistStreams = nil
+	}
+	if sr.lapi != nil && len(sr.createdLAPIStreams) > 0 {
+		time.Sleep(1 * time.Second)
+		for _, sid := range sr.createdLAPIStreams {
+			sr.lapi.DeleteStream(sid)
+		}
+		sr.createdLAPIStreams = nil
 	}
 	return nil
 }
