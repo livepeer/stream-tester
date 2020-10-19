@@ -148,11 +148,15 @@ func main() {
     done <- true
   }()
 
+  // run stream cycles until interupt or panic
   for {
     go startStream()
-    <-streamDone
-  }
 
-  <-done
-  os.Exit(model.ExitCode)
+    select {
+    case <-streamDone:
+        fmt.Println("Stream Cycle Complete")
+    case <-done:
+      os.Exit(model.ExitCode)
+    }
+  }
 }
