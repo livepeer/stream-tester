@@ -30,10 +30,6 @@ func init() {
   model.ProfilesNum = 1
 }
 
-func configureGlog() {
-
-}
-
 func main() {
   var err error
 
