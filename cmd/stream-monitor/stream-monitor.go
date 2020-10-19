@@ -154,7 +154,7 @@ func main() {
 
     select {
     case <-streamDone:
-        fmt.Println("Stream Cycle Complete")
+      fmt.Println("Stream Cycle Complete")
     case <-done:
       os.Exit(model.ExitCode)
     }
