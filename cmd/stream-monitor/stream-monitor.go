@@ -133,13 +133,8 @@ func main() {
     streamDone <- true
   }
 
-  for {
-    go startStream()
-    <-streamDone
-  }
-
+  // setup signal trapping
   signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
-
   go func() {
     <-sigs
     fmt.Println("Got Ctrl-C, cancelling")
@@ -152,6 +147,11 @@ func main() {
 
     done <- true
   }()
+
+  for {
+    go startStream()
+    <-streamDone
+  }
 
   <-done
   os.Exit(model.ExitCode)
