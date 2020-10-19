@@ -11,6 +11,7 @@ import (
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -583,6 +584,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 	seenAtFirst := newStringRing(128)
 	lastTimeNewSegmentSeen := time.Now()
 	countTimeouts := 0
+	countResets := 0
 	for {
 		select {
 		case <-ms.ctx.Done():
@@ -612,9 +614,19 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 				time.Sleep(2 * time.Second)
 				continue
 			}
+			if strings.Contains(err.Error(), "connection reset by peer") {
+				countResets++
+				if countResets > 15 {
+					ms.fatalEnd(fmt.Sprintf("Fatal connection reset error trying to get media playlist %s: %v", surl, err))
+					return
+				}
+				time.Sleep(2 * time.Second)
+				continue
+			}
 			ms.fatalEnd(fmt.Sprintf("Fatal error trying to get media playlist %s: %v", surl, err))
 			return
 		}
+		countTimeouts = 0
 		countTimeouts = 0
 		if resp.StatusCode != http.StatusOK {
 			b, _ := ioutil.ReadAll(resp.Body)
@@ -626,9 +638,19 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 		b, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
+			if strings.Contains(err.Error(), "connection reset by peer") {
+				countResets++
+				if countResets > 15 {
+					ms.fatalEnd(fmt.Sprintf("Fatal connection reset error trying to get media playlist %s: %v", surl, err))
+					return
+				}
+				time.Sleep(2 * time.Second)
+				continue
+			}
 			ms.fatalEnd(fmt.Sprintf("Fatal error trying to read media playlist %s: %v", surl, err))
 			return
 		}
+		countResets = 0
 		pl, err := m3u8.NewMediaPlaylist(100, 100)
 		if err != nil {
 			glog.Fatal(err)
