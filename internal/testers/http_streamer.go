@@ -60,8 +60,8 @@ type httpStats struct {
 	started           time.Time
 }
 
-// NewHTTPtreamer ...
-func NewHTTPtreamer(ctx context.Context, saveLatencies bool, baseManifestID string) *httpStreamer {
+// NewHttpStreamer ...
+func NewHttpStreamer(ctx context.Context, saveLatencies bool, baseManifestID string) *httpStreamer {
 	hs := &httpStreamer{ctx: ctx, saveLatencies: saveLatencies, baseManifestID: baseManifestID}
 	hs.dstats.errors = make(map[string]int)
 	return hs
