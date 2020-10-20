@@ -66,7 +66,8 @@ func main() {
   fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
   fmt.Printf("Production: %v\n", model.Production)
 
-  gctx, _ := context.WithCancel(context.Background()) // to be used as global parent context, in the future
+  gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
+  defer gcancel()
 
   metrics.InitCensus(hostName, model.Version)
 
