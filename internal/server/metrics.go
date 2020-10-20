@@ -9,7 +9,7 @@ import (
 	"github.com/livepeer/stream-tester/internal/metrics"
 )
 
-// MetricsServer creates new MetricsServer
+// MetricsServer object
 type MetricsServer struct {
 }
 
@@ -31,7 +31,8 @@ func (s *MetricsServer) Start(ctx context.Context, bindAddr string) {
 
 	go func() {
 		<-ctx.Done()
-		c, _ := context.WithTimeout(context.Background(), time.Second)
+		c, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
 		glog.Infof("Shutting down metrics server")
 		srv.Shutdown(c)
 	}()
