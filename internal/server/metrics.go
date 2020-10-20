@@ -12,7 +12,7 @@ import (
 type MetricsServer struct {
 }
 
-// NewStreamerServer creates new MetricsServer
+// NewMetricsServer creates new MetricsServer
 func NewMetricsServer() *MetricsServer {
   return &MetricsServer{}
 }
