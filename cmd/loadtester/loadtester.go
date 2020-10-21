@@ -43,6 +43,7 @@ func main() {
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
 	httpIngest := fs.Bool("http-ingest", false, "Use Livepeer HTTP HLS ingest")
+	ignoreNoCodecError := fs.Bool("ignore-no-codec-error", true, "Do not stop streaming if segment without codec's info downloaded")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -64,6 +65,9 @@ func main() {
 		return
 	}
 	metrics.InitCensus(hostName, model.Version)
+	testers.IgnoreNoCodecError = *ignoreNoCodecError
+	testers.IgnoreGaps = true
+	testers.IgnoreTimeDrift = true
 
 	if _, err := os.Stat(*fileArg); os.IsNotExist(err) {
 		fmt.Printf("File '%s' does not exists", *fileArg)
