@@ -40,3 +40,7 @@ push:
 .PHONY: localdocker
 localdocker:
 	docker build -f Dockerfile.debian -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .
+
+.PHONY: stream-monitor
+monitor:
+	go build -ldflags="$(ldflags)" cmd/stream-monitor/stream-monitor.go

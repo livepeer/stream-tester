@@ -309,7 +309,7 @@ func main() {
 			if len(bds) == 0 {
 				glog.Fatal("Got empty list of broadcasterf from Livepeer API")
 			}
-			up := testers.NewHTTPtreamer(gctx, true, "baseManifestID")
+			up := testers.NewHTTPStreamer(gctx, true, "baseManifestID")
 			up.StartUpload(fn, bds[0]+"/live/"+stream.ID, stream.ID, 0, 0, streamDuration, 0)
 			stats, err := up.Stats()
 			if err != nil {
