@@ -83,22 +83,24 @@ type (
 
 	// CreateStreamResp returned by API
 	CreateStreamResp struct {
-		ID                 string    `json:"id,omitempty"`
-		Name               string    `json:"name,omitempty"`
-		Presets            []string  `json:"presets,omitempty"`
-		Kind               string    `json:"kind,omitempty"`
-		UserID             string    `json:"userId,omitempty"`
-		StreamKey          string    `json:"streamKey,omitempty"`
-		PlaybackID         string    `json:"playbackId,omitempty"`
-		ParentID           string    `json:"parentId,omitempty"`
-		CreatedAt          int64     `json:"createdAt,omitempty"`
-		LastSeen           int64     `json:"lastSeen,omitempty"`
-		SourceSegments     int64     `json:"sourceSegments,omitempty"`
-		TranscodedSegments int64     `json:"transcodedSegments,omitempty"`
-		Deleted            bool      `json:"deleted,omitempty"`
-		Record             bool      `json:"record"`
-		Profiles           []Profile `json:"profiles,omitempty"`
-		Errors             []string  `json:"errors,omitempty"`
+		ID                         string    `json:"id,omitempty"`
+		Name                       string    `json:"name,omitempty"`
+		Presets                    []string  `json:"presets,omitempty"`
+		Kind                       string    `json:"kind,omitempty"`
+		UserID                     string    `json:"userId,omitempty"`
+		StreamKey                  string    `json:"streamKey,omitempty"`
+		PlaybackID                 string    `json:"playbackId,omitempty"`
+		ParentID                   string    `json:"parentId,omitempty"`
+		CreatedAt                  int64     `json:"createdAt,omitempty"`
+		LastSeen                   int64     `json:"lastSeen,omitempty"`
+		SourceSegments             int64     `json:"sourceSegments,omitempty"`
+		TranscodedSegments         int64     `json:"transcodedSegments,omitempty"`
+		SourceSegmentsDuration     float64   `json:"sourceSegmentsDuration,omitempty"`
+		TranscodedSegmentsDuration float64   `json:"transcodedSegmentsDuration,omitempty"`
+		Deleted                    bool      `json:"deleted,omitempty"`
+		Record                     bool      `json:"record"`
+		Profiles                   []Profile `json:"profiles,omitempty"`
+		Errors                     []string  `json:"errors,omitempty"`
 	}
 
 	// // Profile ...
@@ -158,9 +160,9 @@ func (lapi *API) Init() {
 	if err != nil {
 		glog.Fatalf("Error geolocating Livepeer API server (%s) error: %v", livepeerAPIGeolocateURL, err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
 		glog.Fatalf("Status error contacting Livepeer API server (%s) status %d body: %s", livepeerAPIGeolocateURL, resp.StatusCode, string(b))
 	}
 	b, err := ioutil.ReadAll(resp.Body)
@@ -225,9 +227,9 @@ func (lapi *API) Ingest(all bool) ([]Ingest, error) {
 		glog.Errorf("Error getting ingests from Livepeer API server (%s) error: %v", u, err)
 		return nil, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
 		glog.Fatalf("Status error contacting Livepeer API server (%s) status %d body: %s", lapi.choosenServer, resp.StatusCode, string(b))
 	}
 	b, err := ioutil.ReadAll(resp.Body)
@@ -301,12 +303,12 @@ func (lapi *API) DeleteStream(id string) error {
 		glog.Errorf("Error deleting Livepeer stream %v", err)
 		return err
 	}
+	defer resp.Body.Close()
 	_, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		glog.Errorf("Error deleting Livepeer stream (body) %v", err)
 		return err
 	}
-	resp.Body.Close()
 	if resp.StatusCode != 204 {
 		return fmt.Errorf("Error deleting stream %s: status is %s", id, resp.Status)
 	}
@@ -345,12 +347,12 @@ func (lapi *API) CreateStreamEx(name string, profiles ...string) (*CreateStreamR
 		glog.Errorf("Error creating Livepeer stream %v", err)
 		return nil, err
 	}
+	defer resp.Body.Close()
 	b, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		glog.Errorf("Error creating Livepeer stream (body) %v", err)
 		return nil, err
 	}
-	resp.Body.Close()
 	glog.Info(string(b))
 	r := &CreateStreamResp{}
 	err = json.Unmarshal(b, r)
@@ -417,12 +419,12 @@ func (lapi *API) SetActive(id string, active bool) (bool, error) {
 		glog.Errorf("id=%s/setactive Error set active %v", id, err)
 		return true, err
 	}
+	defer resp.Body.Close()
 	b, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		glog.Errorf("id=%s/setactive Error set active (body) %v", err)
 		return true, err
 	}
-	resp.Body.Close()
 	glog.Infof("%s/setactive response status code %d status %s resp %+v body=%s", id, resp.StatusCode, resp.Status, resp, string(b))
 	return resp.StatusCode >= 200 && resp.StatusCode < 300, nil
 }
@@ -435,9 +437,9 @@ func (lapi *API) getStream(u string) (*CreateStreamResp, error) {
 		glog.Errorf("Error getting stream by id from Livepeer API server (%s) error: %v", u, err)
 		return nil, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
 		glog.Errorf("Status error getting stream by id Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
 		if resp.StatusCode == http.StatusNotFound {
 			return nil, ErrNotExists
