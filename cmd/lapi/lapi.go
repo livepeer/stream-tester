@@ -224,9 +224,9 @@ func transcodeSegment(token, presets, sid, seq, outFmt, name string) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
 		return errors.New(resp.Status + ": " + string(b))
 	}
 	mediaType, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
@@ -273,7 +273,6 @@ func transcodeSegment(token, presets, sid, seq, outFmt, name string) error {
 	}
 	took := time.Since(postStarted)
 	fmt.Printf("Transcoding took=%s profiles=%d", took, len(segments))
-	resp.Body.Close()
 	if len(segments) > 0 {
 		for i, tseg := range segments {
 			// ofn := fmt.Sprintf("%s_%s.ts", fn, profiles[i])

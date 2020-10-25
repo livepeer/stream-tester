@@ -1,6 +1,7 @@
 package uhttp
 
 import (
+	"context"
 	"io"
 	"net/http"
 
@@ -31,6 +32,16 @@ func RequireRequest(method, url string, body io.Reader) *http.Request {
 // GetRequest ...
 func GetRequest(url string) *http.Request {
 	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		glog.Fatal(err)
+	}
+	req.Header.Add("User-Agent", model.AppName+"/"+model.Version)
+	return req
+}
+
+// NewRequestWithContext ...
+func NewRequestWithContext(ctx context.Context, method, url string, body io.Reader) *http.Request {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		glog.Fatal(err)
 	}

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/apis/consul"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/apis/mist"
 	mistapi "github.com/livepeer/stream-tester/apis/mist"
@@ -17,6 +18,8 @@ import (
 )
 
 const streamPlaybackPrefix = "playback_"
+const traefikRuleTemplate = "PathPrefix(`/hls/%s/`)"
+const traefikKeyPathBase = `traefik/http/routers/`
 
 type (
 	// IMac creates new Mist API Connector application
@@ -37,29 +40,33 @@ type (
 	}
 
 	mac struct {
-		opts           *MacOptions
-		mapi           *mist.API
-		lapi           *livepeer.API
-		balancerHost   string
-		pub2id         map[string]string // public key to stream id
-		mu             sync.Mutex
-		mistHot        string
-		checkBandwidth bool
+		opts            *MacOptions
+		mapi            *mist.API
+		lapi            *livepeer.API
+		balancerHost    string
+		pub2id          map[string]string // public key to stream id
+		mu              sync.Mutex
+		mistHot         string
+		checkBandwidth  bool
+		consulURL       *url.URL
+		mistServiceName string
 	}
 )
 
 // NewMac ...
-func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool) IMac {
+func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, consul *url.URL, mistServiceName string) IMac {
 	if balancerHost != "" && !strings.Contains(balancerHost, ":") {
 		balancerHost = balancerHost + ":8042" // must set default port for Mist's Load Balancer
 	}
 	return &mac{
-		mistHot:        mistHost,
-		mapi:           mapi,
-		lapi:           lapi,
-		checkBandwidth: checkBandwidth,
-		balancerHost:   balancerHost,
-		pub2id:         make(map[string]string), // public key to stream id
+		mistHot:         mistHost,
+		mapi:            mapi,
+		lapi:            lapi,
+		checkBandwidth:  checkBandwidth,
+		balancerHost:    balancerHost,
+		pub2id:          make(map[string]string), // public key to stream id
+		consulURL:       consul,
+		mistServiceName: mistServiceName,
 	}
 }
 
@@ -294,6 +301,16 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.Write([]byte(responseURL))
+	if mc.consulURL != nil {
+		// now create routing rule in the Consul for HLS playback
+		go func() {
+			err := consul.PutKeys(mc.consulURL, traefikKeyPathBase+streamKey+"/rule", fmt.Sprintf(traefikRuleTemplate, streamKey),
+				traefikKeyPathBase+streamKey+"/service", mc.mistServiceName)
+			if err != nil {
+				glog.Errorf("Error creating Traefik rule err=%v", err)
+			}
+		}()
+	}
 	glog.Infof("Responded with '%s'", responseURL)
 }
 

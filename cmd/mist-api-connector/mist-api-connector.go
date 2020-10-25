@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"runtime"
 	"strings"
@@ -33,6 +34,8 @@ func main() {
 	mistCreds := fs.String("mist-creds", "", "login:password of the Mist server")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
+	consulURI := fs.String("consul", "", "Base URL to access Consul (for example: http://localhost:8500)")
+	mistServiceNameInTraefik := fs.String("mist-service-name", "", "Name of the service for this Mist inside Traefik (to be put in Consul)")
 	_ = fs.String("config", "", "config file (optional)")
 
 	ff.Parse(fs, os.Args[1:],
@@ -58,7 +61,15 @@ func main() {
 	mapi = mistapi.NewMist(*mistHost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 	mapi.Login()
 
-	mc := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false)
+	var consulURL *url.URL
+	var err error
+	if *consulURI != "" {
+		consulURL, err = url.Parse(*consulURI)
+		if err != nil {
+			glog.Fatalf("Error parsing Consul URL: %v", err)
+		}
+	}
+	mc := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, consulURL, *mistServiceNameInTraefik)
 	if err := mc.SetupTriggers(*ownURI); err != nil {
 		glog.Fatal(err)
 	}
