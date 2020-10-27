@@ -156,7 +156,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeat in
 	started := make(chan interface{})
 	go func() {
 		for i := 0; i < int(simStreams); i++ {
-			startDelayBetweenGroups = 30*time.Second + time.Duration(rand.Intn(4000))*time.Millisecond
+			startDelayBetweenGroups = 3 * time.Second
 			if model.Production && i != 0 {
 				glog.Infof("Waiting for %s before starting stream %d", startDelayBetweenGroups, i)
 				time.Sleep(startDelayBetweenGroups)

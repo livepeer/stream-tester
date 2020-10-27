@@ -4,9 +4,9 @@ FROM golang:1.13-stretch as builder
 
 WORKDIR /root
 RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs.mp4
-RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_3min.mp4
-RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_t02.mp4
-RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_2min.mp4
+# RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_3min.mp4
+# RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_t02.mp4
+# RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_2min.mp4
 
 ENV GOFLAGS "-mod=readonly"
 ARG version
@@ -34,12 +34,15 @@ WORKDIR /root
 RUN apt update && apt install -y ca-certificates && apt clean
 
 COPY --from=builder /root/official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs.mp4
-COPY --from=builder /root/official_test_source_2s_keys_24pfs_3min.mp4 official_test_source_2s_keys_24pfs_3min.mp4
-COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4
-COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4
+# COPY --from=builder /root/official_test_source_2s_keys_24pfs_3min.mp4 official_test_source_2s_keys_24pfs_3min.mp4
+# COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4
+# COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4
 COPY --from=builder /root/streamtester streamtester
 
-CMD /bin/bash -c 'mv bbb_sunflower_1080p_30fps_normal_t02.mp4 $(hostname).mp4 && exec /root/streamtester -host=mdw-mist-meridix-origin.livepeer.live -media-host=mdw-mist-meridix.livepeer.live -media=443 -profiles=3 -sim=100 -repeat=999 $(hostname).mp4'
+RUN apt-get update && apt-get install -y curl
+
+CMD /bin/bash -c 'curl -L https://eric-test-livepeer.s3.amazonaws.com/bbbx3_720.mp4 -o $(hostname).mp4 && exec /root/streamtester -host=chi-origin.livepeer.live -media-host=chi.livepeer.live -media=443 -profiles=3 -sim=100 -repeat=999 $(hostname).mp4'
+# CMD /bin/bash -c 'mv official_test_source_2s_keys_24pfs.mp4 $(hostname).mp4 && exec /root/streamtester -host=chi-origin.livepeer.live -media-host=chi.livepeer.live -media=443 -profiles=3 -sim=71 -repeat=999 $(hostname).mp4'
 
 # docker build -t livepeer/streamtester:latest .
 # docker build -t livepeer/streamtester:latest --build-arg version=$(git describe --dirty) .
