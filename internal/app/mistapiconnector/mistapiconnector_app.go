@@ -20,6 +20,9 @@ import (
 const streamPlaybackPrefix = "playback_"
 const traefikRuleTemplate = "PathPrefix(`/hls/%s/`)"
 const traefikKeyPathBase = `traefik/http/routers/`
+const audioAlways = "always"
+const audioNever = "never"
+const audioRecord = "record"
 
 type (
 	// IMac creates new Mist API Connector application
@@ -50,11 +53,12 @@ type (
 		checkBandwidth  bool
 		consulURL       *url.URL
 		mistServiceName string
+		sendAudio       string
 	}
 )
 
 // NewMac ...
-func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, consul *url.URL, mistServiceName string) IMac {
+func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, consul *url.URL, mistServiceName string, sendAudio string) IMac {
 	if balancerHost != "" && !strings.Contains(balancerHost, ":") {
 		balancerHost = balancerHost + ":8042" // must set default port for Mist's Load Balancer
 	}
@@ -67,6 +71,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		pub2id:          make(map[string]string), // public key to stream id
 		consulURL:       consul,
 		mistServiceName: mistServiceName,
+		sendAudio:       sendAudio,
 	}
 }
 
@@ -322,8 +327,14 @@ func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStream
 	if mc.balancerHost != "" {
 		source = fmt.Sprintf("balance:http://%s/?fallback=push://", mc.balancerHost)
 	}
+	audio := false
+	if mc.sendAudio == audioAlways {
+		audio = true
+	} else if mc.sendAudio == audioRecord {
+		audio = stream.Record
+	}
 	err := mc.mapi.CreateStream(streamName, stream.Presets,
-		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, skipTranscoding, stream.Record)
+		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, skipTranscoding, audio)
 	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
 	return err
 }
