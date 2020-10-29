@@ -197,6 +197,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 	try := 0
 	for {
 		glog.V(model.DEBUG).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
+		downStart := time.Now()
 		resp, err := httpClient.Do(uhttp.GetRequest(fsurl))
 		if err != nil {
 			glog.Errorf("Error downloading %s: %v", fsurl, err)
@@ -209,9 +210,10 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 		}
 		b, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
+		downTook := time.Since(downStart)
 		now := time.Now()
 		if err != nil {
-			glog.V(model.VVERBOSE).Infof("Error downloading reading body %s: %v", fsurl, err)
+			glog.V(model.VVERBOSE).Infof("Error downloading reading body %s: %v downTook=%s", fsurl, err, downTook)
 			if try < 4 {
 				try++
 				continue
@@ -220,7 +222,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			return
 		}
 		if resp.StatusCode != http.StatusOK {
-			glog.V(model.VVERBOSE).Infof("Error status downloading segment %s result status code %d status %s", fsurl, resp.StatusCode, resp.Status)
+			glog.V(model.VVERBOSE).Infof("Error status downloading segment %s result status code %d status %s downTook=%s", fsurl, resp.StatusCode, resp.Status, downTook)
 			if try < 8 && resp.StatusCode != http.StatusNotFound {
 				try++
 				time.Sleep(time.Second)
@@ -262,8 +264,8 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			}
 			md.mu.Unlock()
 		}
-		glog.V(model.DEBUG).Infof("Download %s result: %s len %d timeStart %s segment duration %s keyframes %d (%+v)",
-			fsurl, resp.Status, len(b), fsttim, dur, keyFrames, skeyFrames)
+		glog.V(model.DEBUG).Infof("Download %s result: %s len %d downTook=%s timeStart %s segment duration %s keyframes %d (%+v)",
+			fsurl, resp.Status, len(b), downTook, fsttim, dur, keyFrames, skeyFrames)
 		if !md.firstSegmentParsed && task.seqNo == 0 {
 			md.firstSegmentTime = fsttim
 			md.firstSegmentParsed = true

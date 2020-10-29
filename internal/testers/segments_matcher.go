@@ -118,7 +118,7 @@ func (sm *segmentsMatcher) cleanup() {
 	now := time.Now()
 	for i := len(sm.sentFrames) - 1; i >= 0; i-- {
 		pkt := sm.sentFrames[i]
-		if now.Sub(pkt.sentAt) > 72*time.Second {
+		if now.Sub(pkt.sentAt) > 3*60*time.Second {
 			until = i
 			break
 		}
