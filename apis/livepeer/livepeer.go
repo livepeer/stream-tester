@@ -376,7 +376,7 @@ func (lapi *API) GetStreamByKey(key string) (*CreateStreamResp, error) {
 	if key == "" {
 		return nil, errors.New("empty key")
 	}
-	u := fmt.Sprintf("%s/api/stream/key/%s", lapi.choosenServer, key)
+	u := fmt.Sprintf("%s/api/stream/key/%s?main=true", lapi.choosenServer, key)
 	return lapi.getStream(u)
 }
 
