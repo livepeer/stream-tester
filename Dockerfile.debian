@@ -25,6 +25,7 @@ COPY apis apis
 RUN echo $version
 
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/streamtester/streamtester.go
+RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/loadtester/loadtester.go
 
 
 FROM debian:stretch-slim
@@ -38,12 +39,17 @@ COPY --from=builder /root/official_test_source_2s_keys_24pfs.mp4 official_test_s
 # COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4
 # COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4
 COPY --from=builder /root/streamtester streamtester
+COPY --from=builder /root/loadtester loadtester
 
 RUN apt-get update && apt-get install -y curl
 
-CMD /bin/bash -c 'curl -L https://eric-test-livepeer.s3.amazonaws.com/bbbx3_720.mp4 -o $(hostname).mp4 && exec /root/streamtester -host=chi-origin.livepeer.live -media-host=chi.livepeer.live -media=443 -profiles=3 -sim=100 -repeat=999 $(hostname).mp4'
-# CMD /bin/bash -c 'mv official_test_source_2s_keys_24pfs.mp4 $(hostname).mp4 && exec /root/streamtester -host=chi-origin.livepeer.live -media-host=chi.livepeer.live -media=443 -profiles=3 -sim=71 -repeat=999 $(hostname).mp4'
+# RUN /root/loadtester -help
 
+# CMD /bin/bash -c 'curl -L https://eric-test-livepeer.s3.amazonaws.com/bbbx3_720.mp4 -o $(hostname).mp4 && exec /root/streamtester -host=chi-origin.livepeer.live -media-host=chi.livepeer.live -media=443 -profiles=3 -sim=100 -repeat=999 $(hostname).mp4'
+CMD /bin/bash -c 'curl -L https://eric-test-livepeer.s3.amazonaws.com/bbbx3_720.mp4 -o $(hostname).mp4 && \
+  exec /root/loadtester -api-token 29e0c327-eb75-4c42-a598-e5a4737f9d67 -api-server mdw.livepeer.com -file $(hostname).mp4 -stream-dur 600s -profiles 4 -sim 100'
+
+# CMD /bin/bash -c 'mv official_test_source_2s_keys_24pfs.mp4 $(hostname).mp4 && exec /root/streamtester -host=chi-origin.livepeer.live -media-host=chi.livepeer.live -media=443 -profiles=3 -sim=71 -repeat=999 $(hostname).mp4'
 # docker build -t livepeer/streamtester:latest .
 # docker build -t livepeer/streamtester:latest --build-arg version=$(git describe --dirty) .
 # docker push livepeer/streamtester:latest
