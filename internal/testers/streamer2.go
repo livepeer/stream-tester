@@ -14,6 +14,9 @@ import (
 // IgnoreNoCodecError ...
 var IgnoreNoCodecError bool
 
+// StartDelayBetweenGroups delay between start of group of streams
+var StartDelayBetweenGroups = 2 * time.Second
+
 type (
 	// streamer2 is used for running continious tests against Wowza servers
 	streamer2 struct {

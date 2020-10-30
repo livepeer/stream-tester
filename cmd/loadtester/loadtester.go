@@ -39,6 +39,7 @@ func main() {
 
 	profiles := fs.Uint("profiles", 2, "number of transcoded profiles should be in output")
 	sim := fs.Uint("sim", 1, "Number of simulteneous streams to stream")
+	delayBetweenGroups := fs.Duration("delay-between-streams", 2*time.Second, "Delay between starting group of streams")
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
@@ -68,6 +69,7 @@ func main() {
 	testers.IgnoreNoCodecError = *ignoreNoCodecError
 	testers.IgnoreGaps = true
 	testers.IgnoreTimeDrift = true
+	testers.StartDelayBetweenGroups = *delayBetweenGroups
 
 	if *fileArg == "" {
 		fmt.Println("Should provide -file argumnet")
@@ -129,7 +131,7 @@ func main() {
 	} else {
 		sr = testers.NewHTTPLoadTester(gctx, gcancel, lapi, 0)
 	}
-	baseManifesID, err := sr.StartStreams(fileName, "", "1935", "", "443", *sim, 1, *streamDuration, false, true, true, 3, 5*time.Second, 0)
+	baseManifesID, err := sr.StartStreams(fileName, "", "1935", "", "443", *sim, 1, *streamDuration, false, true, true, 2, 5*time.Second, 0)
 	if err != nil {
 		exit(255, fileName, *fileArg, err)
 	}
