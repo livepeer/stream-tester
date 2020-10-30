@@ -197,7 +197,7 @@ func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, streamDuration, waitForT
 	}
 
 	var onError = func(err error) {
-		msg := fmt.Sprintf("onError finishing upload : %v", err)
+		msg := fmt.Sprintf("onError finishing upload to %s after %s: %v", rtmpURL, time.Since(started), err)
 		messenger.SendFatalMessage(msg)
 		glog.Error(msg)
 		rs.connectionLost = true
@@ -321,7 +321,8 @@ outloop:
 	// if rs.hasBar {
 	// 	uiprogress.Stop()
 	// }
-	glog.V(model.DEBUG).Infof("Waiting before closing RTMP stream\n")
+	glog.V(model.SHORT).Infof("Upload to %s finished after %s", rtmpURL, time.Since(started))
+	glog.V(model.DEBUG).Infof("Waiting before closing RTMP stream")
 	// fmt.Println("==== waiting before closing RTMP stream\n")
 	// wait before closing connection, so we can recieve transcoded data
 	// if we do not wait, last segment will be thrown out by broadcaster
