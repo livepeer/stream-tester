@@ -69,12 +69,15 @@ func main() {
 	testers.IgnoreGaps = true
 	testers.IgnoreTimeDrift = true
 
-	if _, err := os.Stat(*fileArg); os.IsNotExist(err) {
-		fmt.Printf("File '%s' does not exists", *fileArg)
+	if *fileArg == "" {
+		fmt.Println("Should provide -file argumnet")
 		os.Exit(1)
 	}
+	var err error
+	var fileName string
+
 	if *profiles == 0 {
-		fmt.Printf("Number of profiles couldn't be set to zero")
+		fmt.Println("Number of profiles couldn't be set to zero")
 		os.Exit(1)
 	}
 
@@ -82,20 +85,38 @@ func main() {
 		glog.Fatalf("-api-token should be specified")
 	}
 
+	if fileName, err = utils.GetFile(*fileArg); err != nil {
+		if err == utils.ErrNotFound {
+			fmt.Printf("File %s not found\n", *fileArg)
+		} else {
+			fmt.Printf("Error getting file %s: %v\n", *fileArg, err)
+		}
+		os.Exit(1)
+	}
+	fmt.Printf("Streaming video file '%s'\n", fileName)
+	exit := func(exitCode int, fn, fa string, err error) {
+		if fn != fa {
+			os.Remove(fn)
+		}
+		if err != nil {
+			fmt.Printf("Error: %v", err)
+		}
+		os.Exit(exitCode)
+	}
+
 	model.ProfilesNum = int(*profiles)
-	var err error
 
 	lapi := livepeer.NewLivepeer(*apiToken, *apiServer, nil)
 	lapi.Init()
 	glog.Infof("Choosen server: %s", lapi.GetServer())
 	ingests, err := lapi.Ingest(false)
 	if err != nil {
-		panic(err)
+		exit(255, fileName, *fileArg, err)
 	}
 	glog.Infof("Got ingests: %+v", ingests)
 	broadcasters, err := lapi.Broadcasters()
 	if err != nil {
-		panic(err)
+		exit(255, fileName, *fileArg, err)
 	}
 	glog.Infof("Got broadcasters: %+v", broadcasters)
 
@@ -108,9 +129,9 @@ func main() {
 	} else {
 		sr = testers.NewHTTPLoadTester(gctx, gcancel, lapi, 0)
 	}
-	baseManifesID, err := sr.StartStreams(*fileArg, "", "1935", "", "443", *sim, 1, *streamDuration, false, true, true, 3, 5*time.Second, 0)
+	baseManifesID, err := sr.StartStreams(fileName, "", "1935", "", "443", *sim, 1, *streamDuration, false, true, true, 3, 5*time.Second, 0)
 	if err != nil {
-		panic(err)
+		exit(255, fileName, *fileArg, err)
 	}
 	glog.Infof("Base manfiest id: %s", baseManifesID)
 	exitc := make(chan os.Signal, 1)
@@ -123,6 +144,9 @@ func main() {
 		time.Sleep(2 * time.Second)
 		stats, _ := sr.Stats("")
 		fmt.Println(stats.FormatForConsole())
+		if fileName != *fileArg {
+			os.Remove(fileName)
+		}
 	}()
 	glog.Infof("Waiting for test to complete")
 	<-sr.Done()
@@ -132,5 +156,5 @@ func main() {
 	stats, _ := sr.Stats("")
 	fmt.Println(stats.FormatForConsole())
 	fmt.Println(stats.FormatErrorsForConsole())
-	os.Exit(model.ExitCode)
+	exit(model.ExitCode, fileName, *fileArg, err)
 }
