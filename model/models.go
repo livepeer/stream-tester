@@ -73,7 +73,7 @@ type Streamer interface {
 	// DownStatsFormatted() string
 	// AnalyzeFormatted(short bool) string
 	Done() <-chan struct{}
-	Stop() // Stop active streams
+	// Stop() // Stop active streams
 	Cancel()
 }
 

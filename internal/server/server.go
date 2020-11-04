@@ -92,7 +92,7 @@ func (ss *StreamerServer) handleStop(w http.ResponseWriter, r *http.Request) {
 	}
 	glog.Info("Got stop request.")
 	if ss.streamer != nil {
-		ss.streamer.Stop()
+		ss.streamer.Cancel()
 	}
 	w.WriteHeader(http.StatusOK)
 }
