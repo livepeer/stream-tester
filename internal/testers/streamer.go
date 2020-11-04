@@ -111,6 +111,16 @@ func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPo
 		return "", err
 	}
 
+	// check if we can make TCP connection to RTMP target
+	waitForRTMP := 5 * time.Second
+	if waitForTarget > 0 {
+		waitForRTMP = waitForTarget
+	}
+	if err := utils.WaitForTCP(waitForRTMP, fmt.Sprintf("rtmp://%s:%d", bhost, nMediaPort)); err != nil {
+		glog.Info(err)
+		return "", err
+	}
+
 	var overallBar *uiprogress.Bar
 	sr.totalSegmentsToSend = segments * int(simStreams) * int(repeat)
 	if showProgress {

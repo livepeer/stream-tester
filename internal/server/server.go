@@ -228,6 +228,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		if streamDuration, err = ParseStreamDurationArgument(ssr.Time); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
+			cancel()
 			return
 		}
 	}
@@ -238,6 +239,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
+		cancel()
 		return
 	}
 
@@ -251,8 +253,8 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
+		cancel()
 		return
 	}
 	w.Write(res)
-
 }
