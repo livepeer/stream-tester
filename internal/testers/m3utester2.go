@@ -88,13 +88,14 @@ type (
 	}
 )
 
-func newM3utester2(ctx context.Context, cancel context.CancelFunc, u string, wowzaMode, mistMode bool,
+func newM3utester2(pctx context.Context, u string, wowzaMode, mistMode bool,
 	waitForTarget time.Duration, sm *segmentsMatcher) *m3utester2 {
 
 	iu, err := url.Parse(u)
 	if err != nil {
 		glog.Fatal(err)
 	}
+	ctx, cancel := context.WithCancel(pctx)
 	mut := &m3utester2{
 		finite: finite{
 			ctx:    ctx,
@@ -301,6 +302,14 @@ func (f *finite) fatalEnd(msg string) {
 	messenger.SendFatalMessage(msg)
 	f.cancel()
 	// panic(msg)
+}
+
+func (f *finite) Done() <-chan struct{} {
+	return f.ctx.Done()
+}
+
+func (f *finite) Cancel() {
+	f.cancel()
 }
 
 // continiously pull main manifest, starts new media streams

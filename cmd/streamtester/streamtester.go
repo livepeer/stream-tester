@@ -142,7 +142,7 @@ func main() {
 	}
 	if *infinitePull != "" {
 		model.ProfilesNum = 0
-		puller := testers.NewInfinitePuller(gctx, *infinitePull, *save, *wowza)
+		puller := testers.NewInfinitePuller(gctx, *infinitePull, *save, *wowza, *mist)
 		puller.Start()
 		return
 	}
@@ -223,7 +223,7 @@ func main() {
 	if *mediaURL != "" && *rtmpURL == "" {
 		msg := fmt.Sprintf(`Starting infinite pull from %s`, *mediaURL)
 		messenger.SendMessage(msg)
-		sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
+		sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
 		sr2.StartPulling(*mediaURL)
 		return
 	}
@@ -233,7 +233,7 @@ func main() {
 		}
 		msg := fmt.Sprintf(`Starting infinite stream to %s`, *mediaURL)
 		messenger.SendMessage(msg)
-		sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
+		sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
 		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, streamDuration)
 		if *wowza {
 			// let Wowza remove session
@@ -331,7 +331,7 @@ func main() {
 			msg := fmt.Sprintf(`Starting %s stream to %s`, dur, *rtmpURL)
 			glog.Info(msg)
 
-			sr2 := testers.NewStreamer2(gctx, gcancel, *wowza, *mist)
+			sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
 			sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, streamDuration)
 		}
 		if model.ExitCode == 0 {

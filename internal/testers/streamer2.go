@@ -20,6 +20,7 @@ var StartDelayBetweenGroups = 2 * time.Second
 type (
 	// streamer2 is used for running continious tests against Wowza servers
 	streamer2 struct {
+		finite
 		ctx        context.Context
 		cancel     context.CancelFunc
 		uploader   *rtmpStreamer
@@ -30,10 +31,13 @@ type (
 )
 
 // NewStreamer2 returns new streamer2
-func NewStreamer2(ctx context.Context, cancel context.CancelFunc, wowzaMode, mistMode bool) model.Streamer2 {
+func NewStreamer2(pctx context.Context, wowzaMode, mistMode bool) model.Streamer2 {
+	ctx, cancel := context.WithCancel(pctx)
 	return &streamer2{
-		ctx:       ctx,
-		cancel:    cancel,
+		finite: finite{
+			ctx:    ctx,
+			cancel: cancel,
+		},
 		wowzaMode: wowzaMode,
 		mistMode:  mistMode,
 	}
@@ -55,28 +59,25 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 
 	sm := newSegmentsMatcher()
 	// sr.uploader = newRtmpStreamer(rtmpIngestURL, sourceFileName, nil, nil, sr.eof, sr.wowzaMode)
-	sctx, scancel := context.WithCancel(sr.ctx)
-	sr.uploader = newRtmpStreamer(sctx, scancel, rtmpIngestURL, sourceFileName, sourceFileName, nil, nil, false, sm)
+	sr.uploader = newRtmpStreamer(sr.ctx, sr.cancel, rtmpIngestURL, sourceFileName, sourceFileName, nil, nil, false, sm)
 	if timeToStream == 0 {
 		timeToStream = -1
 	}
 	go func() {
 		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, timeToStream, waitForTarget)
 	}()
-	sr.downloader = newM3utester2(sr.ctx, sr.cancel, mediaURL, sr.wowzaMode, sr.mistMode, waitForTarget, sm) // starts to download at creation
+	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.wowzaMode, sr.mistMode, waitForTarget, sm) // starts to download at creation
 	started := time.Now()
-	<-sctx.Done()
-	sr.cancel()
+	<-sr.ctx.Done()
 	msg := fmt.Sprintf(`Streaming stopped after %s`, time.Since(started))
 	messenger.SendMessage(msg)
 }
 
 // StartPulling pull arbitrary HLS stream and report found errors
 func (sr *streamer2) StartPulling(mediaURL string) {
-	sctx, scancel := context.WithCancel(sr.ctx)
-	sr.downloader = newM3utester2(sctx, scancel, mediaURL, sr.wowzaMode, sr.mistMode, 0, nil) // starts to download at creation
+	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.wowzaMode, sr.mistMode, 0, nil) // starts to download at creation
 	started := time.Now()
-	<-sctx.Done()
+	<-sr.downloader.Done()
 	msg := fmt.Sprintf(`Streaming stopped after %s`, time.Since(started))
 	messenger.SendMessage(msg)
 }
