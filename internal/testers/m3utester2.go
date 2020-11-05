@@ -139,7 +139,7 @@ func newM3uMediaStream(ctx context.Context, cancel context.CancelFunc, name, res
 
 func (mut *m3utester2) workerLoop() {
 	seenResolutions := make(sort.StringSlice, 0, 16)
-	results := make(map[string]downloadResultsByAtFirstTime)
+	results := make(map[string][]*downloadResult)
 	started := time.Now()
 	timer := time.NewTimer(reportStatsEvery)
 	// transcodedLatencies := utils.LatenciesCalculator{}
@@ -183,12 +183,14 @@ func (mut *m3utester2) workerLoop() {
 			// glog.Infof("MAIN downloaded: %s", dres.String2())
 			// continue
 			if _, has := results[dres.resolution]; !has {
-				results[dres.resolution] = make(downloadResultsByAtFirstTime, 0, 128)
+				results[dres.resolution] = make([]*downloadResult, 0, 128)
 				seenResolutions = append(seenResolutions, dres.resolution)
 				seenResolutions.Sort()
 			}
 			results[dres.resolution] = append(results[dres.resolution], dres)
-			sort.Sort(results[dres.resolution])
+			sort.Slice(results[dres.resolution], func(i, j int) bool {
+				return results[dres.resolution][i].timeAtFirstPlace.Before(results[dres.resolution][j].timeAtFirstPlace)
+			})
 			if len(results[dres.resolution]) > 128 {
 				results[dres.resolution] = results[dres.resolution][1:]
 			}
@@ -430,22 +432,6 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 	}
 }
 
-type downloadResultsByAppTime []*downloadResult
-
-func (p downloadResultsByAppTime) Len() int { return len(p) }
-func (p downloadResultsByAppTime) Less(i, j int) bool {
-	return p[i].appTime.Before(p[j].appTime)
-}
-func (p downloadResultsByAppTime) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
-
-type downloadResultsByAtFirstTime []*downloadResult
-
-func (p downloadResultsByAtFirstTime) Len() int { return len(p) }
-func (p downloadResultsByAtFirstTime) Less(i, j int) bool {
-	return p[i].timeAtFirstPlace.Before(p[j].timeAtFirstPlace)
-}
-func (p downloadResultsByAtFirstTime) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
-
 func (ms *m3uMediaStream) segmentDownloadWorker(num int) {
 	resultsChan := make(chan *downloadResult)
 	for {
@@ -467,7 +453,7 @@ func (ms *m3uMediaStream) segmentDownloadWorker(num int) {
 }
 
 func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResults chan *latencyResult) {
-	results := make(downloadResultsByAppTime, 0, 128)
+	results := make([]*downloadResult, 0, 128)
 	var lastPrintTime, lastMessageSentAt time.Time
 
 	for {
@@ -521,7 +507,9 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 			}
 			// masterDR <- dres
 			results = append(results, dres)
-			sort.Sort(results)
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].appTime.Before(results[j].appTime)
+			})
 			if len(results) > 128 {
 				results = results[1:]
 			}
@@ -696,7 +684,11 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
 			}
 		}
-		time.Sleep(500 * time.Millisecond)
+		delay := 1 * time.Second
+		if ms.segmentsMatcher != nil {
+			delay = 100 * time.Millisecond
+		}
+		time.Sleep(delay)
 	}
 }
 
