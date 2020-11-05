@@ -59,7 +59,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 
 	sm := newSegmentsMatcher()
 	// sr.uploader = newRtmpStreamer(rtmpIngestURL, sourceFileName, nil, nil, sr.eof, sr.wowzaMode)
-	sr.uploader = newRtmpStreamer(sr.ctx, sr.cancel, rtmpIngestURL, sourceFileName, sourceFileName, nil, nil, false, sm)
+	sr.uploader = newRtmpStreamer(sr.ctx, rtmpIngestURL, sourceFileName, sourceFileName, nil, nil, false, sm)
 	if timeToStream == 0 {
 		timeToStream = -1
 	}
@@ -68,9 +68,10 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	}()
 	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.wowzaMode, sr.mistMode, waitForTarget, sm) // starts to download at creation
 	started := time.Now()
-	<-sr.ctx.Done()
+	<-sr.uploader.Done()
 	msg := fmt.Sprintf(`Streaming stopped after %s`, time.Since(started))
 	messenger.SendMessage(msg)
+	sr.cancel()
 }
 
 // StartPulling pull arbitrary HLS stream and report found errors

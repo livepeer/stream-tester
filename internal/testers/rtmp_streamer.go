@@ -24,8 +24,7 @@ var segLen = 2 * time.Second
 
 // rtmpStreamer streams one video file to RTMP server
 type rtmpStreamer struct {
-	ctx             context.Context
-	cancel          context.CancelFunc
+	finite
 	baseManifestID  string
 	ingestURL       string
 	counter         *segmentsCounter
@@ -39,23 +38,34 @@ type rtmpStreamer struct {
 	started         time.Time
 }
 
+// IRTMPStreamer public interface
+type IRTMPStreamer interface {
+	StartUpload(fn, rtmpURL string, streamDuration, waitForTarget time.Duration)
+}
+
 // NewRtmpStreamer ...
-func NewRtmpStreamer(ctx context.Context, cancel context.CancelFunc, ingestURL string) *rtmpStreamer {
+func NewRtmpStreamer(pctx context.Context, ingestURL string) IRTMPStreamer {
+	ctx, cancel := context.WithCancel(pctx)
 	return &rtmpStreamer{
-		ctx:       ctx,
-		cancel:    cancel,
+		finite: finite{
+			ctx:    ctx,
+			cancel: cancel,
+		},
 		ingestURL: ingestURL,
 		counter:   newSegmentsCounter(segLen, nil, false, nil),
 	}
 }
 
 // source is local file name for now
-func newRtmpStreamer(ctx context.Context, cancel context.CancelFunc, ingestURL, source, baseManifestID string,
+func newRtmpStreamer(pctx context.Context, ingestURL, source, baseManifestID string,
 	sentTimesMap *utils.SyncedTimesMap, bar *uiprogress.Bar, wowzaMode bool, sm *segmentsMatcher) *rtmpStreamer {
 
+	ctx, cancel := context.WithCancel(pctx)
 	return &rtmpStreamer{
-		ctx:             ctx,
-		cancel:          cancel,
+		finite: finite{
+			ctx:    ctx,
+			cancel: cancel,
+		},
 		wowzaMode:       wowzaMode,
 		ingestURL:       ingestURL,
 		counter:         newSegmentsCounter(segLen, bar, false, sentTimesMap),
@@ -165,6 +175,7 @@ func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, streamDuration, waitForT
 	rs.active = true
 	defer func() {
 		rs.active = false
+		rs.cancel()
 	}()
 
 	// pio.RecommendBufioSize = 1024 * 8

@@ -242,21 +242,20 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 				SaveNewStreams(ctx, "localhost", "10.140.19.178", "10.140.21.136")
 			}
 
-			sctx, scancel := context.WithCancel(ctx)
 			var sentTimesMap *utils.SyncedTimesMap
 			var segmentsMatcher *segmentsMatcher
 			if measureLatency {
 				// sentTimesMap = utils.NewSyncedTimesMap()
 				segmentsMatcher = newSegmentsMatcher()
 			}
-			up := newRtmpStreamer(sctx, scancel, rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, sr.wowzaMode, segmentsMatcher)
+			up := newRtmpStreamer(ctx, rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, sr.wowzaMode, segmentsMatcher)
 			wg.Add(1)
 			go func() {
 				up.StartUpload(sourceFileName, rtmpURL, streamDuration, waitForTarget)
 				wg.Done()
 			}()
 			sr.uploaders = append(sr.uploaders, up)
-			down := newM3UTester(sctx, sentTimesMap, sr.wowzaMode, sr.mistMode, false, false, saveDownloaded, segmentsMatcher, nil, "")
+			down := newM3UTester(ctx, sentTimesMap, sr.wowzaMode, sr.mistMode, false, false, saveDownloaded, segmentsMatcher, nil, "")
 			go findSkippedSegmentsNumber(up, down)
 			sr.downloaders = append(sr.downloaders, down)
 			down.Start(mediaURL)

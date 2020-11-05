@@ -176,7 +176,7 @@ func main() {
 			glog.Error(err)
 			return
 		}
-		uploader := testers.NewRtmpStreamer(gctx, gcancel, *rtmpURL)
+		uploader := testers.NewRtmpStreamer(gctx, *rtmpURL)
 		uploader.StartUpload(fn, *rtmpURL, -1, *waitForTarget)
 		return
 	}
