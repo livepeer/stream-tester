@@ -14,7 +14,7 @@ import (
 type (
 
 	/*
-		sementsMatcher record timings of frames sent by RTMP
+		segmentsMatcher record timings of frames sent by RTMP
 		matches segments that are read back
 	*/
 	segmentsMatcher struct {
@@ -31,7 +31,7 @@ type (
 	}
 )
 
-func newsementsMatcher() *segmentsMatcher {
+func newSegmentsMatcher() *segmentsMatcher {
 	return &segmentsMatcher{
 		sentFrames: make([]sentFrameInfo, 0, 1024),
 		mu:         &sync.Mutex{},

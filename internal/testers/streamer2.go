@@ -53,7 +53,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 		return
 	}
 
-	sm := newsementsMatcher()
+	sm := newSegmentsMatcher()
 	// sr.uploader = newRtmpStreamer(rtmpIngestURL, sourceFileName, nil, nil, sr.eof, sr.wowzaMode)
 	sctx, scancel := context.WithCancel(sr.ctx)
 	sr.uploader = newRtmpStreamer(sctx, scancel, rtmpIngestURL, sourceFileName, sourceFileName, nil, nil, false, sm)

@@ -247,7 +247,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			var segmentsMatcher *segmentsMatcher
 			if measureLatency {
 				// sentTimesMap = utils.NewSyncedTimesMap()
-				segmentsMatcher = newsementsMatcher()
+				segmentsMatcher = newSegmentsMatcher()
 			}
 			up := newRtmpStreamer(sctx, scancel, rtmpURL, sourceFileName, baseManfistID, sentTimesMap, bar, sr.wowzaMode, segmentsMatcher)
 			wg.Add(1)
