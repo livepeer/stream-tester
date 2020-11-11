@@ -37,7 +37,7 @@ func main() {
 	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
 	consulURI := fs.String("consul", "", "Base URL to access Consul (for example: http://localhost:8500)")
 	playbackDomain := fs.String("playback-domain", "", "domain to create consul routes for (ex: playback.livepeer.live)")
-	mistURL := fs.String("mist-url", "", "external URL of this Mist instance (to be put in Consul) (ex: https://mist-server-0.livepeer.live)")
+	mistURL := fs.String("consul-mist-url", "", "external URL of this Mist instance (to be put in Consul) (ex: https://mist-server-0.livepeer.live)")
 	_ = fs.String("config", "", "config file (optional)")
 
 	ff.Parse(fs, os.Args[1:],
