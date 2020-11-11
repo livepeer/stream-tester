@@ -319,6 +319,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 				traefikKeyPathRouters+streamKey+"/service",
 				streamKey,
 				traefikKeyPathServices+streamKey+"/loadbalancer/servers/0/url",
+				mc.mistURL,
 			)
 			if err != nil {
 				glog.Errorf("Error creating Traefik rule err=%v", err)
