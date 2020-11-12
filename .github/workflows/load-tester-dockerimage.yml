@@ -30,4 +30,4 @@ jobs:
         docker tag livepeer/streamtester:load-tester livepeer/streamtester:load-tester${{ steps.get_version.outputs.VERSION }}
         docker push livepeer/streamtester:load-tester${{ steps.get_version.outputs.VERSION }}
     - name: Push Docker Container to Registry
-      run: docker push livepeer/streamtester:mist-api-connector
+      run: docker push livepeer/streamtester:load-tester
