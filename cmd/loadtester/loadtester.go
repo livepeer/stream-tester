@@ -182,7 +182,7 @@ func main() {
 			if *httpIngest {
 				httpIngestURLTemplate := httpIngestURLTemplates[id%len(httpIngestURLTemplates)]
 				httpIngestURL := fmt.Sprintf(httpIngestURLTemplate, stream.ID)
-				glog.Infof("HTTP ingest: %s", httpIngestURL)
+				glog.V(model.SHORT).Infof("HTTP ingest: %s", httpIngestURL)
 
 				up := testers.NewHTTPStreamer(ctx, false, hostName)
 				go up.StartUpload(sourceFileName, httpIngestURL, manifestID, 0, waitForTarget, timeToStream, 0)
@@ -190,8 +190,8 @@ func main() {
 			}
 			rtmpURL := fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.StreamKey)
 			mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingests[0].Playback, stream.PlaybackID)
-			glog.V(model.VERBOSE).Infof("RTMP: %s", rtmpURL)
-			glog.V(model.VERBOSE).Infof("MEDIA: %s", mediaURL)
+			glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
+			glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
 			sr2 := testers.NewStreamer2(ctx, false, false, false, false, false)
 			go sr2.StartStreaming(sourceFileName, rtmpURL, mediaURL, waitForTarget, timeToStream)
 			return sr2, nil
@@ -205,8 +205,8 @@ func main() {
 			mu.Unlock()
 			rtmpURL := fmt.Sprintf(*rtmpTemplate, manifestID)
 			mediaURL := fmt.Sprintf(*hlsTemplate, manifestID)
-			glog.V(model.VERBOSE).Infof("RTMP: %s", rtmpURL)
-			glog.V(model.VERBOSE).Infof("MEDIA: %s", mediaURL)
+			glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
+			glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
 			if err := utils.WaitForTCP(waitForTarget, rtmpURL); err != nil {
 				// glog.Error(err)
 				return nil, err
