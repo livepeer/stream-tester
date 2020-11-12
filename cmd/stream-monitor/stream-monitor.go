@@ -5,6 +5,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
+	"os/signal"
+	"runtime"
+	"syscall"
+	"time"
+
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/stream-tester/apis/livepeer"
@@ -14,11 +20,6 @@ import (
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/peterbourgon/ff/v2"
-	"os"
-	"os/signal"
-	"runtime"
-	"syscall"
-	"time"
 )
 
 func init() {
@@ -123,7 +124,7 @@ func main() {
 		up := testers.NewHTTPStreamer(gctx, true, "baseManifestID")
 		up.StartUpload(*fileArg, broadcasters[0]+"/live/"+stream.ID, stream.ID, 0, 0, *streamDuration, 0)
 
-		stats, err := up.Stats()
+		stats, err := up.StatsOld()
 		if err != nil {
 			panic(err)
 		}
