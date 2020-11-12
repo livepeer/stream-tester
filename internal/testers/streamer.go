@@ -75,6 +75,16 @@ func (sr *streamer) Done() <-chan struct{} {
 	return sr.ctx.Done()
 }
 
+// Finished ...
+func (sr *streamer) Finished() bool {
+	select {
+	case <-sr.ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
 func (sr *streamer) Cancel() {
 	if sr.mapi != nil && len(sr.createdMistStreams) > 0 {
 		err := sr.mapi.DeleteStreams(sr.createdMistStreams...)
@@ -93,6 +103,15 @@ func (sr *streamer) Stop() {
 	}
 }
 
+// StartStreams starts streaming. streamDuration should be greater than zero. Attempts to maintain specified number of streams.
+// `repeat` argument not used.
+func (sr *streamer) StartStreams2(sourceFileName, bhost, rtmpPort, ohost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
+	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error) {
+
+	return "", nil
+}
+
+// StartStreams old code that is not used now
 func (sr *streamer) StartStreams(sourceFileName, bhost, rtmpPort, ohost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
 	notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error) {
 

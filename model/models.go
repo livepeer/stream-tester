@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -52,29 +53,60 @@ var FailHardOnBadSegments bool
 var ExitCode int
 
 // InfinitePuller interface
+/*
 type InfinitePuller interface {
 	// Start blocks
 	Start()
 }
+*/
 
-// Streamer2 interface
-type Streamer2 interface {
-	StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget, timeToStream time.Duration)
-	// StartPulling pull arbitrary HLS stream and report found errors
-	StartPulling(mediaURL string)
+// IFinite public interface
+type IFinite interface {
+	Done() <-chan struct{}
+	Cancel()
+	Finished() bool
 }
 
-// Streamer interface
+// ILoadTester gerenal purpose load tester
+type ILoadTester interface {
+	IFinite
+	Start(sourceFileName string, waitForTarget, oneStreamTime, overallTestTime time.Duration, sim int) error
+	Stats() (StatsMany, error)
+}
+
+// Streamer2 interface for
+type Streamer2 interface {
+	IFinite
+	// StartStreaming starts streaming. Do not exit until end.
+	StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget, timeToStream time.Duration)
+	// Stats get stats
+	Stats() (Stats1, error)
+}
+
+// OneTestStream represents one running test stream
+type OneTestStream interface {
+	IFinite
+	// Stats get stats
+	Stats() (Stats1, error)
+}
+
+// StreamStarter starts one stream
+type StreamStarter func(ctx context.Context, sourceFileName string, waitForTarget, timeToStream time.Duration) (OneTestStream, error)
+
+// Streamer interface (deprecated)
 type Streamer interface {
+	IFinite
+	// StartStreams2(sourceFileName, traceID string, streamDuration time.Duration) error
+	// StartStreams old one, shouldn't be used
 	StartStreams(sourceFileName, bhost, rtmpPort, mhost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
 		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error)
 	Stats(basedManifestID string) (*Stats, error)
 	// StatsFormatted() string
 	// DownStatsFormatted() string
 	// AnalyzeFormatted(short bool) string
-	Done() <-chan struct{}
-	// Stop() // Stop active streams
-	Cancel()
+	// Done() <-chan struct{}
+	// // Stop() // Stop active streams
+	// Cancel()
 }
 
 // Latencies contains latencies
@@ -83,6 +115,29 @@ type Latencies struct {
 	P50 time.Duration `json:"p_50"`
 	P95 time.Duration `json:"p_95"`
 	P99 time.Duration `json:"p_99"`
+}
+
+// StatsMany stats for load tester
+type StatsMany struct {
+	ActiveStreams int `json:"active_streams,omitempty"`
+	// SuccessRate average success rate
+	SuccessRate float64 `json:"success_rate,omitempty"` // 0..1
+	Finished    bool    `json:"finished,omitempty"`
+}
+
+// FormatForConsole ...
+func (sm *StatsMany) FormatForConsole() string {
+	msg := fmt.Sprintf("Stats: number of active streams %d Success rate %v Finished %v", sm.ActiveStreams, sm.SuccessRate, sm.Finished)
+	return msg
+}
+
+// Stats1 stats for one stream
+type Stats1 struct {
+	SuccessRate         float64   `json:"success_rate"` // 0..1
+	SourceLatencies     Latencies `json:"source_latencies"`
+	TranscodedLatencies Latencies `json:"transcoded_latencies"`
+	Started             bool      `json:"started"`
+	Finished            bool      `json:"finished"`
 }
 
 // Stats represents global test statistics

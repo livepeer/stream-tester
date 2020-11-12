@@ -38,9 +38,10 @@ type Uploader interface {
 // then it reads resutls back, check if video segments are
 // parseable, and calculates transcode latecies and succes rate
 type httpStreamer struct {
-	ctx            context.Context
+	finite
 	baseManifestID string
 	saveLatencies  bool
+	started        bool
 	dstats         httpStats
 	mu             sync.RWMutex
 }
@@ -53,6 +54,7 @@ type httpStats struct {
 	downloadFailures  int
 	transcodeFailures int
 	success           int
+	success1          int
 	bytes             int64
 	errors            map[string]int
 	latencies         []time.Duration
@@ -61,14 +63,18 @@ type httpStats struct {
 }
 
 // NewHTTPStreamer ...
-func NewHTTPStreamer(ctx context.Context, saveLatencies bool, baseManifestID string) *httpStreamer {
-	hs := &httpStreamer{ctx: ctx, saveLatencies: saveLatencies, baseManifestID: baseManifestID}
+func NewHTTPStreamer(pctx context.Context, saveLatencies bool, baseManifestID string) *httpStreamer {
+	ctx, cancel := context.WithCancel(pctx)
+	hs := &httpStreamer{
+		finite: finite{
+			ctx:    ctx,
+			cancel: cancel,
+		},
+		saveLatencies:  saveLatencies,
+		baseManifestID: baseManifestID,
+	}
 	hs.dstats.errors = make(map[string]int)
 	return hs
-}
-
-func (hs *httpStreamer) Stop() {
-
 }
 
 // var savePrefix = "segmented3"
@@ -137,6 +143,7 @@ func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToSt
 		glog.Infof("Error starting segmenter: %v", err)
 		panic(err)
 	}
+	hs.started = true
 	metrics.StartStream()
 	var seg *hlsSegment
 	lastSeg := time.Now()
@@ -145,7 +152,7 @@ outloop:
 		select {
 		case seg = <-segmentsIn:
 		case <-hs.ctx.Done():
-			glog.Infof("=========>>>> got stop singal")
+			glog.V(model.DEBUG).Infof("=========>>>> got stop singal")
 			break outloop
 		}
 		if seg.err != nil {
@@ -154,7 +161,7 @@ outloop:
 			}
 			break
 		}
-		glog.V(model.DEBUG).Infof("Got segment out of segmenter mainfest=%s seqNo=%d pts=%s dur=%s since last=%s", manifestID, seg.seqNo, seg.pts, seg.duration, time.Since(lastSeg))
+		glog.V(model.VERBOSE).Infof("Got segment out of segmenter mainfest=%s seqNo=%d pts=%s dur=%s since last=%s", manifestID, seg.seqNo, seg.pts, seg.duration, time.Since(lastSeg))
 		lastSeg = time.Now()
 		go hs.pushSegment(httpURL, manifestID, seg)
 	}
@@ -175,7 +182,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	purl, _ := url.Parse(httpURL)
 	host := purl.Hostname()
 	urlToUp := fmt.Sprintf("%s/%d.ts", httpURL, seg.seqNo)
-	glog.V(model.SHORT).Infof("Got source segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
+	glog.V(model.DEBUG).Infof("Got source segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
 	var body io.Reader
 	body = bytes.NewReader(seg.data)
 	req, err := uhttp.NewRequest("POST", urlToUp, body)
@@ -236,7 +243,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.dstats.triedToSend++
 		hs.dstats.transcodeFailures++
 		hs.dstats.errors[string(b)] = hs.dstats.errors[string(b)] + 1
-		statusStr := fmt.Sprintf("Pushing segment status error %d (%s)", resp.StatusCode, host)
+		statusStr := fmt.Sprintf("Pushing segment status error %d (%s) (%s)", resp.StatusCode, host, b)
 		hs.dstats.errors[statusStr] = hs.dstats.errors[statusStr] + 1
 		hs.dstats.errors[string(b)] = hs.dstats.errors[string(b)] + 1
 		hs.mu.Unlock()
@@ -334,6 +341,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	hs.mu.Lock()
 	hs.dstats.triedToSend++
 	hs.dstats.success += len(segments)
+	hs.dstats.success1++
 	hs.mu.Unlock()
 	if len(segments) > 0 {
 		var panicerr error
@@ -401,9 +409,23 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	}
 }
 
-func (hs *httpStreamer) Stats() (*model.Stats, error) {
+func (hs *httpStreamer) StatsOld() (*model.Stats, error) {
 	s := hs.stats()
 	return s.Stats()
+}
+
+func (hs *httpStreamer) Stats() (model.Stats1, error) {
+	s := hs.stats()
+	stats, _ := s.Stats()
+	glog.V(model.VERBOSE).Infof("====> stats is\n===> %+v", stats)
+	stats1 := model.Stats1{
+		SuccessRate:         stats.SuccessRate / 100.0,
+		Finished:            stats.Finished,
+		Started:             hs.started,
+		SourceLatencies:     stats.SourceLatencies,
+		TranscodedLatencies: stats.TranscodedLatencies,
+	}
+	return stats1, nil
 }
 
 func (hs *httpStreamer) stats() httpStats {
@@ -459,7 +481,8 @@ func (hs *httpStats) Stats() (*model.Stats, error) {
 	avg, p50, p95, p99 := transcodedLatencies.Calc()
 	stats.TranscodedLatencies = model.Latencies{Avg: avg, P50: p50, P95: p95, P99: p99}
 	if stats.SentSegments > 0 {
-		stats.SuccessRate = float64(stats.DownloadedSegments) / (float64(model.ProfilesNum) * float64(stats.SentSegments)) * 100
+		// stats.SuccessRate = float64(stats.DownloadedSegments) / (float64(model.ProfilesNum) * float64(stats.SentSegments)) * 100
+		stats.SuccessRate = float64(hs.success1) / float64(hs.triedToSend) * 100
 	}
 	stats.ShouldHaveDownloadedSegments = model.ProfilesNum * stats.SentSegments
 	stats.ProfilesNum = model.ProfilesNum

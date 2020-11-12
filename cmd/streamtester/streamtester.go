@@ -43,7 +43,7 @@ func main() {
 	mhost := flag.String("media-host", "", "Host name to read transcoded segments back from. -host will be used by default if not specified")
 	rtmp := flag.String("rtmp", "1935", "RTMP port number")
 	media := flag.String("media", "8935", "Media port number")
-	stime := flag.String("time", "", "Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option.")
+	streamDuration := flag.Duration("time", 0, "Time to stream streams (40s, 4m, 24h45m). Not compatible with repeat option.")
 	fServer := flag.Bool("server", false, "Server mode")
 	latency := flag.Bool("latency", false, "Measure latency")
 	wowza := flag.Bool("wowza", false, "Wowza mode")
@@ -119,14 +119,17 @@ func main() {
 	// return
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
 	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, *botToken, *channelID, *apiToken)
+	defer time.Sleep(2 * time.Second)
+	exitc := make(chan os.Signal, 1)
+	signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	go func() {
+		<-exitc
+		fmt.Println("Got Ctrl-C, cancelling")
+		gcancel()
+		time.Sleep(2 * time.Second)
+		fmt.Println("Done waiting")
+	}()
 	startWebServer := func() {
-		exitc := make(chan os.Signal, 1)
-		signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
-		go func() {
-			<-exitc
-			fmt.Println("Got Ctrl-C, cancelling")
-			gcancel()
-		}()
 		s := server.NewStreamerServer(*wowza, *apiToken, *mistCreds, *mistPort)
 		s.StartWebServer(gctx, *serverAddr)
 	}
@@ -142,8 +145,21 @@ func main() {
 	}
 	if *infinitePull != "" {
 		model.ProfilesNum = 0
-		puller := testers.NewInfinitePuller(gctx, *infinitePull, *save, *wowza, *mist)
-		puller.Start()
+		if *save {
+			testers.IgnoreGaps = true
+			testers.IgnoreNoCodecError = true
+			testers.IgnoreTimeDrift = true
+		}
+		// puller := testers.NewInfinitePuller(gctx, *infinitePull, *save, *wowza, *mist)
+		// puller.Start()
+		glog.Infof(`Starting infinite pull from %s`, *infinitePull)
+		// messenger.SendMessage(msg)
+		// sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
+		// sr2.StartPulling(*mediaURL)
+		started := time.Now()
+		downloader := testers.NewM3utester2(gctx, *infinitePull, *wowza, *mist, false, *save, 30*time.Second, nil) // starts to download at creation
+		<-downloader.Done()
+		glog.Infof(`Pulling stopped after %s`, time.Since(started))
 		return
 	}
 	var lapi *livepeer.API
@@ -210,35 +226,48 @@ func main() {
 		time.Sleep(time.Second)
 		return
 	}
-	var streamDuration time.Duration
-	if *stime != "" {
-		if streamDuration, err = server.ParseStreamDurationArgument(*stime); err != nil {
-			panic(err)
-		}
-		if *repeat > 1 {
-			// glog.Fatal("Can't set both -time and -repeat.")
-		}
-	}
+	// var streamDuration time.Duration
+	// if *stime != "" {
+	// 	if streamDuration, err = server.ParseStreamDurationArgument(*stime); err != nil {
+	// 		panic(err)
+	// 	}
+	// 	if *repeat > 1 {
+	// 		// glog.Fatal("Can't set both -time and -repeat.")
+	// 	}
+	// }
 
 	if *mediaURL != "" && *rtmpURL == "" {
-		msg := fmt.Sprintf(`Starting infinite pull from %s`, *mediaURL)
-		messenger.SendMessage(msg)
-		sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
-		sr2.StartPulling(*mediaURL)
+		glog.Fatal("Should also specifiy -rtmp-url")
+		// glog.Infof(`Starting infinite pull from %s`, *mediaURL)
+		// messenger.SendMessage(msg)
+		// sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
+		// sr2.StartPulling(*mediaURL)
+		// started := time.Now()
+		// downloader := testers.NewM3utester2(gctx, *mediaURL, *wowza, *mist, *save, 15*time.Second, nil) // starts to download at creation
+		// <-downloader.Done()
+		// glog.Infof(`Streaming stopped after %s`, time.Since(started))
 		return
 	}
 	if *rtmpURL != "" {
 		if *mediaURL == "" {
 			glog.Fatal("Should also specifiy -media-url")
 		}
-		msg := fmt.Sprintf(`Starting infinite stream to %s`, *mediaURL)
+		durs := "(file duration)"
+		if *streamDuration == -1 {
+			durs = "infinite"
+		} else if *streamDuration > 0 {
+			durs = (*streamDuration).String()
+		}
+		msg := fmt.Sprintf(`Starting %s stream to %s, pulling from %s`, durs, *rtmpURL, *mediaURL)
 		messenger.SendMessage(msg)
-		sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
-		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, streamDuration)
+		sr2 := testers.NewStreamer2(gctx, *wowza, *mist, *save, true, true)
+		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, *streamDuration)
 		if *wowza {
 			// let Wowza remove session
 			time.Sleep(3 * time.Minute)
 		}
+		stats, _ := sr2.Stats()
+		fmt.Printf("Stats: %+v\n", stats)
 		os.Exit(model.ExitCode)
 		// to not exit
 		// s := server.NewStreamerServer(*wowza)
@@ -310,8 +339,8 @@ func main() {
 				glog.Fatal("Got empty list of broadcasterf from Livepeer API")
 			}
 			up := testers.NewHTTPStreamer(gctx, true, "baseManifestID")
-			up.StartUpload(fn, bds[0]+"/live/"+stream.ID, stream.ID, 0, 0, streamDuration, 0)
-			stats, err := up.Stats()
+			up.StartUpload(fn, bds[0]+"/live/"+stream.ID, stream.ID, 0, 0, *streamDuration, 0)
+			stats, err := up.StatsOld()
 			if err != nil {
 				panic(err)
 			}
@@ -325,20 +354,18 @@ func main() {
 			*rtmpURL = ingests[0].Ingest + "/" + stream.StreamKey
 			*mediaURL = ingests[0].Playback + "/" + stream.PlaybackID + "/index.m3u8"
 			dur := "infinite"
-			if streamDuration > 0 {
-				dur = streamDuration.String()
+			if *streamDuration > 0 {
+				dur = (*streamDuration).String()
 			}
 			msg := fmt.Sprintf(`Starting %s stream to %s`, dur, *rtmpURL)
 			glog.Info(msg)
 
-			sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
-			sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, streamDuration)
+			sr2 := testers.NewStreamer2(gctx, *wowza, *mist, *save, true, true)
+			sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, *streamDuration)
 		}
-		if model.ExitCode == 0 {
-			err = lapi.DeleteStream(stream.ID)
-			if err != nil {
-				glog.Errorf("Error deleting stream %s: %v", stream.ID, err)
-			}
+		err = lapi.DeleteStream(stream.ID)
+		if err != nil {
+			glog.Errorf("Error deleting stream %s: %v", stream.ID, err)
 		}
 		os.Exit(model.ExitCode)
 		return
@@ -353,7 +380,7 @@ func main() {
 	} else {
 		sr = testers.NewHTTPLoadTester(gctx, gcancel, lapi, *skipTime)
 	}
-	_, err = sr.StartStreams(fn, *bhost, *rtmp, mHost, *media, *sim, *repeat, streamDuration, false, *latency, *noBar, 3, 5*time.Second, *waitForTarget)
+	_, err = sr.StartStreams(fn, *bhost, *rtmp, mHost, *media, *sim, *repeat, *streamDuration, false, *latency, *noBar, 3, 5*time.Second, *waitForTarget)
 	if err != nil {
 		glog.Fatal(err)
 	}
@@ -372,15 +399,6 @@ func main() {
 	// 	sr.Cancel()
 	// }()
 	// Catch interrupt signal to shut down transcoder
-	exitc := make(chan os.Signal, 1)
-	signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
-	go func() {
-		<-exitc
-		fmt.Println("Got Ctrl-C, cancelling")
-		gcancel()
-		sr.Cancel()
-		time.Sleep(2 * time.Second)
-	}()
 	glog.Infof("Waiting for test to complete")
 	<-sr.Done()
 	time.Sleep(2 * time.Second)

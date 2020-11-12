@@ -291,7 +291,7 @@ func (lapi *API) CreateStream(name string, profiles ...string) (string, error) {
 
 // DeleteStream deletes stream
 func (lapi *API) DeleteStream(id string) error {
-	glog.Infof("Deleting Livepeer stream '%s' ", id)
+	glog.V(model.DEBUG).Infof("Deleting Livepeer stream '%s' ", id)
 	u := fmt.Sprintf("%s/api/stream/%s", lapi.choosenServer, id)
 	req, err := uhttp.NewRequest("DELETE", u, nil)
 	if err != nil {

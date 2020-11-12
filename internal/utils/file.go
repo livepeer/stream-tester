@@ -22,7 +22,7 @@ var httpClient = &http.Client{
 }
 
 // GetFile download fileName is HTTP url
-func GetFile(fileName string) (string, error) {
+func GetFile(fileName, baseName string) (string, error) {
 	if pu, err := url.Parse(fileName); err == nil && (pu.Scheme == "http" || pu.Scheme == "https") {
 		start := time.Now()
 		fmt.Printf("Downloading file %s\n", fileName)
@@ -40,7 +40,7 @@ func GetFile(fileName string) (string, error) {
 			return "", err
 		}
 		_, name := filepath.Split(pu.Path)
-		fullFileName := filepath.Join(tempDir, name)
+		fullFileName := filepath.Join(tempDir, baseName+"_"+name)
 		f, err := os.Create(fullFileName)
 		if err != nil {
 			return "", err

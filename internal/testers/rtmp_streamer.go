@@ -230,7 +230,7 @@ func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, streamDuration, waitForT
 		onError(err)
 		return
 	}
-	glog.V(model.VERBOSE).Infof("=== Raw streams %d", len(rawStreams))
+	glog.V(model.INSANE).Infof("=== Raw streams %d in %s", len(rawStreams), fn)
 	audioidx, videoidx, streams = chooseNeededStreams(rawStreams)
 	if err = conn.WriteHeader(streams); err != nil {
 		onError(err)
@@ -245,7 +245,7 @@ outloop:
 		for {
 			select {
 			case <-rs.ctx.Done():
-				glog.Infof("=========>>>> got stop singal")
+				glog.V(model.VERBOSE).Infof("=========>>>> got stop singal")
 				// rs.file.Close()
 				// conn.Close()
 				// return
@@ -261,7 +261,7 @@ outloop:
 					return
 				} else if rs.wowzaMode {
 					// in Wowza mode can't really loop, just stopping at EOF
-					glog.V(model.DEBUG).Info("==== RTMP streamer file ended.")
+					glog.V(model.DEBUG).Infof("==== RTMP streamer file %s ended.", fn)
 					break outloop
 				}
 				if streamDuration >= 0 && lastPacketTime >= streamDuration || streamDuration == 0 {
@@ -281,7 +281,7 @@ outloop:
 			// glog.Infof("Writing packet %d pkt.Idx %d pkt.Time %s Composition Time %s stream duration %s", packetIdx, pkt.Idx, pkt.Time, pkt.CompositionTime, streamDuration)
 			if streamDuration > 0 && pkt.IsKeyFrame && pkt.Idx == videoidx && pkt.Time >= streamDuration {
 				conn.WritePacket(pkt)
-				glog.Info("Done streaming\n")
+				glog.V(model.DEBUG).Infof("Done streaming %s", fn)
 				break outloop
 			}
 			start := time.Now()
@@ -291,18 +291,21 @@ outloop:
 				return
 			}
 			took := time.Since(start)
-			if rs.segmentsMatcher != nil {
+			if rs.segmentsMatcher != nil && pkt.Idx == videoidx {
+				if pkt.IsKeyFrame {
+					glog.V(model.INSANE).Infof("video key frame %s", pkt.Time)
+				}
 				rs.segmentsMatcher.frameSent(pkt, pkt.Idx == videoidx)
 			}
 			if took > 1000*time.Millisecond {
-				glog.V(model.SHORT).Infof("packet %d writing took %s PTS %s rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d stream duration: %d", packetIdx, took,
+				glog.V(model.DEBUG).Infof("packet %d writing took %s PTS %s rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d stream duration: %d", packetIdx, took,
 					pkt.Time, rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, streamDuration)
 			}
 			if pkt.IsKeyFrame {
-				glog.V(model.VERBOSE).Infof("sent keyframe PTS %s rs.counter.segments: %d idx %d is video %v", pkt.Time, rs.counter.segments, pkt.Idx, pkt.Idx == videoidx)
+				glog.V(model.VVERBOSE).Infof("sent keyframe PTS %s rs.counter.segments: %d idx %d is video %v", pkt.Time, rs.counter.segments, pkt.Idx, pkt.Idx == videoidx)
 			}
 			if rs.counter.segments > lastSegments {
-				glog.V(model.VERBOSE).Infof("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d PTS %s stream duration: %s",
+				glog.V(model.INSANE).Infof("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d PTS %s stream duration: %s",
 					rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, pkt.Time, streamDuration)
 				// glog.Infof("packet %d rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d", packetIdx, rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
 				// fmt.Printf("rs.counter.segments: %d currentSegments: %d rs.skippedSegments: %d segmentsToStream: %d\n\n", rs.counter.segments, rs.counter.currentSegments, rs.skippedSegments, segmentsToStream)
@@ -310,7 +313,7 @@ outloop:
 			}
 			packetIdx++
 		}
-		glog.V(model.DEBUG).Infof("=== REOPENING file!")
+		glog.V(model.VVERBOSE).Infof("=== REOPENING file %s!", fn)
 		// re-open same file and stream it again
 		rs.counter.timeShift = rs.counter.lastPacketTime + 30*time.Millisecond
 		rs.file, err = avutil.Open(fn)
@@ -321,7 +324,7 @@ outloop:
 		demuxer.Streams()
 	}
 
-	glog.V(model.DEBUG).Info("Writing trailer")
+	glog.V(model.INSANE).Infof("Writing trailer for %s", fn)
 	if err = conn.WriteTrailer(); err != nil {
 		onError(err)
 		metrics.StopStream(false)
@@ -332,24 +335,24 @@ outloop:
 	// if rs.hasBar {
 	// 	uiprogress.Stop()
 	// }
-	glog.V(model.SHORT).Infof("Upload to %s finished after %s", rtmpURL, time.Since(started))
-	glog.V(model.DEBUG).Infof("Waiting before closing RTMP stream")
+	glog.V(model.DEBUG).Infof("Upload to %s finished after %s", rtmpURL, time.Since(started))
+	glog.V(model.VVERBOSE).Infof("Waiting before closing RTMP stream")
 	// fmt.Println("==== waiting before closing RTMP stream\n")
 	// wait before closing connection, so we can recieve transcoded data
 	// if we do not wait, last segment will be thrown out by broadcaster
 	// with 'Session ended` error
 	time.Sleep(8 * time.Second)
-	glog.V(model.DEBUG).Infof("---------- calling connection close rxbytes %d", conn.RxBytes())
+	glog.V(model.INSANE2).Infof("---------- calling connection close rxbytes %d", conn.RxBytes())
 	// nc := conn.NetConn()
 	readAll(conn.NetConn())
 	// pckt, err := conn.ReadPacket()
 	// glog.Info("pck, err", pckt, err)
-	glog.V(model.DEBUG).Info("---------- calling connection close start", err)
+	glog.V(model.INSANE2).Info("---------- calling connection close start", err)
 	err = conn.Close()
-	glog.V(model.DEBUG).Info("---------- calling connection close DONE", err)
+	glog.V(model.INSANE2).Info("---------- calling connection close DONE", err)
 	// time.Sleep(8 * time.Second)
 	rs.closeDone()
-	glog.V(model.DEBUG).Info("---------- done channel closed", err)
+	glog.V(model.INSANE2).Info("---------- done channel closed", err)
 	metrics.StopStream(true)
 }
 

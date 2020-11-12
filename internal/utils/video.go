@@ -89,7 +89,9 @@ func GetVideoStartTimeDurFrames(segment []byte) (time.Duration, time.Duration, i
 	}
 	// glog.Infof("== Video index is %d", videoIdx)
 
-	var firstTime, lastTime time.Duration
+	var lastTime, oneFrameDiff time.Duration
+	var firstTime time.Duration = -1
+
 	for {
 		pkt, err := demuxer.ReadPacket()
 		if err != nil {
@@ -112,14 +114,18 @@ func GetVideoStartTimeDurFrames(segment []byte) (time.Duration, time.Duration, i
 			// glog.V(model.VERBOSE).Infof("=====--- first video paket idx %d, video idx %d, time %s", pkt.Idx, videoIdx, pkt.Time)
 			// pktHash := md5.Sum(pkt.Data)
 			// glog.Infof("=== downloaded hash of %s is %x", pkt.Time, pktHash)
-			if firstTime == 0 {
-				glog.V(model.VERBOSE).Infof("=====--- first video paket idx %d, video idx %d, time %s is key %v is video %v", pkt.Idx, videoIdx, pkt.Time, pkt.IsKeyFrame, pkt.Idx == videoIdx)
+			if firstTime == -1 {
+				glog.V(model.INSANE).Infof("=====--- first video paket idx %d, video idx %d, time %s is key %v is video %v", pkt.Idx, videoIdx, pkt.Time, pkt.IsKeyFrame, pkt.Idx == videoIdx)
 				firstTime = pkt.Time
+			} else if oneFrameDiff == 0 {
+				oneFrameDiff = pkt.Time - firstTime
+				// glog.Infof("=====--- first video paket idx %d, video idx %d, time %s is key %v is video %v frit time %s one frame %s",
+				// 	pkt.Idx, videoIdx, pkt.Time, pkt.IsKeyFrame, pkt.Idx == videoIdx, firstTime, oneFrameDiff)
 			}
+			lastTime = pkt.Time
 		}
-		lastTime = pkt.Time
 	}
-	return firstTime, lastTime - firstTime, keyFrames, skeyframes, nil
+	return firstTime, lastTime - firstTime + oneFrameDiff, keyFrames, skeyframes, nil
 }
 
 // Img2Jpeg encodees img to jpeg

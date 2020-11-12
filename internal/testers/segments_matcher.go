@@ -18,9 +18,14 @@ type (
 		matches segments that are read back
 	*/
 	segmentsMatcher struct {
-		sentFrames []sentFrameInfo
-		mu         *sync.Mutex
-		reqs       int64
+		sentFrames    []sentFrameInfo
+		sentFramesNum int64
+		mu            *sync.Mutex
+		reqs          int64
+		firstPTS      time.Duration
+		lastPTS       time.Duration
+		lastPTS1      time.Duration
+		lastPTS2      time.Duration
 	}
 
 	sentFrameInfo struct {
@@ -38,25 +43,43 @@ func newSegmentsMatcher() *segmentsMatcher {
 	}
 }
 
+func (sm *segmentsMatcher) getStartEnd() (time.Duration, time.Duration, time.Duration, time.Duration) {
+	sm.mu.Lock()
+	f, l2, l1, l := sm.firstPTS, sm.lastPTS2, sm.lastPTS1, sm.lastPTS
+	sm.mu.Unlock()
+	return f, l2, l1, l
+}
+
 func (sm *segmentsMatcher) frameSent(pkt av.Packet, isVideo bool) {
 	sm.mu.Lock()
-	sm.sentFrames = append(sm.sentFrames, sentFrameInfo{
-		pts:        pkt.Time,
-		sentAt:     time.Now(),
-		isKeyFrame: pkt.IsKeyFrame,
-		isVideo:    isVideo,
-	})
+	if isVideo && pkt.IsKeyFrame {
+		if sm.sentFramesNum == 0 {
+			sm.firstPTS = pkt.Time
+		}
+		if pkt.Time > sm.lastPTS {
+			sm.lastPTS2 = sm.lastPTS1
+			sm.lastPTS1 = sm.lastPTS
+			sm.lastPTS = pkt.Time
+		}
+		sm.sentFrames = append(sm.sentFrames, sentFrameInfo{
+			pts:        pkt.Time,
+			sentAt:     time.Now(),
+			isKeyFrame: pkt.IsKeyFrame,
+			isVideo:    isVideo,
+		})
+	}
+	sm.sentFramesNum++
 	sm.mu.Unlock()
 }
 
 // matchSegment matches received segment to sent data
 // returns latency and speed ratio
 func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDuration time.Duration, receivedAt time.Time) (time.Duration, float64, error) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
 	var lastPaket, curPacket sentFrameInfo
 	var startInd int
+	sm.mu.Lock()
 	sentFrames := sm.sentFrames
+	sm.mu.Unlock()
 
 	for i, pkt := range sentFrames {
 		if pkt.pts == firstPaketsPTS {
@@ -78,7 +101,7 @@ func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDur
 		}
 		lastPaket = pkt
 	}
-	glog.V(model.VERBOSE).Infof(`looking for %s cur packet: %s last packet %s startInd %d`, firstPaketsPTS, curPacket.String(), lastPaket.String(), startInd)
+	glog.V(model.VVERBOSE).Infof(`looking for %s cur packet: %s last packet %s startInd %d`, firstPaketsPTS, curPacket.String(), lastPaket.String(), startInd)
 	// for i, pkt := range sm.sentFrames {
 	// 	glog.Info(i, pkt.String())
 	// }
@@ -96,7 +119,7 @@ func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDur
 		lastPaket = pkt
 	}
 	latency := receivedAt.Sub(lastPaket.sentAt)
-	glog.V(model.VERBOSE).Infof(`last packet %s sent at %s received at %s latency %s`, lastPaket.String(), lastPaket.sentAt, receivedAt, latency)
+	glog.V(model.VVERBOSE).Infof(`last packet %s sent at %s received at %s latency %s`, lastPaket.String(), lastPaket.sentAt, receivedAt, latency)
 	if atomic.AddInt64(&sm.reqs, 1)%16 == 0 {
 		sm.cleanup()
 	}
@@ -114,6 +137,7 @@ func (sm *segmentsMatcher) cleanup() {
 	if len(sm.sentFrames) == 0 {
 		return
 	}
+	sm.mu.Lock()
 	var until int
 	now := time.Now()
 	for i := len(sm.sentFrames) - 1; i >= 0; i-- {
@@ -127,6 +151,7 @@ func (sm *segmentsMatcher) cleanup() {
 	if until > 0 {
 		sm.sentFrames = sm.sentFrames[until:]
 	}
+	sm.mu.Unlock()
 }
 
 func (sfi *sentFrameInfo) String() string {

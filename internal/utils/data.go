@@ -82,6 +82,24 @@ func (ds *DurationsCapped) GetPercentileFloat(percentile ...int) []float64 {
 	return res
 }
 
+// Calc return average, 50th, 95th 99th percentiles
+func (ds *DurationsCapped) Calc() (time.Duration, time.Duration, time.Duration, time.Duration) {
+	var avg, p5, p95, p99 time.Duration
+	if len(ds.durations) == 0 {
+		return avg, p5, p95, p99
+	}
+	dur := durations(ds.durations)
+	sort.Sort(dur)
+	for _, v := range ds.durations {
+		avg += v
+	}
+	avg /= time.Duration(len(ds.durations))
+	p5 = GetPercentile(ds.durations, 50)
+	p95 = GetPercentile(ds.durations, 95)
+	p99 = GetPercentile(ds.durations, 99)
+	return avg, p5, p95, p99
+}
+
 func getPercentileFloat(values []float64, percentile int) float64 {
 	var per float64
 	var findex = float64(len(values)) * float64(percentile) / 100.0

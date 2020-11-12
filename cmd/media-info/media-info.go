@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/peterbourgon/ff"
@@ -74,7 +75,7 @@ func main() {
 	if streams, err = file.Streams(); err != nil {
 		msg := fmt.Sprintf("Can't get info about file: '%+v', isNoAudio %v isNoVideo %v", err, errors.Is(err, jerrors.ErrNoAudioInfoFound), errors.Is(err, jerrors.ErrNoVideoInfoFound))
 		if !(errors.Is(err, jerrors.ErrNoAudioInfoFound) || errors.Is(err, jerrors.ErrNoVideoInfoFound)) {
-			glog.Fatal(msg)
+			// glog.Fatal(msg)
 		}
 		fmt.Println(msg)
 	}
@@ -87,6 +88,7 @@ func main() {
 		}
 	}
 	fmt.Printf("Video stream index %d, audio stream index %d\n", videoidx, audioidx)
+	var prevDTS time.Duration
 	for {
 		pkt, err := file.ReadPacket()
 		if err != nil {
@@ -96,8 +98,10 @@ func main() {
 			glog.Fatal(err)
 		}
 		if pkt.IsKeyFrame && pkt.Idx == videoidx || false {
-			fmt.Printf("Packet Is Keyframe %v Is Audio %v Is Video %v PTS %s CompTime %s\n",
-				pkt.IsKeyFrame, pkt.Idx == audioidx, pkt.Idx == videoidx, pkt.Time, pkt.CompositionTime)
+			// if pkt.Idx == videoidx {
+			fmt.Printf("Packet Is Keyframe %v Is Audio %v Is Video %v DTS %s CompTime %s diff dts %s\n",
+				pkt.IsKeyFrame, pkt.Idx == audioidx, pkt.Idx == videoidx, pkt.Time, pkt.CompositionTime, pkt.Time-prevDTS)
+			prevDTS = pkt.Time
 		}
 	}
 }

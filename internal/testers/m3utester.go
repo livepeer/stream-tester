@@ -126,12 +126,15 @@ type downloadResult struct {
 	duration           time.Duration
 	appTime            time.Time
 	timeAtFirstPlace   time.Time
+	downloadStartedAt  time.Time
 	downloadCompetedAt time.Time
 	name               string
 	seqNo              uint64
 	mySeqNo            uint64
 	resolution         string
 	keyFrames          int
+	task               *downloadTask
+	data               []byte
 }
 
 func (r *downloadResult) String() string {

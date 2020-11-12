@@ -44,6 +44,16 @@ func (hlt *HTTPLoadTester) Cancel() {
 	hlt.cancel()
 }
 
+// Finished ...
+func (hlt *HTTPLoadTester) Finished() bool {
+	select {
+	case <-hlt.ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
 // Stop calls stop method on all the running streamers
 func (hlt *HTTPLoadTester) Stop() {
 	// sr.stopSignal = true
