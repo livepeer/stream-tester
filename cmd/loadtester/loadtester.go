@@ -224,10 +224,11 @@ func main() {
 		<-exitc
 		fmt.Println("Got Ctrl-C, cancelling")
 		gcancel()
+		cleanup(fn, fa)
 		time.Sleep(2 * time.Second)
 		stats, _ := loadTester.Stats()
 		fmt.Println(stats.FormatForConsole())
-		exit(0, fn, fa, nil)
+		// exit(0, fn, fa, nil)
 	}(fileName, *fileArg)
 
 	err = loadTester.Start(fileName, 30*time.Second, *streamDuration, *testDuration, int(*sim))
