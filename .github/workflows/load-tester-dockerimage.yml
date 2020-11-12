@@ -1,0 +1,33 @@
+name: Load Tester Docker Image CI
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Docker Registry
+      env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD 
+    - name: Build the Docker image
+      # run: docker build . --file Dockerfile --tag livepeer/streamtester:$(date +%s)
+      run: docker build . --file Dockerfile.load-tester --tag livepeer/streamtester:load-tester --build-arg version=$(git describe --dirty)
+    - name: Get tag name
+      id: get_version
+      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+    - name: Tag version
+      if: startsWith(github.ref, 'refs/tags/v')
+      run: |
+        docker tag livepeer/streamtester:load-tester livepeer/streamtester:load-tester${{ steps.get_version.outputs.VERSION }}
+        docker push livepeer/streamtester:load-tester${{ steps.get_version.outputs.VERSION }}
+    - name: Push Docker Container to Registry
+      run: docker push livepeer/streamtester:mist-api-connector
