@@ -99,11 +99,13 @@ func LivepeerProfiles2MistProfiles(lps []livepeer.Profile) []mist.Profile {
 func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte("false"))
 		return
 	}
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
 		return
 	}
 	bs := string(b)
@@ -118,7 +120,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}(started, trigger)
 	if trigger == "DEFAULT_STREAM" {
 		if mc.balancerHost == "" {
-			glog.V(model.VERBOSE).Infof("Request %s: (%s) responded forbidden", trigger, strings.Split(bs, "\n"), bs)
+			glog.V(model.VERBOSE).Infof("Request %s: (%d lines) responded with forbidden", trigger, len(strings.Split(bs, "\n")))
 			w.WriteHeader(http.StatusForbidden)
 			w.Write([]byte("false"))
 			return
@@ -177,6 +179,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 					if err != nil || stream == nil {
 						glog.Errorf("Error getting stream info from Livepeer API err=%v", err)
 						w.WriteHeader(http.StatusNotFound)
+						w.Write([]byte("false"))
 						return
 					}
 					glog.V(model.DEBUG).Infof("For stream %s got info %+v", playbackID, stream)
@@ -184,6 +187,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 						glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", playbackID)
 						go mc.mapi.DeleteStreams(streamNameInMist)
 						w.WriteHeader(http.StatusNotFound)
+						w.Write([]byte("false"))
 						return
 					}
 					err = mc.createMistStream(streamNameInMist, stream, true)
@@ -215,6 +219,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		if len(lines) < 3 {
 			glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), bs)
 			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("false"))
 			return
 		}
 		if lines[2] == "RTMP" {
@@ -230,16 +235,19 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			mc.mu.Unlock()
 		}
 		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("yes"))
 		return
 	}
 	if trigger != "RTMP_PUSH_REWRITE" {
 		glog.Errorf("Got unsupported trigger: '%s'", trigger)
 		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
 		return
 	}
 	if len(lines) < 2 {
 		glog.Errorf("Expected 2 lines, got %d, request \n%s", len(lines), bs)
 		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
 		return
 	}
 	glog.V(model.VVERBOSE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
@@ -248,12 +256,14 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		glog.Errorf("Error parsing url=%s err=%v", lines[0], err)
 		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
 		return
 	}
 	pp := strings.Split(pu.Path, "/")
 	if len(pp) != 3 {
 		glog.Errorf("URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
 		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
 		return
 	}
 	streamKey := pp[2]
@@ -271,6 +281,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			}
 		*/
 		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("false"))
 		return
 	}
 	glog.V(model.DEBUG).Infof("For stream %s got info %+v", streamKey, stream)
@@ -284,6 +295,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		}
 		mc.mapi.DeleteStreams(streamKey)
 		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("false"))
 		return
 	}
 
@@ -306,6 +318,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			glog.Infof("Stream %s (%s) forbidden by webhook, rejecting", stream.ID, stream.StreamKey)
 			delete(mc.pub2id, stream.PlaybackID)
 			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("false"))
 			return
 		}
 	} else {
@@ -315,6 +328,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		glog.Errorf("Error creating stream on the Mist server: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("false"))
 		return
 	}
 	w.Write([]byte(responseURL))
