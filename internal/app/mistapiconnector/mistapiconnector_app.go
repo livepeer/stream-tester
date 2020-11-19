@@ -118,7 +118,9 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}(started, trigger)
 	if trigger == "DEFAULT_STREAM" {
 		if mc.balancerHost == "" {
+			glog.V(model.VERBOSE).Infof("Request %s: (%s) responded forbidden", trigger, strings.Split(bs, "\n"), bs)
 			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte("false"))
 			return
 		}
 		lines := strings.Split(bs, "\n")
@@ -200,6 +202,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		// 2. When someone pulls HLS for stream that exists but is not active (no
 		//    RTMP stream coming in).
 		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte("false"))
 		return
 	}
 	if trigger == "LIVE_BANDWIDTH" {
