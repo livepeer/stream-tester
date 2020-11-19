@@ -427,7 +427,8 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 		triggers = make(mistapi.TriggersMap)
 	}
 	added := mc.addTrigger(triggers, "RTMP_PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000", "", true)
-	added = mc.addTrigger(triggers, "DEFAULT_STREAM", ownURI, "false", "", true) || added
+	// DEFAULT_STREAM needed when using Mist's load balancing
+	// added = mc.addTrigger(triggers, "DEFAULT_STREAM", ownURI, "false", "", true) || added
 	if mc.checkBandwidth {
 		added = mc.addTrigger(triggers, "LIVE_BANDWIDTH", ownURI, "false", "100000", true) || added
 	}
