@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/consul"
@@ -107,9 +108,14 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}
 	bs := string(b)
 	trigger := r.Header.Get("X-Trigger")
-	glog.V(model.VERBOSE).Infof("Got request (%s):\n%s", trigger, bs)
+	glog.V(model.VERBOSE).Infof("Got request (%s) (%d lines):\n%s", trigger, len(strings.Split(bs, "\n")), bs)
 	glog.V(model.VERBOSE).Infof("User agent: %s", r.UserAgent())
 	glog.V(model.VERBOSE).Infof("Mist version: %s", r.Header.Get("X-Version"))
+	started := time.Now()
+	defer func(s time.Time, t string) {
+		took := time.Since(s)
+		glog.V(model.VERBOSE).Infof("Request %s ended in %s", t, took)
+	}(started, trigger)
 	if trigger == "DEFAULT_STREAM" {
 		if mc.balancerHost == "" {
 			w.WriteHeader(http.StatusForbidden)
