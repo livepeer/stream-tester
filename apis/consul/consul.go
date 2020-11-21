@@ -17,6 +17,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
+	"github.com/livepeer/stream-tester/model"
 )
 
 // GetKeyResponse response from Consul
@@ -112,7 +113,7 @@ func GetKeyEx(u *url.URL, path string, recurse bool) ([]GetKeyResponse, error) {
 func PutKey(u *url.URL, path, value string) error {
 	var cu url.URL = *u
 	cu.Path = "v1/kv/" + path
-	glog.Infof("Making PUT request to %s", cu.String())
+	glog.V(model.VERBOSE).Infof("Making PUT request to %s", cu.String())
 	var body io.Reader
 	body = bytes.NewReader([]byte(value))
 	ctx, cancel := context.WithTimeout(context.Background(), httpTimeout)
@@ -134,7 +135,7 @@ func PutKey(u *url.URL, path, value string) error {
 		return err
 	}
 	val := string(b)
-	glog.Infof("Read from Consul '%s': '%s'", path, val)
+	glog.V(model.VERBOSE).Infof("Read from Consul '%s': '%s'", path, val)
 	return nil
 }
 
@@ -145,7 +146,7 @@ func PutKeys(u *url.URL, kvs ...string) error {
 	}
 	var cu url.URL = *u
 	cu.Path = "v1/txn"
-	glog.Infof("Making transaction PUT request to %s", cu.String())
+	glog.V(model.VERBOSE).Infof("Making transaction PUT request to %s", cu.String())
 	var body io.Reader
 	bodyParts := make([]string, 0, len(kvs)/2)
 	for i := 0; i < len(kvs); i += 2 {
@@ -173,15 +174,20 @@ func PutKeys(u *url.URL, kvs ...string) error {
 		return err
 	}
 	val := string(b)
-	glog.Infof("Read from Consul '%s': '%s'", kvs[0], val)
+	glog.V(model.VERBOSE).Infof("Read from Consul '%s': '%s'", kvs[0], val)
 	return nil
 }
 
 // DeleteKey retrieves key from Consul's KV storage
-func DeleteKey(u *url.URL, path string) (bool, error) {
+func DeleteKey(u *url.URL, path string, recurse bool) (bool, error) {
 	var cu url.URL = *u
 	cu.Path = "v1/kv/" + path
-	glog.Infof("Making GET request to %s", cu.String())
+	q := make(url.Values)
+	if recurse {
+		q.Add("recurse", "true")
+	}
+	cu.RawQuery = q.Encode()
+	glog.V(model.VERBOSE).Infof("Making DELETE request to %s", cu.String())
 	ctx, cancel := context.WithTimeout(context.Background(), httpTimeout)
 	resp, err := http.DefaultClient.Do(uhttp.NewRequestWithContext(ctx, "DELETE", cu.String(), nil))
 	cancel()
@@ -204,6 +210,6 @@ func DeleteKey(u *url.URL, path string) (bool, error) {
 		return false, err
 	}
 	val := string(b)
-	glog.Infof("Read from Consul '%s': '%s'", path, val)
+	glog.V(model.VERBOSE).Infof("Read from Consul '%s': '%s'", path, val)
 	return strings.TrimSpace(val) == "true", nil
 }

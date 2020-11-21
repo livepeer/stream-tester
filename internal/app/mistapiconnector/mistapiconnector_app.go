@@ -226,6 +226,11 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
 			mc.mu.Lock()
 			if id, has := mc.pub2id[playbackID]; has {
+				glog.Infof("Setting stream's manifestID=%s playbackID=%s active status to false", id, playbackID)
+				if mc.consulURL != nil {
+					go consul.DeleteKey(mc.consulURL, traefikKeyPathRouters+playbackID, true)
+					go consul.DeleteKey(mc.consulURL, traefikKeyPathServices+playbackID, true)
+				}
 				_, err := mc.lapi.SetActive(id, false)
 				if err != nil {
 					glog.Error(err)
