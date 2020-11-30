@@ -147,40 +147,29 @@ func main() {
 		if err != nil {
 			glog.Error(err)
 		}
-		apiStats.AvgSegDuration = avgSegDuration
+		apiStats.SegDuration = avgSegDuration
 
 		avgRoundTripTime, err := streamer.avgRoundTripTime()
 		if err != nil {
 			glog.Error(err)
 		}
-		apiStats.AvgRoundTripTime = avgRoundTripTime
-		if avgRoundTripTime > 0 {
-			apiStats.AvgRoundTripScore = avgSegDuration / avgRoundTripTime
-		}
+		apiStats.RoundTripTime = avgRoundTripTime
 
 		avgUploadTime, err := streamer.avgUploadTime()
 		if err != nil {
 			glog.Error(err)
 		}
-		apiStats.AvgUploadTime = avgUploadTime
-		if avgUploadTime > 0 {
-			apiStats.AvgUploadScore = avgSegDuration / avgUploadTime
-		}
+		apiStats.UploadTime = avgUploadTime
 
 		avgDownloadTime, err := streamer.avgDownloadTime()
 		if err != nil {
 			glog.Error(err)
 		}
-		apiStats.AvgDownloadTime = avgDownloadTime
-		if avgDownloadTime > 0 {
-			apiStats.AvgDownloadScore = avgSegDuration / avgDownloadTime
-		}
+		apiStats.DownloadTime = avgDownloadTime
 
 		transcodeTime := avgRoundTripTime - avgUploadTime - avgDownloadTime
 		if transcodeTime > 0 {
-			apiStats.AvgTranscodeTime = transcodeTime
-			apiStats.AvgTranscodeScore = avgSegDuration / transcodeTime
-			apiStats.TotalScore = apiStats.AvgRoundTripScore * apiStats.SuccessRate / 100
+			apiStats.TranscodeTime = transcodeTime
 		}
 
 		errors, err := streamer.queryErrorCounts()
@@ -501,7 +490,7 @@ func (s *streamerClient) postStats(stats *apiModels.Stats) error {
 		return errors.New(string(body))
 	}
 
-	glog.Infof("Posted stats for orchestrator %s - success rate=%v   score=%v", stats.Orchestrator, stats.SuccessRate, stats.TotalScore)
+	glog.Infof("Posted stats for orchestrator %s - success rate=%v   latency=%v", stats.Orchestrator, stats.SuccessRate, stats.RoundTripTime)
 	return nil
 }
 
