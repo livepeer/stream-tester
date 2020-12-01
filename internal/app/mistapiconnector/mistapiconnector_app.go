@@ -294,7 +294,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	if stream.Deleted {
 		glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", streamKey)
 		streamKey = stream.PlaybackID
-		streamKey = strings.ReplaceAll(streamKey, "-", "")
+		// streamKey = strings.ReplaceAll(streamKey, "-", "")
 		if mc.balancerHost != "" {
 			streamKey = streamPlaybackPrefix + streamKey
 		}
@@ -309,7 +309,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		defer mc.mu.Unlock()
 		mc.pub2id[stream.PlaybackID] = stream.ID
 		streamKey = stream.PlaybackID
-		streamKey = strings.ReplaceAll(streamKey, "-", "")
+		// streamKey = strings.ReplaceAll(streamKey, "-", "")
 		if mc.balancerHost != "" {
 			streamKey = streamPlaybackPrefix + streamKey
 		}
@@ -327,7 +327,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			return
 		}
 	} else {
-		streamKey = strings.ReplaceAll(streamKey, "-", "")
+		// streamKey = strings.ReplaceAll(streamKey, "-", "")
 	}
 	err = mc.createMistStream(streamKey, stream, false)
 	if err != nil {
