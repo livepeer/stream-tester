@@ -1,12 +1,15 @@
-FROM golang:1-alpine as builder
+FROM golang:1.15-alpine as builder
 
-RUN apk add --no-cache git pkgconfig ffmpeg-dev build-base
+RUN apk add --no-cache make gcc musl-dev linux-headers git
+
+RUN apk add --no-cache git pkgconfig gnutls-dev ffmpeg-dev build-base
 
 WORKDIR /root
 RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs.mp4
 RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_3min.mp4
 RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_t02.mp4
 RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_2min.mp4
+RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s.mp4
 
 # ENV GOFLAGS "-mod=readonly"
 ARG version
@@ -29,6 +32,7 @@ RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$vers
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/mist-api-connector/mist-api-connector.go
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/loadtester/loadtester.go
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/stream-monitor/stream-monitor.go
+RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/orch-tester/orch_tester.go
 # RUN ls -a /usr
 # RUN find / -name libavformat.so.58
 
@@ -41,11 +45,14 @@ COPY --from=builder /root/official_test_source_2s_keys_24pfs.mp4 official_test_s
 COPY --from=builder /root/official_test_source_2s_keys_24pfs_3min.mp4 official_test_source_2s_keys_24pfs_3min.mp4
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4
+COPY --from=builder /root/official_test_source_2s_keys_24pfs_30s.mp4 official_test_source_2s_keys_24pfs_30s.mp4
+
 COPY --from=builder /root/streamtester streamtester
 COPY --from=builder /root/testdriver testdriver
 COPY --from=builder /root/mist-api-connector mist-api-connector
 COPY --from=builder /root/loadtester loadtester
 COPY --from=builder /root/stream-monitor stream-monitor
+COPY --from=builder /root/orch_tester orch_tester
 # COPY --from=builder /usr/lib/libavformat.so.58 /usr/lib/libavformat.so.58
 # COPY --from=builder /usr/lib/libavutil.so.56 /usr/lib/libavutil.so.56
 # COPY --from=builder /usr/lib/libavcodec.so.58 /usr/lib/libavcodec.so.58

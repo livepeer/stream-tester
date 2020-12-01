@@ -175,21 +175,22 @@ type Stats struct {
 
 // StartStreamsReq start streams request
 type StartStreamsReq struct {
-	FileName        string `json:"file_name"`
-	Host            string `json:"host"`
-	MHost           string `json:"media_host"`
-	RTMP            uint16 `json:"rtmp"`
-	Media           uint16 `json:"media"`
-	Repeat          uint   `json:"repeat"`
-	Simultaneous    uint   `json:"simultaneous"`
-	Time            string `json:"time"`
-	ProfilesNum     int    `json:"profiles_num"`
-	DoNotClearStats bool   `json:"do_not_clear_stats"`
-	MeasureLatency  bool   `json:"measure_latency"`
-	HTTPIngest      bool   `json:"http_ingest"`
-	Lapi            bool   `json:"lapi"`    // Use Livepeer API to create stream
-	Mist            bool   `json:"mist"`    // Streaming into the Mist server
-	Presets         string `json:"presets"` // Transcoding profiles to use with Livepeer API
+	FileName        string   `json:"file_name"`
+	Host            string   `json:"host"`
+	MHost           string   `json:"media_host"`
+	RTMP            uint16   `json:"rtmp"`
+	Media           uint16   `json:"media"`
+	Repeat          uint     `json:"repeat"`
+	Simultaneous    uint     `json:"simultaneous"`
+	Time            string   `json:"time"`
+	ProfilesNum     int      `json:"profiles_num"`
+	DoNotClearStats bool     `json:"do_not_clear_stats"`
+	MeasureLatency  bool     `json:"measure_latency"`
+	HTTPIngest      bool     `json:"http_ingest"`
+	Lapi            bool     `json:"lapi"`          // Use Livepeer API to create stream
+	Mist            bool     `json:"mist"`          // Streaming into the Mist server
+	Presets         string   `json:"presets"`       // Transcoding profiles to use with Livepeer API
+	Orchestrators   []string `json:"orchestrators"` // orchestrators that can be used if the broadcaster uses webhook discovery
 }
 
 // StartStreamsRes start streams response

@@ -39,7 +39,7 @@ func main() {
 	}
 	fmt.Printf("Got service: '%s'\n", rule)
 	return
-	res, err := consul.DeleteKey(u, "traefik/http/routers/hall/rule")
+	res, err := consul.DeleteKey(u, "traefik/http/routers/hall/rule", false)
 	if err != nil {
 		panic(err)
 	}
@@ -49,7 +49,7 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("Got rule: '%s'\n", rule)
-	res, err = consul.DeleteKey(u, "traefik/http/routers/hall/rule")
+	res, err = consul.DeleteKey(u, "traefik/http/routers/hall/rule", true)
 	if err != nil {
 		panic(err)
 	}

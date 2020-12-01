@@ -33,6 +33,7 @@ type StreamerServer struct {
 	lapiToken string
 	mistCreds []string
 	mistPort  uint
+	orchs     []string
 }
 
 // NewStreamerServer creates new StreamerServer
@@ -81,6 +82,7 @@ func (ss *StreamerServer) webServerHandlers(bindAddr string) *http.ServeMux {
 	mux.HandleFunc("/start_streams", ss.handleStartStreams)
 	mux.HandleFunc("/stats", ss.handleStats)
 	mux.HandleFunc("/stop", ss.handleStop)
+	mux.HandleFunc("/orchestrators", ss.handleOrchestrators)
 	return mux
 }
 
@@ -170,6 +172,14 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		w.Write([]byte(err.Error()))
 		return
 	}
+
+	// Set orchestrators for webhook discovery if provided
+	if len(ssr.Orchestrators) > 0 {
+		ss.lock.Lock()
+		ss.orchs = ssr.Orchestrators
+		ss.lock.Unlock()
+	}
+
 	glog.Infof("Start streams request %+v", *ssr)
 	if ssr.Host == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -254,6 +264,36 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		cancel()
+		return
+	}
+	w.Write(res)
+}
+
+// Set the orchestators discoverable by the broadcaster using the orchWebhook
+func (ss *StreamerServer) handleOrchestrators(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	ss.lock.RLock()
+
+	type orch struct {
+		Address string `json:"address"`
+	}
+
+	orchs := make([]orch, len(ss.orchs))
+	for i, o := range ss.orchs {
+		orchs[i] = orch{o}
+	}
+
+	ss.lock.RUnlock()
+
+	res, err := json.Marshal(orchs)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
 		return
 	}
 	w.Write(res)
