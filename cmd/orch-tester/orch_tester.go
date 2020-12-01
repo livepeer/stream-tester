@@ -141,7 +141,7 @@ func main() {
 		apiStats.SegmentsSent = streamerStats.SentSegments
 		apiStats.SegmentsReceived = streamerStats.DownloadedSegments
 		// This calculation requires HTTP ingest to be correct
-		apiStats.SuccessRate = (float64(apiStats.SegmentsReceived) / float64(*numProfiles) / float64(apiStats.SegmentsSent)) * 100
+		apiStats.SuccessRate = (float64(apiStats.SegmentsReceived) / float64(*numProfiles) / float64(apiStats.SegmentsSent))
 
 		avgSegDuration, err := streamer.avgSegDuration()
 		if err != nil {
