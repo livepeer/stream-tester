@@ -63,7 +63,7 @@ func (lt *loadTester) Start(sourceFileName string, waitForTarget, oneStreamTime,
 		if len(lt.streams) < sim {
 			if lt.delayBetweenStreams > 0 {
 				delay := lt.delayBetweenStreams + time.Duration(rand.Intn(int(lt.delayBetweenStreams.Milliseconds())))*time.Millisecond
-				glog.V(model.VERBOSE).Infof("Waiting for %s before starting stream %d", delay, lt.id)
+				glog.V(model.VERBOSE).Infof("Waiting for %s before starting stream id=%d (current concurrent streams is %d)", delay, lt.id, len(lt.streams))
 				time.Sleep(delay)
 			}
 			stream, err := lt.streamStarter(lt.ctx, sourceFileName, waitForTarget, oneStreamTime)
