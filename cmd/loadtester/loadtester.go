@@ -194,6 +194,10 @@ func main() {
 			glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
 			sr2 := testers.NewStreamer2(ctx, false, false, false, false, false)
 			go sr2.StartStreaming(sourceFileName, rtmpURL, mediaURL, waitForTarget, timeToStream)
+			go func() {
+				<-sr2.Done()
+				lapi.DeleteStream(stream.ID)
+			}()
 			return sr2, nil
 		}
 	} else {
