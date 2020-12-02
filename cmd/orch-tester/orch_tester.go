@@ -47,6 +47,7 @@ func main() {
 	// Video config
 	videoFile := flag.String("video", "official_test_source_2s_keys_24pfs_30s.mp4", "video file to use, has to be present in stream-tester root")
 	numProfiles := flag.Int("profiles", 3, "number of video profiles to use on the broadcaster")
+	presets := flag.String("presets", "P240p30fps16x9,P360p30fps16x9,P720p30fps16x9", "video profile presets to use for HTTP ingest")
 	repeat := flag.Int("repeat", 1, "number of times to repeat the stream")
 	simultaneous := flag.Int("simultaneous", 1, "number of times to run the stream simultaneously")
 	flag.Parse()
@@ -108,6 +109,7 @@ func main() {
 			Simultaneous:    uint(*simultaneous),
 			Orchestrators:   []string{o.ServiceURI},
 			ProfilesNum:     *numProfiles,
+			Presets:         *presets,
 			DoNotClearStats: false,
 			MeasureLatency:  false,
 			HTTPIngest:      true,
