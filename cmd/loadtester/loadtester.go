@@ -72,7 +72,7 @@ func main() {
 	if *version {
 		return
 	}
-	metrics.InitCensus(hostName, model.Version)
+	metrics.InitCensus(hostName, model.Version, "loadtester")
 	// testers.IgnoreNoCodecError = *ignoreNoCodecError
 	testers.IgnoreNoCodecError = true
 	testers.IgnoreGaps = true

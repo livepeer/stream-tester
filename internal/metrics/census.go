@@ -50,7 +50,7 @@ var Exporter *prometheus.Exporter
 var Census censusMetricsCounter
 
 // InitCensus init metrics
-func InitCensus(nodeID, version string) {
+func InitCensus(nodeID, version, namespace string) {
 	Census = censusMetricsCounter{
 		nodeID: nodeID,
 	}
@@ -162,7 +162,7 @@ func InitCensus(nodeID, version string) {
 	registry.MustRegister(rprom.NewProcessCollector(rprom.ProcessCollectorOpts{}))
 	registry.MustRegister(rprom.NewGoCollector())
 	pe, err := prometheus.NewExporter(prometheus.Options{
-		Namespace: "streamtester",
+		Namespace: namespace,
 		Registry:  registry,
 	})
 	if err != nil {

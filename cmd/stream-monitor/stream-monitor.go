@@ -77,7 +77,7 @@ func main() {
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
 	defer gcancel()
 
-	metrics.InitCensus(hostName, model.Version)
+	metrics.InitCensus(hostName, model.Version, "streammonitor")
 
 	metricServer := server.NewMetricsServer()
 	go metricServer.Start(gctx, *bind)

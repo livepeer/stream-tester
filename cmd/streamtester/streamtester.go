@@ -114,7 +114,7 @@ func main() {
 	if *latencyThreshold > 0 {
 		*latency = true
 	}
-	metrics.InitCensus(hostName, model.Version)
+	metrics.InitCensus(hostName, model.Version, "streamtester")
 	// codec.MTest()
 	// return
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
