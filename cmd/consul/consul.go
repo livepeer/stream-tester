@@ -1,30 +1,49 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/url"
 
 	"github.com/livepeer/stream-tester/apis/consul"
 )
 
+const consulPath = "http://localhost:8500/"
+
 func main() {
-	const consulPath = "http://localhost:8500/"
+	flag.Set("logtostderr", "true")
+	vFlag := flag.Lookup("v")
+	// verbosity := flag.String("v", "", "Log verbosity.  {4|5|6}")
+	flag.Parse()
+	// vFlag.Value.Set(*verbosity)
+	fmt.Printf("verbosity is %v", *&vFlag.Value)
 	u, err := url.Parse(consulPath)
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Printf("url: %s\n", u)
+
+	/*
+		res, err := consul.DeleteKey(u, "traefik/http/routers/hall/rule", true)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("Delete result: %v\n", res)
+		return
+	*/
+
 	// rules, err := consul.GetKeyEx(u, "traefik/http/routers/myrouter", true)
 	rules, err := consul.GetKeyEx(u, "traefik/http/routers/hall", true)
 	if err != nil {
-		panic(err)
+		// panic(err)
 	}
 	fmt.Printf("Got rules: %+v\n", rules)
 	// err = consul.PutKey(u, "traefik/http/routers/hall/rule", "hall all 2")
 	// if err != nil {
 	// 	panic(err)
 	// }
-	err = consul.PutKeys(u, "traefik/http/routers/hall/rule", "hall all 2", "traefik/http/routers/hall/service", "hall service")
+	err = consul.PutKeys(u, "traefik/http/routers/hall/rule", "hall all 3", "traefik/http/routers/hall/service", "hall service")
 	if err != nil {
 		panic(err)
 	}
@@ -54,5 +73,4 @@ func main() {
 		panic(err)
 	}
 	fmt.Printf("Delete result: %v\n", res)
-
 }
