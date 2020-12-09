@@ -153,7 +153,9 @@ func PutKeys(u *url.URL, kvs ...string) error {
 		val := base64.StdEncoding.EncodeToString([]byte(kvs[i+1]))
 		bodyParts = append(bodyParts, fmt.Sprintf(`{"KV":{"Verb":"set", "Key": "%s", "Value": "%s"}}`, kvs[i], val))
 	}
-	body = bytes.NewReader([]byte(`[` + strings.Join(bodyParts, ",") + `]`))
+	bodyStr := `[` + strings.Join(bodyParts, ",") + `]`
+	body = bytes.NewReader([]byte(bodyStr))
+	glog.V(model.VVERBOSE).Infof("Making transaction PUT request to %s body: '%s'", cu.String(), bodyStr)
 
 	ctx, cancel := context.WithTimeout(context.Background(), httpTimeout)
 	resp, err := http.DefaultClient.Do(uhttp.NewRequestWithContext(ctx, "PUT", cu.String(), body))
@@ -174,7 +176,7 @@ func PutKeys(u *url.URL, kvs ...string) error {
 		return err
 	}
 	val := string(b)
-	glog.V(model.VERBOSE).Infof("Read from Consul '%s': '%s'", kvs[0], val)
+	glog.V(model.VERBOSE).Infof("Put keys result '%s': '%s'", kvs[0], val)
 	return nil
 }
 
@@ -210,6 +212,6 @@ func DeleteKey(u *url.URL, path string, recurse bool) (bool, error) {
 		return false, err
 	}
 	val := string(b)
-	glog.V(model.VERBOSE).Infof("Read from Consul '%s': '%s'", path, val)
+	glog.V(model.VERBOSE).Infof("Delete result key=%s res=%s", path, val)
 	return strings.TrimSpace(val) == "true", nil
 }
