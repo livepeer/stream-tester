@@ -14,6 +14,7 @@ import (
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/apis/mist"
 	mistapi "github.com/livepeer/stream-tester/apis/mist"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
 )
@@ -22,9 +23,11 @@ const streamPlaybackPrefix = "playback_"
 const traefikRuleTemplate = "Host(`%s`) && PathPrefix(`/hls/%s/`)"
 const traefikKeyPathRouters = `traefik/http/routers/`
 const traefikKeyPathServices = `traefik/http/services/`
+const traefikKeyPathMiddlewares = `traefik/http/middlewares/`
 const audioAlways = "always"
 const audioNever = "never"
 const audioRecord = "record"
+const audioEnabledStreamSuffix = "rec"
 
 type (
 	// IMac creates new Mist API Connector application
@@ -57,11 +60,13 @@ type (
 		mistURL        string
 		playbackDomain string
 		sendAudio      string
+		baseStreamName string
 	}
 )
 
 // NewMac ...
-func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, consul *url.URL, playbackDomain, mistURL, sendAudio string) IMac {
+func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, consul *url.URL, playbackDomain, mistURL,
+	sendAudio, baseStreamName string) IMac {
 	if balancerHost != "" && !strings.Contains(balancerHost, ":") {
 		balancerHost = balancerHost + ":8042" // must set default port for Mist's Load Balancer
 	}
@@ -76,6 +81,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		mistURL:        mistURL,
 		playbackDomain: playbackDomain,
 		sendAudio:      sendAudio,
+		baseStreamName: baseStreamName,
 	}
 }
 
@@ -224,12 +230,18 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		}
 		if lines[2] == "RTMP" {
 			playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
+			if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
+				playbackID = strings.Split(playbackID, "+")[1]
+			}
 			mc.mu.Lock()
 			if id, has := mc.pub2id[playbackID]; has {
 				glog.Infof("Setting stream's manifestID=%s playbackID=%s active status to false", id, playbackID)
 				if mc.consulURL != nil {
 					go consul.DeleteKey(mc.consulURL, traefikKeyPathRouters+playbackID, true)
 					go consul.DeleteKey(mc.consulURL, traefikKeyPathServices+playbackID, true)
+					if mc.baseStreamName != "" {
+						go consul.DeleteKey(mc.consulURL, traefikKeyPathMiddlewares+playbackID, true)
+					}
 				}
 				_, err := mc.lapi.SetActive(id, false)
 				if err != nil {
@@ -293,12 +305,14 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 
 	if stream.Deleted {
 		glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", streamKey)
-		streamKey = stream.PlaybackID
-		// streamKey = strings.ReplaceAll(streamKey, "-", "")
-		if mc.balancerHost != "" {
-			streamKey = streamPlaybackPrefix + streamKey
+		if mc.baseStreamName == "" {
+			streamKey = stream.PlaybackID
+			// streamKey = strings.ReplaceAll(streamKey, "-", "")
+			if mc.balancerHost != "" {
+				streamKey = streamPlaybackPrefix + streamKey
+			}
+			mc.mapi.DeleteStreams(streamKey)
 		}
-		mc.mapi.DeleteStreams(streamKey)
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("false"))
 		return
@@ -313,7 +327,11 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		if mc.balancerHost != "" {
 			streamKey = streamPlaybackPrefix + streamKey
 		}
-		pp[2] = streamKey
+		if mc.baseStreamName == "" {
+			pp[2] = streamKey
+		} else {
+			pp[2] = mc.wildcardPlaybackID(stream)
+		}
 		pu.Path = strings.Join(pp, "/")
 		responseURL = pu.String()
 		ok, err := mc.lapi.SetActive(stream.ID, true)
@@ -329,34 +347,90 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	} else {
 		// streamKey = strings.ReplaceAll(streamKey, "-", "")
 	}
-	err = mc.createMistStream(streamKey, stream, false)
-	if err != nil {
-		glog.Errorf("Error creating stream on the Mist server: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("false"))
-		return
+	if mc.baseStreamName == "" {
+		err = mc.createMistStream(streamKey, stream, false)
+		if err != nil {
+			glog.Errorf("Error creating stream on the Mist server: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("false"))
+			return
+		}
 	}
 	w.Write([]byte(responseURL))
 	if mc.consulURL != nil {
 		// now create routing rule in the Consul for HLS playback
 		go func() {
-			err := consul.PutKeys(
-				mc.consulURL,
-				traefikKeyPathRouters+streamKey+"/rule",
-				fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, streamKey),
-				traefikKeyPathRouters+streamKey+"/service",
-				streamKey,
-				traefikKeyPathServices+streamKey+"/loadbalancer/servers/0/url",
-				mc.mistURL,
-				traefikKeyPathServices+streamKey+"/loadbalancer/passhostheader",
-				"false",
-			)
+			var err error
+			if mc.baseStreamName != "" {
+				wildcardPlaybackID := mc.wildcardPlaybackID(stream)
+				playbackID := stream.PlaybackID
+				err = consul.PutKeys(
+					mc.consulURL,
+					traefikKeyPathRouters+playbackID+"/rule",
+					fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, playbackID),
+					traefikKeyPathRouters+playbackID+"/service",
+					playbackID,
+					traefikKeyPathRouters+playbackID+"/middlewares/0",
+					playbackID+"-1",
+					traefikKeyPathRouters+playbackID+"/middlewares/1",
+					playbackID+"-2",
+
+					traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/0",
+					`/hls/`+playbackID,
+					traefikKeyPathMiddlewares+playbackID+"-2/addprefix/prefix",
+					`/hls/`+wildcardPlaybackID,
+
+					// traefikKeyPathMiddlewares+playbackID+"/replacepathregex/regex",
+					// fmt.Sprintf(`^/hls/%s\+(.*)`, mc.baseNameForStream(stream)),
+					// traefikKeyPathMiddlewares+playbackID+"/replacepathregex/replacement",
+					// `/hls/$1`,
+
+					traefikKeyPathServices+playbackID+"/loadbalancer/servers/0/url",
+					mc.mistURL,
+					traefikKeyPathServices+playbackID+"/loadbalancer/passhostheader",
+					"false",
+				)
+			} else {
+				err = consul.PutKeys(
+					mc.consulURL,
+					traefikKeyPathRouters+streamKey+"/rule",
+					fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, streamKey),
+					traefikKeyPathRouters+streamKey+"/service",
+					streamKey,
+					traefikKeyPathServices+streamKey+"/loadbalancer/servers/0/url",
+					mc.mistURL,
+					traefikKeyPathServices+streamKey+"/loadbalancer/passhostheader",
+					"false",
+				)
+			}
 			if err != nil {
 				glog.Errorf("Error creating Traefik rule err=%v", err)
 			}
 		}()
 	}
 	glog.Infof("Responded with '%s'", responseURL)
+}
+
+func (mc *mac) wildcardPlaybackID(stream *livepeer.CreateStreamResp) string {
+	return mc.baseNameForStream(stream) + "+" + stream.PlaybackID
+}
+
+func (mc *mac) baseNameForStream(stream *livepeer.CreateStreamResp) string {
+	baseName := mc.baseStreamName
+	if mc.shouldEnableAudio(stream) {
+		baseName += audioEnabledStreamSuffix
+	}
+	return baseName
+}
+
+func (mc *mac) shouldEnableAudio(stream *livepeer.CreateStreamResp) bool {
+	audio := false
+	if mc.sendAudio == audioAlways {
+		audio = true
+	} else if mc.sendAudio == audioRecord {
+		audio = stream.Record
+	}
+	return audio
 }
 
 func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStreamResp, skipTranscoding bool) error {
@@ -367,12 +441,7 @@ func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStream
 	if mc.balancerHost != "" {
 		source = fmt.Sprintf("balance:http://%s/?fallback=push://", mc.balancerHost)
 	}
-	audio := false
-	if mc.sendAudio == audioAlways {
-		audio = true
-	} else if mc.sendAudio == audioRecord {
-		audio = stream.Record
-	}
+	audio := mc.shouldEnableAudio(stream)
 	err := mc.mapi.CreateStream(streamName, stream.Presets,
 		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, skipTranscoding, audio)
 	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
@@ -382,7 +451,8 @@ func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStream
 func (mc *mac) webServerHandlers() *http.ServeMux {
 	mux := http.NewServeMux()
 	utils.AddPProfHandlers(mux)
-	mux.Handle("/metrics", utils.InitPrometheusExporter("mistconnector"))
+	// mux.Handle("/metrics", utils.InitPrometheusExporter("mistconnector"))
+	mux.Handle("/metrics", metrics.Exporter)
 
 	mux.HandleFunc("/", mc.handleDefaultStreamTrigger)
 	return mux
@@ -440,6 +510,19 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 	added = mc.addTrigger(triggers, "CONN_CLOSE", ownURI, "", "", false) || added
 	if added {
 		err = mc.mapi.SetTriggers(triggers)
+	}
+	// setup base stream if needed
+	if mc.baseStreamName != "" {
+		apiURL := mc.lapi.GetServer() + "/api/stream/" + mc.baseStreamName
+		presets := []string{"P144p30fps16x9"}
+		// base stream created with audio disabled
+		err = mc.mapi.CreateStream(mc.baseStreamName, presets, nil, "1", apiURL, "", false, false)
+		if err != nil {
+			glog.Error(err)
+			return err
+		}
+		// create second stream with audio enabled - used for stream with recording enabled
+		err = mc.mapi.CreateStream(mc.baseStreamName+audioEnabledStreamSuffix, presets, nil, "1", apiURL, "", false, true)
 	}
 	return err
 }

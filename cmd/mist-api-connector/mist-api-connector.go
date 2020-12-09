@@ -12,6 +12,7 @@ import (
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	mistapi "github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/app/mistapiconnector"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/peterbourgon/ff"
@@ -38,6 +39,7 @@ func main() {
 	consulURI := fs.String("consul", "", "Base URL to access Consul (for example: http://localhost:8500)")
 	playbackDomain := fs.String("playback-domain", "", "domain to create consul routes for (ex: playback.livepeer.live)")
 	mistURL := fs.String("consul-mist-url", "", "external URL of this Mist instance (to be put in Consul) (ex: https://mist-server-0.livepeer.live)")
+	baseStreamName := fs.String("base-stream-name", "", "Base stream name to be used in wildcard-based routing scheme")
 	_ = fs.String("config", "", "config file (optional)")
 
 	ff.Parse(fs, os.Args[1:],
@@ -62,6 +64,7 @@ func main() {
 
 	mapi = mistapi.NewMist(*mistHost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 	mapi.Login()
+	metrics.InitCensus(hostName, model.Version, "mistconnector")
 
 	var consulURL *url.URL
 	var err error
@@ -71,7 +74,8 @@ func main() {
 			glog.Fatalf("Error parsing Consul URL: %v", err)
 		}
 	}
-	mc := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, consulURL, *playbackDomain, *mistURL, *sendAudio)
+	mc := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, consulURL,
+		*playbackDomain, *mistURL, *sendAudio, *baseStreamName)
 	if err := mc.SetupTriggers(*ownURI); err != nil {
 		glog.Fatal(err)
 	}

@@ -12,9 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"contrib.go.opencensus.io/exporter/prometheus"
 	"github.com/golang/glog"
-	rprom "github.com/prometheus/client_golang/prometheus"
 )
 
 var (
@@ -139,6 +137,7 @@ func WaitForTCP(waitForTarget time.Duration, uri string) error {
 }
 
 // InitPrometheusExporter init prometheus exporter
+/*
 func InitPrometheusExporter(namespace string) *prometheus.Exporter {
 
 	registry := rprom.NewRegistry()
@@ -155,6 +154,7 @@ func InitPrometheusExporter(namespace string) *prometheus.Exporter {
 
 	return pe
 }
+*/
 
 // AddPProfHandlers add standard handlers from pprof package
 func AddPProfHandlers(mux *http.ServeMux) {
