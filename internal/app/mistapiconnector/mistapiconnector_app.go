@@ -115,23 +115,36 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		return
 	}
 	bs := string(b)
+	lines := strings.Split(bs, "\n")
 	trigger := r.Header.Get("X-Trigger")
-	glog.V(model.VERBOSE).Infof("Got request (%s) (%d lines):\n%s", trigger, len(strings.Split(bs, "\n")), bs)
-	glog.V(model.VERBOSE).Infof("User agent: %s", r.UserAgent())
-	glog.V(model.VERBOSE).Infof("Mist version: %s", r.Header.Get("X-Version"))
+	if trigger == "" {
+		glog.Errorf("Trigger not defined in request %s", bs)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
+		return
+	}
+	mistVersion := r.Header.Get("X-Version")
+	if mistVersion == "" {
+		mistVersion = r.UserAgent()
+	}
+	glog.V(model.VERBOSE).Infof("Got request (%s) mist=%s (%d lines): `%s`", trigger, mistVersion, len(lines), strings.Join(lines, `\n`))
+	// glog.V(model.VERBOSE).Infof("User agent: %s", r.UserAgent())
+	// glog.V(model.VERBOSE).Infof("Mist version: %s", r.Header.Get("X-Version"))
 	started := time.Now()
+	doLogRequestEnd := false
 	defer func(s time.Time, t string) {
-		took := time.Since(s)
-		glog.V(model.VERBOSE).Infof("Request %s ended in %s", t, took)
+		if doLogRequestEnd {
+			took := time.Since(s)
+			glog.V(model.VERBOSE).Infof("Request %s ended in %s", t, took)
+		}
 	}(started, trigger)
 	if trigger == "DEFAULT_STREAM" {
 		if mc.balancerHost == "" {
-			glog.V(model.VERBOSE).Infof("Request %s: (%d lines) responded with forbidden", trigger, len(strings.Split(bs, "\n")))
+			glog.V(model.VERBOSE).Infof("Request %s: (%d lines) responded with forbidden", trigger, len(lines))
 			w.WriteHeader(http.StatusForbidden)
 			w.Write([]byte("false"))
 			return
 		}
-		lines := strings.Split(bs, "\n")
 		if len(lines) == 5 {
 			protocol := lines[3] // HLS
 			uri := lines[4]      // /hls/h5rfoaiqoafbsq44/index.m3u8?stream=h5rfoaiqoafbsq44
@@ -220,7 +233,6 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		w.Write([]byte("yes"))
 		return
 	}
-	lines := strings.Split(bs, "\n")
 	if trigger == "CONN_CLOSE" {
 		if len(lines) < 3 {
 			glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), bs)
@@ -229,6 +241,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			return
 		}
 		if lines[2] == "RTMP" {
+			doLogRequestEnd = true
 			playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
 			if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
 				playbackID = strings.Split(playbackID, "+")[1]
@@ -267,7 +280,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		w.Write([]byte("false"))
 		return
 	}
-	glog.V(model.VVERBOSE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
+	// glog.V(model.INSANE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
 	pu, err := url.Parse(lines[0])
 	responseURL := lines[0]
 	if err != nil {
@@ -284,11 +297,11 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		return
 	}
 	streamKey := pp[2]
-	glog.V(model.SHORT).Infof("Requested stream key is '%s'", streamKey)
+	glog.V(model.VVERBOSE).Infof("Requested stream key is '%s'", streamKey)
 	// ask API
 	stream, err := mc.lapi.GetStreamByKey(streamKey)
 	if err != nil || stream == nil {
-		glog.Errorf("Error getting stream info from Livepeer API err=%v", err)
+		glog.Errorf("Error getting stream info from Livepeer API streamKey=%s err=%v", streamKey, err)
 		/*
 			if err == livepeer.ErrNotExists {
 				// mc.mapi.DeleteStreams(streamKey)
@@ -301,7 +314,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		w.Write([]byte("false"))
 		return
 	}
-	glog.V(model.DEBUG).Infof("For stream %s got info %+v", streamKey, stream)
+	glog.V(model.VERBOSE).Infof("For stream %s got info %+v", streamKey, stream)
 
 	if stream.Deleted {
 		glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", streamKey)
@@ -317,6 +330,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		w.Write([]byte("false"))
 		return
 	}
+	doLogRequestEnd = true
 
 	if stream.PlaybackID != "" {
 		mc.mu.Lock()
@@ -338,7 +352,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			glog.Error(err)
 		} else if !ok {
-			glog.Infof("Stream %s (%s) forbidden by webhook, rejecting", stream.ID, stream.StreamKey)
+			glog.Infof("Stream id=%s streamKey=%s playbackId=%s forbidden by webhook, rejecting", stream.ID, stream.StreamKey, stream.PlaybackID)
 			delete(mc.pub2id, stream.PlaybackID)
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte("false"))
