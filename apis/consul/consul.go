@@ -32,6 +32,7 @@ type GetKeyResponse struct {
 
 // ErrNotFound returned if key is not found
 var ErrNotFound = errors.New("Key not found")
+var ErrConfilct = errors.New("Conflict")
 
 const httpTimeout = 2 * time.Second
 
@@ -139,19 +140,45 @@ func PutKey(u *url.URL, path, value string) error {
 	return nil
 }
 
+// PutKeysWithCurrentTime puts keys in one transaction and sets Flags
+// field to the current timestamp (in ms)
+func PutKeysWithCurrentTime(u *url.URL, kvs ...string) error {
+	if len(kvs) == 0 || len(kvs)%2 != 0 {
+		return errors.New("Number of arguments should be even")
+	}
+	now := time.Now().UnixNano() / int64(time.Millisecond)
+	ks := make([]GetKeyResponse, 0, len(kvs)/2)
+	for i := 0; i < len(kvs); i += 2 {
+		ks = append(ks, GetKeyResponse{Key: kvs[i], Value: kvs[i+1], Flags: now})
+	}
+	return PutKeysEx(u, ks)
+}
+
 // PutKeys puts keys in one transaction
 func PutKeys(u *url.URL, kvs ...string) error {
 	if len(kvs) == 0 || len(kvs)%2 != 0 {
 		return errors.New("Number of arguments should be even")
 	}
+	ks := make([]GetKeyResponse, 0, len(kvs)/2)
+	for i := 0; i < len(kvs); i += 2 {
+		ks = append(ks, GetKeyResponse{Key: kvs[i], Value: kvs[i+1]})
+	}
+	return PutKeysEx(u, ks)
+}
+
+// PutKeysEx puts keys in one transaction
+func PutKeysEx(u *url.URL, ks []GetKeyResponse) error {
+	if len(ks) == 0 {
+		return errors.New("Number of arguments should be greater than zero")
+	}
 	var cu url.URL = *u
 	cu.Path = "v1/txn"
 	glog.V(model.VERBOSE).Infof("Making transaction PUT request to %s", cu.String())
 	var body io.Reader
-	bodyParts := make([]string, 0, len(kvs)/2)
-	for i := 0; i < len(kvs); i += 2 {
-		val := base64.StdEncoding.EncodeToString([]byte(kvs[i+1]))
-		bodyParts = append(bodyParts, fmt.Sprintf(`{"KV":{"Verb":"set", "Key": "%s", "Value": "%s"}}`, kvs[i], val))
+	bodyParts := make([]string, 0, len(ks))
+	for _, kvi := range ks {
+		val := base64.StdEncoding.EncodeToString([]byte(kvi.Value))
+		bodyParts = append(bodyParts, fmt.Sprintf(`{"KV":{"Verb":"set", "Key": "%s", "Value": "%s", "Flags": %d}}`, kvi.Key, val, kvi.Flags))
 	}
 	bodyStr := `[` + strings.Join(bodyParts, ",") + `]`
 	body = bytes.NewReader([]byte(bodyStr))
@@ -161,7 +188,7 @@ func PutKeys(u *url.URL, kvs ...string) error {
 	resp, err := http.DefaultClient.Do(uhttp.NewRequestWithContext(ctx, "PUT", cu.String(), body))
 	cancel()
 	if err != nil {
-		glog.Errorf("Error putting keys '%s' to Consul at %s error: %v", kvs[0], cu.String(), err)
+		glog.Errorf("Error putting keys '%s' to Consul at %s error: %v", ks[0].Key, cu.String(), err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -176,7 +203,7 @@ func PutKeys(u *url.URL, kvs ...string) error {
 		return err
 	}
 	val := string(b)
-	glog.V(model.VERBOSE).Infof("Put keys result '%s': '%s'", kvs[0], val)
+	glog.V(model.VERBOSE).Infof("Put keys result '%s': '%s'", ks[0].Key, val)
 	return nil
 }
 
@@ -214,4 +241,46 @@ func DeleteKey(u *url.URL, path string, recurse bool) (bool, error) {
 	val := string(b)
 	glog.V(model.VERBOSE).Infof("Delete result key=%s res=%s", path, val)
 	return strings.TrimSpace(val) == "true", nil
+}
+
+// DeleteKeysCas delete keys from Consul's KV storage
+func DeleteKeysCas(u *url.URL, ks []GetKeyResponse) (bool, error) {
+	if len(ks) == 0 {
+		return false, errors.New("Number of arguments should be greater than zero")
+	}
+	var cu url.URL = *u
+	cu.Path = "v1/txn"
+	glog.V(model.VERBOSE).Infof("Making transaction PUT request to %s", cu.String())
+	var body io.Reader
+	bodyParts := make([]string, 0, len(ks))
+	for _, kvi := range ks {
+		bodyParts = append(bodyParts, fmt.Sprintf(`{"KV":{"Verb":"delete-cas", "Key": "%s", "Index": %d}}`, kvi.Key, kvi.ModifyIndex))
+	}
+	bodyStr := `[` + strings.Join(bodyParts, ",") + `]`
+	body = bytes.NewReader([]byte(bodyStr))
+	glog.V(model.VVERBOSE).Infof("Making transaction PUT request to %s body: '%s'", cu.String(), bodyStr)
+
+	ctx, cancel := context.WithTimeout(context.Background(), httpTimeout)
+	resp, err := http.DefaultClient.Do(uhttp.NewRequestWithContext(ctx, "PUT", cu.String(), body))
+	cancel()
+	if err != nil {
+		glog.Errorf("Error deleting keys '%s' to Consul at %s error: %v", ks[0].Key, cu.String(), err)
+		return false, err
+	}
+	defer resp.Body.Close()
+	b, _ := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusConflict {
+		return false, ErrConfilct
+	}
+	if resp.StatusCode != http.StatusOK {
+		glog.Errorf("Status error contacting Consul (%s) status %d body: %s", cu.String(), resp.StatusCode, string(b))
+		return false, errors.New(resp.Status + ": " + string(b))
+	}
+	if err != nil {
+		glog.Errorf("Error reading response from Consul (%s) error: %v", cu.String(), err)
+		return false, err
+	}
+	val := string(b)
+	glog.V(model.VERBOSE).Infof("Delete keys result '%s': '%s'", ks[0].Key, val)
+	return true, nil
 }
