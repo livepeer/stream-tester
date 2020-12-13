@@ -378,7 +378,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			if mc.baseStreamName != "" {
 				wildcardPlaybackID := mc.wildcardPlaybackID(stream)
 				playbackID := stream.PlaybackID
-				err = consul.PutKeys(
+				err = consul.PutKeysWithCurrentTime(
 					mc.consulURL,
 					traefikKeyPathRouters+playbackID+"/rule",
 					fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, playbackID),
