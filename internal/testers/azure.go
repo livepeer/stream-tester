@@ -63,7 +63,7 @@ func isNoCodecError(verr error) bool {
 	return errors.Is(verr, jerrors.ErrNoAudioInfoFound) || errors.Is(verr, jerrors.ErrNoVideoInfoFound)
 }
 
-func saveToExternalStorage(fileName string, data []byte) (string, string, error) {
+func SaveToExternalStorage(fileName string, data []byte) (string, string, error) {
 	if azure == nil && Bucket == "" {
 		return "", "", nil
 	}

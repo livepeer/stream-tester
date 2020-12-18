@@ -1117,7 +1117,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 				glog.V(model.DEBUG).Infof("==============>>>>>>>>>>>>>  Saving segment %s", sn)
 				ioutil.WriteFile(sn, b, 0644)
 				sid := strconv.FormatInt(time.Now().Unix(), 10)
-				if savedName, service, serr := saveToExternalStorage(sid+"_"+task.url, b); serr != nil {
+				if savedName, service, serr := SaveToExternalStorage(sid+"_"+task.url, b); serr != nil {
 					messenger.SendFatalMessage(fmt.Sprintf("Failure to save segment to %s %v", service, serr))
 				} else {
 					messenger.SendMessage(fmt.Sprintf("Segment %s (which can't be parsed) saved to %s %s", task.url, service, savedName))
