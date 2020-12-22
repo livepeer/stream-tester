@@ -240,7 +240,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 					task.seqNo, randName())
 				err = ioutil.WriteFile(fname, b, 0644)
 				glog.Infof("Wrote bad segment to local file '%s' (err=%v)", fname, err)
-				if extURL, service, err := saveToExternalStorage(fname, b); err != nil {
+				if extURL, service, err := SaveToExternalStorage(fname, b); err != nil {
 					glog.Infof("Failed saving bad segment %s to %s err=%v", fname, service, err)
 				} else {
 					messenger.SendFatalMessage(fmt.Sprintf("Saved bad segment to %s url=%s verr=%v", service, extURL, verr))

@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"math"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -20,6 +22,9 @@ import (
 
 	"github.com/golang/glog"
 	apiModels "github.com/livepeer/leaderboard-serverless/models"
+	"github.com/livepeer/m3u8"
+	"github.com/livepeer/stream-tester/internal/testers"
+	"github.com/livepeer/stream-tester/model"
 	streamerModel "github.com/livepeer/stream-tester/model"
 	promClient "github.com/prometheus/client_golang/api"
 	promAPI "github.com/prometheus/client_golang/api/prometheus/v1"
@@ -32,6 +37,10 @@ const bcastMediaPort = "8935"
 const bcastRTMPPort = "1935"
 const defaultBcast = "127.0.0.1"
 const httpTimeout = 8 * time.Second
+
+const numSegments = 15
+
+var start time.Time
 
 func main() {
 	flag.Set("logtostderr", "true")
@@ -47,9 +56,15 @@ func main() {
 	// Video config
 	videoFile := flag.String("video", "official_test_source_2s_keys_24pfs_30s.mp4", "video file to use, has to be present in stream-tester root")
 	numProfiles := flag.Int("profiles", 3, "number of video profiles to use on the broadcaster")
-	presets := flag.String("presets", "P240p30fps16x9,P360p30fps16x9,P720p30fps16x9", "video profile presets to use for HTTP ingest")
+	presets := flag.String("presets", "P240p30fps16x9,P360p30fps16x9", "video profile presets to use for HTTP ingest")
 	repeat := flag.Int("repeat", 1, "number of times to repeat the stream")
 	simultaneous := flag.Int("simultaneous", 1, "number of times to run the stream simultaneously")
+
+	// randomSample will sample one transcoded rendition and source segment randomly per stream
+	randomSample := flag.Bool("randomsample", false, "randomly sample a source and transcoded segment per stream")
+	gsBucket := flag.String("gsbucket", "", "Google storage bucket to store segments")
+	gsKey := flag.String("gskey", "", "Google Storage private key (in json format)")
+
 	flag.Parse()
 
 	if *region == "" {
@@ -76,6 +91,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	broadcasterURL, err := defaultAddr(fmt.Sprintf("%v:%v", *broadcaster, *media), "127.0.0.1", "8935")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	rtmpUint, err := strconv.ParseUint(*rtmp, 10, 16)
 	if err != nil {
 		log.Fatal(err)
@@ -86,7 +106,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	streamer, err := newStreamerClient(streamTesterURL, metricsURL, leaderboardURL, *leaderboardSecret, subgraphURL)
+	profiles := strings.Split(*presets, ",")
+
+	streamer, err := newStreamerClient(streamTesterURL, metricsURL, leaderboardURL, *leaderboardSecret, subgraphURL, broadcasterURL, profiles)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -96,7 +118,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	refreshWait := 90 * time.Second
+	testers.Bucket = *gsBucket
+	testers.CredsJSON = *gsKey
+
+	refreshWait := 70 * time.Second
+
+	start = time.Now()
 
 	for _, o := range orchestrators {
 		time.Sleep(refreshWait)
@@ -123,7 +150,20 @@ func main() {
 			continue
 		}
 
-		glog.Infof("Started stream for orchestrator %v", o.Address)
+		var (
+			ctx    context.Context
+			cancel context.CancelFunc
+		)
+		randErr := make(chan error)
+		if *randomSample {
+			rand.Seed(time.Now().UnixNano())
+			ctx, cancel = context.WithCancel(context.Background())
+			go func(randErr chan error) {
+				randErr <- streamer.randomSample(ctx, mid, o.Address)
+			}(randErr)
+		}
+
+		glog.Infof("Started stream orchestrator=%v maninfestID=%v", o.Address, mid)
 
 		apiStats := &apiModels.Stats{
 			Region:       *region,
@@ -133,6 +173,7 @@ func main() {
 
 		// Make sure manifest ID exists before getting stats
 		time.Sleep(15 * time.Second)
+
 		// wait for stream to finish transcoding
 		streamerStats, err := streamer.getFinishedStats(mid)
 		if err != nil {
@@ -184,6 +225,15 @@ func main() {
 			glog.Error(err)
 			continue
 		}
+		// if we haven't found a random sample by now cancel and wait for the backup attempt to complete before returning
+		if *randomSample {
+			cancel()
+			err := <-randErr
+			if err != nil {
+				glog.Error(err)
+			}
+			continue
+		}
 	}
 }
 
@@ -218,11 +268,13 @@ type streamerClient struct {
 	leaderboardAddr   string
 	leaderboardSecret string
 	subgraph          string
+	broadcaster       string
 	metrics           promAPI.API
 	client            *http.Client
+	profiles          []string
 }
 
-func newStreamerClient(streamTesterURL, metricsURL, leaderboardAddr, leaderboardSecret, subgraph string) (*streamerClient, error) {
+func newStreamerClient(streamTesterURL, metricsURL, leaderboardAddr, leaderboardSecret, subgraph, broadcasterURL string, profiles []string) (*streamerClient, error) {
 	client, err := promClient.NewClient(promClient.Config{
 		Address: metricsURL,
 	})
@@ -239,6 +291,8 @@ func newStreamerClient(streamTesterURL, metricsURL, leaderboardAddr, leaderboard
 		leaderboardAddr:   leaderboardAddr,
 		leaderboardSecret: leaderboardSecret,
 		subgraph:          subgraph,
+		broadcaster:       broadcasterURL,
+		profiles:          profiles,
 	}, nil
 }
 
@@ -548,4 +602,201 @@ func (s *streamerClient) getOrchestrators() ([]*orch, error) {
 	}
 
 	return data.Data.Transcoders, nil
+}
+
+// Get a random source/rendition sample segment and write it to external storage
+func (s *streamerClient) randomSample(ctx context.Context, mid string, orch string) error {
+	randSeqNo := rand.Int() % numSegments
+	randProfile := s.profiles[rand.Int()%len(s.profiles)]
+	//stream/manifestID/profile/SeqNo.ts
+	sourceUrl := fmt.Sprintf("%v/stream/%v_0_0/source/%v.ts", s.broadcaster, mid, randSeqNo)
+	renditionUrl := fmt.Sprintf("%v/stream/%v_0_0/%v/%v.ts", s.broadcaster, mid, randProfile, randSeqNo)
+	var (
+		rendition []byte
+		source    []byte
+		err       error
+	)
+	tick := time.NewTicker(2 * time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			glog.Info("random sampler timed out")
+			// If we haven't found the segment try to sample from whatever playlist we can
+			rendition, source, renditionUrl, err = s.sampleFromPlaylist(mid)
+			if err != nil {
+				glog.Error(err)
+			}
+			break
+		case <-tick.C:
+			rendition, err = s.downloadSegment(renditionUrl)
+			if err != nil {
+				glog.V(model.DEBUG).Info(err)
+				continue
+			}
+			source, err = s.downloadSegment(sourceUrl)
+			if err != nil {
+				glog.V(model.DEBUG).Info(err)
+				continue
+			}
+			break
+		}
+		break
+	}
+
+	if len(rendition) == 0 || len(source) == 0 {
+		return fmt.Errorf("no segments found")
+	}
+
+	urlSplit := strings.Split(renditionUrl, "/")
+	rendS := urlSplit[len(urlSplit)-2]
+	fname := urlSplit[len(urlSplit)-1]
+
+	rendF := fileName(orch, mid, rendS, fname)
+	sourceF := fileName(orch, mid, "source", fname)
+
+	src, _, err := testers.SaveToExternalStorage(sourceF, source)
+	if err != nil {
+		glog.Error(err)
+		return err
+	}
+	glog.Infof("Wrote source segment to storage url=%v", src)
+
+	rend, _, err := testers.SaveToExternalStorage(rendF, rendition)
+	if err != nil {
+		glog.Error(err)
+		return err
+	}
+	glog.Infof("Wrote rendition to storage url=%v", rend)
+	return nil
+}
+
+func baseFileName() string {
+	y, m, d := start.Date()
+	return fmt.Sprintf("%v-%v-%v", y, m, d)
+}
+
+func fileName(orch, mid, rend, fname string) string {
+	return fmt.Sprintf("%v/%v/%v-%v-%v", baseFileName(), orch, mid, rend, fname)
+}
+
+func (s *streamerClient) sampleFromPlaylist(mid string) (source, rendition []byte, url string, err error) {
+	mpl, err := s.downloadMasterPlaylist(mid)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	sourceURI := fmt.Sprintf("%v_0_0/source.m3u8", mid)
+	sourcePl, err := s.downloadMediaPlaylist(sourceURI)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	renditionPl, err := s.downloadMediaPlaylist(mpl.Variants[rand.Int()%len(mpl.Variants)].URI)
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	if sourcePl.Len() == 0 || renditionPl.Len() == 0 {
+		return nil, nil, "", fmt.Errorf("no segments found")
+	}
+
+	r := rand.Int()
+	segIdx := r % int(math.Min(float64(renditionPl.Len()), float64(sourcePl.Len())))
+	seqNo := sourcePl.Segments[segIdx].SeqId // Assumes that segIdx points to the same seqNo in the slice of sources and renditions
+	rendition, err = s.downloadSegment(fmt.Sprintf("%v/%v", s.broadcaster, renditionPl.Segments[seqNo].URI))
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	source, err = s.downloadSegment(fmt.Sprintf("%v/%v", s.broadcaster, sourcePl.Segments[seqNo].URI))
+	if err != nil {
+		return nil, nil, "", err
+	}
+
+	return source, rendition, renditionPl.Segments[seqNo].URI, err
+}
+
+func (s *streamerClient) downloadSegment(url string) ([]byte, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.client.Do(req)
+	if err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+	if err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, fmt.Errorf("%v", string(body))
+	}
+	return body, nil
+}
+
+func (s *streamerClient) downloadMasterPlaylist(manifestID string) (*m3u8.MasterPlaylist, error) {
+	url := fmt.Sprintf("%v/stream/%v_0_0.m3u8", s.broadcaster, manifestID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, errors.New(string(body))
+	}
+
+	mpl := m3u8.NewMasterPlaylist()
+	if err := mpl.Decode(*bytes.NewBuffer(body), true); err != nil {
+		return nil, err
+	}
+
+	return mpl, nil
+}
+
+func (s *streamerClient) downloadMediaPlaylist(uri string) (*m3u8.MediaPlaylist, error) {
+	url := fmt.Sprintf("%v/stream/%v", s.broadcaster, uri)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return nil, errors.New(string(body))
+	}
+
+	gpl, plt, err := m3u8.Decode(*bytes.NewBuffer(body), true)
+	if err != nil {
+		return nil, err
+	}
+	if plt != m3u8.MEDIA {
+		return nil, fmt.Errorf("Expecting media playlist, got %d", plt)
+	}
+	pl := gpl.(*m3u8.MediaPlaylist)
+	return pl, nil
 }
