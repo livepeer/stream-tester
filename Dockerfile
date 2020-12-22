@@ -10,6 +10,7 @@ RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_sour
 RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_t02.mp4
 RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_2min.mp4
 RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s.mp4
+RUN wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
 
 # ENV GOFLAGS "-mod=readonly"
 ARG version
@@ -46,6 +47,7 @@ COPY --from=builder /root/official_test_source_2s_keys_24pfs_3min.mp4 official_t
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4
 COPY --from=builder /root/official_test_source_2s_keys_24pfs_30s.mp4 official_test_source_2s_keys_24pfs_30s.mp4
+COPY --from=builder /root/official_test_source_2s_keys_24pfs_30s_hls official_test_source_2s_keys_24pfs_30s_hls
 
 COPY --from=builder /root/streamtester streamtester
 COPY --from=builder /root/testdriver testdriver
