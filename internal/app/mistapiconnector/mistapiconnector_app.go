@@ -251,6 +251,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 				glog.Infof("Setting stream's manifestID=%s playbackID=%s active status to false", id, playbackID)
 				if mc.consulURL != nil {
 					go consul.DeleteKey(mc.consulURL, traefikKeyPathRouters+playbackID, true)
+					// shouldn't exists with new scheme, but keeping here to clean up routes made with old scheme
 					go consul.DeleteKey(mc.consulURL, traefikKeyPathServices+playbackID, true)
 					if mc.baseStreamName != "" {
 						go consul.DeleteKey(mc.consulURL, traefikKeyPathMiddlewares+playbackID, true)
@@ -378,12 +379,13 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			if mc.baseStreamName != "" {
 				wildcardPlaybackID := mc.wildcardPlaybackID(stream)
 				playbackID := stream.PlaybackID
+				serviceName := serviceNameFromMistURL(mc.mistURL)
 				err = consul.PutKeysWithCurrentTime(
 					mc.consulURL,
 					traefikKeyPathRouters+playbackID+"/rule",
 					fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, playbackID),
 					traefikKeyPathRouters+playbackID+"/service",
-					playbackID,
+					serviceName,
 					traefikKeyPathRouters+playbackID+"/middlewares/0",
 					playbackID+"-1",
 					traefikKeyPathRouters+playbackID+"/middlewares/1",
@@ -399,9 +401,9 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 					// traefikKeyPathMiddlewares+playbackID+"/replacepathregex/replacement",
 					// `/hls/$1`,
 
-					traefikKeyPathServices+playbackID+"/loadbalancer/servers/0/url",
+					traefikKeyPathServices+serviceName+"/loadbalancer/servers/0/url",
 					mc.mistURL,
-					traefikKeyPathServices+playbackID+"/loadbalancer/passhostheader",
+					traefikKeyPathServices+serviceName+"/loadbalancer/passhostheader",
 					"false",
 				)
 			} else {
@@ -507,6 +509,7 @@ func (mc *mac) addTrigger(triggers mistapi.TriggersMap, name, ownURI, def, param
 }
 
 func (mc *mac) SetupTriggers(ownURI string) error {
+	return nil
 	triggers, err := mc.mapi.GetTriggers()
 	if err != nil {
 		glog.Error(err)
@@ -539,4 +542,12 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 		err = mc.mapi.CreateStream(mc.baseStreamName+audioEnabledStreamSuffix, presets, nil, "1", apiURL, "", false, true)
 	}
 	return err
+}
+
+func serviceNameFromMistURL(murl string) string {
+	murl = strings.TrimPrefix(murl, "https://")
+	murl = strings.TrimPrefix(murl, "http://")
+	murl = strings.ReplaceAll(murl, ".", "-")
+	murl = strings.ReplaceAll(murl, "/", "-")
+	return murl
 }
