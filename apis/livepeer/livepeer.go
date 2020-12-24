@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/model"
 )
@@ -377,7 +378,7 @@ func (lapi *API) GetStreamByKey(key string) (*CreateStreamResp, error) {
 		return nil, errors.New("empty key")
 	}
 	u := fmt.Sprintf("%s/api/stream/key/%s?main=true", lapi.choosenServer, key)
-	return lapi.getStream(u)
+	return lapi.getStream(u, "get_by_key")
 }
 
 // GetStreamByPlaybackID gets stream by playbackID
@@ -386,7 +387,7 @@ func (lapi *API) GetStreamByPlaybackID(playbackID string) (*CreateStreamResp, er
 		return nil, errors.New("empty playbackID")
 	}
 	u := fmt.Sprintf("%s/api/stream/playback/%s", lapi.choosenServer, playbackID)
-	return lapi.getStream(u)
+	return lapi.getStream(u, "get_by_playbackid")
 }
 
 // GetStream gets stream by id
@@ -395,7 +396,7 @@ func (lapi *API) GetStream(id string) (*CreateStreamResp, error) {
 		return nil, errors.New("empty id")
 	}
 	u := fmt.Sprintf("%s/api/stream/%s", lapi.choosenServer, id)
-	return lapi.getStream(u)
+	return lapi.getStream(u, "get_by_id")
 }
 
 // SetActive set isActive
@@ -403,6 +404,7 @@ func (lapi *API) SetActive(id string, active bool) (bool, error) {
 	if id == "" {
 		return true, errors.New("empty id")
 	}
+	start := time.Now()
 	u := fmt.Sprintf("%s/api/stream/%s/setactive", lapi.choosenServer, id)
 	ar := setActiveReq{
 		Active: active,
@@ -410,6 +412,7 @@ func (lapi *API) SetActive(id string, active bool) (bool, error) {
 	b, _ := json.Marshal(&ar)
 	req, err := uhttp.NewRequest("PUT", u, bytes.NewBuffer(b))
 	if err != nil {
+		metrics.APIRequest("set_active", 0, err)
 		return true, err
 	}
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
@@ -417,24 +420,31 @@ func (lapi *API) SetActive(id string, active bool) (bool, error) {
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		glog.Errorf("id=%s/setactive Error set active %v", id, err)
+		metrics.APIRequest("set_active", 0, err)
 		return true, err
 	}
 	defer resp.Body.Close()
 	b, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
 		glog.Errorf("id=%s/setactive Error set active (body) %v", err)
+		metrics.APIRequest("set_active", 0, err)
 		return true, err
 	}
-	glog.Infof("%s/setactive response status code %d status %s resp %+v body=%s", id, resp.StatusCode, resp.Status, resp, string(b))
+	took := time.Since(start)
+	metrics.APIRequest("set_active", took, nil)
+	glog.Infof("%s/setactive took=%s response status code %d status %s resp %+v body=%s",
+		took, id, resp.StatusCode, resp.Status, resp, string(b))
 	return resp.StatusCode >= 200 && resp.StatusCode < 300, nil
 }
 
-func (lapi *API) getStream(u string) (*CreateStreamResp, error) {
+func (lapi *API) getStream(u, rType string) (*CreateStreamResp, error) {
+	start := time.Now()
 	req := uhttp.GetRequest(u)
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		glog.Errorf("Error getting stream by id from Livepeer API server (%s) error: %v", u, err)
+		metrics.APIRequest(rType, 0, err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -442,15 +452,21 @@ func (lapi *API) getStream(u string) (*CreateStreamResp, error) {
 		b, _ := ioutil.ReadAll(resp.Body)
 		glog.Errorf("Status error getting stream by id Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
 		if resp.StatusCode == http.StatusNotFound {
+			metrics.APIRequest(rType, 0, ErrNotExists)
 			return nil, ErrNotExists
 		}
-		return nil, errors.New(http.StatusText(resp.StatusCode))
+		err := errors.New(http.StatusText(resp.StatusCode))
+		metrics.APIRequest(rType, 0, err)
+		return nil, err
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		glog.Errorf("Error getting stream by id Livepeer API server (%s) error: %v", u, err)
+		metrics.APIRequest(rType, 0, err)
 		return nil, err
 	}
+	took := time.Since(start)
+	metrics.APIRequest(rType, took, nil)
 	bs := string(b)
 	glog.V(model.VERBOSE).Info(bs)
 	if bs == "null" {

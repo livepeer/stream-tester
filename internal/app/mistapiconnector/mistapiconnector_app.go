@@ -136,6 +136,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		if doLogRequestEnd {
 			took := time.Since(s)
 			glog.V(model.VERBOSE).Infof("Request %s ended in %s", t, took)
+			metrics.TriggerDuration(t, took)
 		}
 	}(started, trigger)
 	if trigger == "DEFAULT_STREAM" {
@@ -262,6 +263,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 					glog.Error(err)
 				}
 				delete(mc.pub2id, playbackID)
+				metrics.StopStream(true)
 			}
 			mc.mu.Unlock()
 		}
@@ -372,6 +374,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		}
 	}
 	w.Write([]byte(responseURL))
+	metrics.StartStream()
 	if mc.consulURL != nil {
 		// now create routing rule in the Consul for HLS playback
 		go func() {

@@ -26,6 +26,8 @@ type (
 		nodeID                string
 		ctx                   context.Context
 		kNodeID               tag.Key
+		kTrigger              tag.Key
+		kType                 tag.Key
 		mCurrentStreams       *stats.Int64Measure
 		mSuccessfulStreams    *stats.Int64Measure
 		mTotalStreams         *stats.Int64Measure
@@ -35,6 +37,14 @@ type (
 
 		mStartupLatency   *stats.Float64Measure
 		mTranscodeLatency *stats.Float64Measure
+
+		mTriggerDuration *stats.Float64Measure
+
+		mAPIErrors  *stats.Int64Measure
+		mAPILatency *stats.Float64Measure
+
+		mConsulErrors  *stats.Int64Measure
+		mConsulLatency *stats.Float64Measure
 
 		activeStreams int64
 		lock          sync.Mutex
@@ -57,6 +67,8 @@ func InitCensus(nodeID, version, namespace string) {
 	var err error
 	ctx := context.Background()
 	Census.kNodeID = tag.MustNewKey("node_id")
+	Census.kTrigger = tag.MustNewKey("trigger")
+	Census.kType = tag.MustNewKey("type")
 	Census.ctx, err = tag.New(ctx, tag.Insert(Census.kNodeID, nodeID))
 	if err != nil {
 		glog.Fatal("Error creating context", err)
@@ -67,6 +79,14 @@ func InitCensus(nodeID, version, namespace string) {
 
 	Census.mStartupLatency = stats.Float64("startup_latency", "Startup latency", "sec")
 	Census.mTranscodeLatency = stats.Float64("transcode_latency", "Transcode latency", "sec")
+
+	Census.mTriggerDuration = stats.Float64("trigger_duration", "Trigger duration", "sec")
+
+	Census.mAPIErrors = stats.Int64("api_errors", "Number of API errors", "tot")
+	Census.mAPILatency = stats.Float64("api_latency", "API latency", "sec")
+
+	Census.mConsulErrors = stats.Int64("consul_errors", "Number of Consul errors", "tot")
+	Census.mConsulLatency = stats.Float64("consul_latency", "Consul latency", "sec")
 
 	Census.mSegmentsDownloading = stats.Int64("segments_downloading", "", "tot")
 	Census.mSegmentsToDownload = stats.Int64("segments_to_download", "Number of segments queued for download", "tot")
@@ -152,6 +172,41 @@ func InitCensus(nodeID, version, namespace string) {
 			TagKeys:     baseTags,
 			Aggregation: view.Distribution(0, 0.050, 0.100, .250, .500, .750, 1.000, 1.250, 1.500, 2.000, 2.500, 3.000, 3.500, 4.000, 4.500, 5.000, 10.000, 20.0, 30.0, 60.0),
 		},
+		{
+			Name:        "trigger_duration",
+			Measure:     Census.mTriggerDuration,
+			Description: "Trigger duration",
+			TagKeys:     append([]tag.Key{Census.kTrigger}, baseTags...),
+			Aggregation: view.Distribution(0, 0.050, 0.100, .250, .500, .750, 1.000, 1.250, 1.500, 2.000, 2.500, 3.000, 3.500, 4.000, 4.500, 5.000, 10.000, 20.0, 30.0, 60.0),
+		},
+		{
+			Name:        "api_errors",
+			Measure:     Census.mAPIErrors,
+			Description: "Number of API errors",
+			TagKeys:     append([]tag.Key{Census.kType}, baseTags...),
+			Aggregation: view.Count(),
+		},
+		{
+			Name:        "api_latency",
+			Measure:     Census.mAPILatency,
+			Description: "API latency",
+			TagKeys:     append([]tag.Key{Census.kType}, baseTags...),
+			Aggregation: view.Distribution(0, 0.050, 0.100, .250, .500, .750, 1.000, 1.250, 1.500, 2.000, 2.500, 3.000, 3.500, 4.000, 4.500, 5.000, 10.000, 20.0, 30.0, 60.0),
+		},
+		{
+			Name:        "consul_errors",
+			Measure:     Census.mConsulErrors,
+			Description: "Number of Consul errors",
+			TagKeys:     append([]tag.Key{Census.kType}, baseTags...),
+			Aggregation: view.Count(),
+		},
+		{
+			Name:        "consul_latency",
+			Measure:     Census.mConsulLatency,
+			Description: "Consul latency",
+			TagKeys:     append([]tag.Key{Census.kType}, baseTags...),
+			Aggregation: view.Distribution(0, 0.050, 0.100, .250, .500, .750, 1.000, 1.250, 1.500, 2.000, 2.500, 3.000, 3.500, 4.000, 4.500, 5.000, 10.000, 20.0, 30.0, 60.0),
+		},
 	}
 
 	// Register the views
@@ -232,4 +287,42 @@ func StartupLatency(latency time.Duration) {
 // TranscodeLatency ...
 func TranscodeLatency(latency time.Duration) {
 	stats.Record(Census.ctx, Census.mTranscodeLatency.M(latency.Seconds()))
+}
+
+// TriggerDuration ...
+func TriggerDuration(trigger string, duration time.Duration) {
+	ctx, err := tag.New(Census.ctx, tag.Insert(Census.kTrigger, trigger))
+	if err != nil {
+		glog.Error("Error creating context", err)
+		return
+	}
+	stats.Record(ctx, Census.mTriggerDuration.M(duration.Seconds()))
+}
+
+// ConsulRequest ...
+func ConsulRequest(rType string, duration time.Duration, err error) {
+	ctx, err := tag.New(Census.ctx, tag.Insert(Census.kType, rType))
+	if err != nil {
+		glog.Error("Error creating context", err)
+		return
+	}
+	if err != nil {
+		stats.Record(ctx, Census.mConsulErrors.M(1))
+	} else {
+		stats.Record(ctx, Census.mConsulLatency.M(duration.Seconds()))
+	}
+}
+
+// APIRequest ...
+func APIRequest(rType string, duration time.Duration, err error) {
+	ctx, err := tag.New(Census.ctx, tag.Insert(Census.kType, rType))
+	if err != nil {
+		glog.Error("Error creating context", err)
+		return
+	}
+	if err != nil {
+		stats.Record(ctx, Census.mAPIErrors.M(1))
+	} else {
+		stats.Record(ctx, Census.mAPILatency.M(duration.Seconds()))
+	}
 }

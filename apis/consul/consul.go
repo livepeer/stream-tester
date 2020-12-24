@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/model"
 )
@@ -142,6 +143,8 @@ func PutKey(u *url.URL, path, value string) error {
 
 // PutKeysWithCurrentTime puts keys in one transaction and sets Flags
 // field to the current timestamp (in ms)
+// (needed to ensure that ModifyIndex field is modified even if
+//  content of the keys is the same)
 func PutKeysWithCurrentTime(u *url.URL, kvs ...string) error {
 	if len(kvs) == 0 || len(kvs)%2 != 0 {
 		return errors.New("Number of arguments should be even")
@@ -171,6 +174,7 @@ func PutKeysEx(u *url.URL, ks []GetKeyResponse) error {
 	if len(ks) == 0 {
 		return errors.New("Number of arguments should be greater than zero")
 	}
+	start := time.Now()
 	var cu url.URL = *u
 	cu.Path = "v1/txn"
 	glog.V(model.VERBOSE).Infof("Making transaction PUT request to %s", cu.String())
@@ -189,26 +193,33 @@ func PutKeysEx(u *url.URL, ks []GetKeyResponse) error {
 	cancel()
 	if err != nil {
 		glog.Errorf("Error putting keys '%s' to Consul at %s error: %v", ks[0].Key, cu.String(), err)
+		metrics.ConsulRequest("put", 0, err)
 		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		glog.Errorf("Status error contacting Consul (%s) status %d body: %s", cu.String(), resp.StatusCode, string(b))
-		return errors.New(resp.Status + ": " + string(b))
+		err := errors.New(resp.Status + ": " + string(b))
+		metrics.ConsulRequest("put", 0, err)
+		return err
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		glog.Errorf("Error reading from Consul (%s) error: %v", cu.String(), err)
+		metrics.ConsulRequest("put", 0, err)
 		return err
 	}
+	took := time.Since(start)
+	metrics.ConsulRequest("put", took, nil)
 	val := string(b)
-	glog.V(model.VERBOSE).Infof("Put keys result '%s': '%s'", ks[0].Key, val)
+	glog.V(model.VERBOSE).Infof("Put keys result took=%s '%s': '%s'", took, ks[0].Key, val)
 	return nil
 }
 
 // DeleteKey retrieves key from Consul's KV storage
 func DeleteKey(u *url.URL, path string, recurse bool) (bool, error) {
+	start := time.Now()
 	var cu url.URL = *u
 	cu.Path = "v1/kv/" + path
 	q := make(url.Values)
@@ -222,6 +233,7 @@ func DeleteKey(u *url.URL, path string, recurse bool) (bool, error) {
 	cancel()
 	if err != nil {
 		glog.Errorf("Error deleting key '%s' from Consul at %s error: %v", path, cu.String(), err)
+		metrics.ConsulRequest("delete", 0, err)
 		return false, err
 	}
 	defer resp.Body.Close()
@@ -231,15 +243,20 @@ func DeleteKey(u *url.URL, path string, recurse bool) (bool, error) {
 		if resp.StatusCode == http.StatusNotFound {
 			return false, ErrNotFound
 		}
-		return false, errors.New(http.StatusText(resp.StatusCode))
+		err := errors.New(http.StatusText(resp.StatusCode))
+		metrics.ConsulRequest("delete", 0, err)
+		return false, err
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		glog.Errorf("Error reading from Consul (%s) error: %v", cu.String(), err)
+		metrics.ConsulRequest("delete", 0, err)
 		return false, err
 	}
+	took := time.Since(start)
+	metrics.ConsulRequest("delete", took, nil)
 	val := string(b)
-	glog.V(model.VERBOSE).Infof("Delete result key=%s res=%s", path, val)
+	glog.V(model.VERBOSE).Infof("Delete result took=%s key=%s res=%s", took, path, val)
 	return strings.TrimSpace(val) == "true", nil
 }
 
@@ -248,6 +265,7 @@ func DeleteKeysCas(u *url.URL, ks []GetKeyResponse) (bool, error) {
 	if len(ks) == 0 {
 		return false, errors.New("Number of arguments should be greater than zero")
 	}
+	start := time.Now()
 	var cu url.URL = *u
 	cu.Path = "v1/txn"
 	glog.V(model.VERBOSE).Infof("Making transaction PUT request to %s", cu.String())
@@ -265,22 +283,29 @@ func DeleteKeysCas(u *url.URL, ks []GetKeyResponse) (bool, error) {
 	cancel()
 	if err != nil {
 		glog.Errorf("Error deleting keys '%s' to Consul at %s error: %v", ks[0].Key, cu.String(), err)
+		metrics.ConsulRequest("delete-cas", 0, err)
 		return false, err
 	}
 	defer resp.Body.Close()
 	b, _ := ioutil.ReadAll(resp.Body)
 	if resp.StatusCode == http.StatusConflict {
+		metrics.ConsulRequest("delete-cas", 0, ErrConfilct)
 		return false, ErrConfilct
 	}
 	if resp.StatusCode != http.StatusOK {
 		glog.Errorf("Status error contacting Consul (%s) status %d body: %s", cu.String(), resp.StatusCode, string(b))
-		return false, errors.New(resp.Status + ": " + string(b))
+		err := errors.New(resp.Status + ": " + string(b))
+		metrics.ConsulRequest("delete-cas", 0, err)
+		return false, err
 	}
 	if err != nil {
 		glog.Errorf("Error reading response from Consul (%s) error: %v", cu.String(), err)
+		metrics.ConsulRequest("delete-cas", 0, err)
 		return false, err
 	}
+	took := time.Since(start)
+	metrics.ConsulRequest("delete-cas", took, nil)
 	val := string(b)
-	glog.V(model.VERBOSE).Infof("Delete keys result '%s': '%s'", ks[0].Key, val)
+	glog.V(model.VERBOSE).Infof("Delete keys took=%s result '%s': '%s'", took, ks[0].Key, val)
 	return true, nil
 }
