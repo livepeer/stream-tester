@@ -509,7 +509,6 @@ func (mc *mac) addTrigger(triggers mistapi.TriggersMap, name, ownURI, def, param
 }
 
 func (mc *mac) SetupTriggers(ownURI string) error {
-	return nil
 	triggers, err := mc.mapi.GetTriggers()
 	if err != nil {
 		glog.Error(err)
