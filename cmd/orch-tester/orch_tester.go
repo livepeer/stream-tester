@@ -117,7 +117,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	testers.Bucket = *gsBucket
 	testers.CredsJSON = *gsKey
 
@@ -225,6 +224,7 @@ func main() {
 			glog.Error(err)
 			continue
 		}
+
 		// if we haven't found a random sample by now cancel and wait for the backup attempt to complete before returning
 		if *randomSample {
 			cancel()
@@ -690,7 +690,23 @@ func (s *streamerClient) sampleFromPlaylist(mid string) (source, rendition []byt
 	if err != nil {
 		return nil, nil, "", err
 	}
-	renditionPl, err := s.downloadMediaPlaylist(mpl.Variants[rand.Int()%len(mpl.Variants)].URI)
+
+	// Filter source from variants
+	variants := []*m3u8.Variant{}
+	for _, v := range mpl.Variants {
+		uriSplit := strings.Split(v.URI, "/")
+		fName := uriSplit[len(uriSplit)-1]
+		if strings.Contains(fName, "source") {
+			continue
+		}
+		variants = append(variants, v)
+	}
+
+	if len(variants) == 0 {
+		return nil, nil, "", fmt.Errorf("no transcoded renditions in playlist")
+	}
+
+	renditionPl, err := s.downloadMediaPlaylist(variants[rand.Int()%len(variants)].URI)
 	if err != nil {
 		return nil, nil, "", err
 	}
