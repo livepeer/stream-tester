@@ -717,8 +717,7 @@ func (s *streamerClient) sampleFromPlaylist(mid string) (source, rendition []byt
 
 	r := rand.Int()
 	segIdx := r % int(math.Min(float64(renditionPl.Len()), float64(sourcePl.Len())))
-	seqNo := sourcePl.Segments[segIdx].SeqId
-	rendURI := renditionPl.Segments[seqNo].URI
+	rendURI := renditionPl.Segments[segIdx].URI
 	urlSplit := strings.Split(rendURI, "/")
 	fName := urlSplit[len(urlSplit)-1]
 
@@ -728,12 +727,12 @@ func (s *streamerClient) sampleFromPlaylist(mid string) (source, rendition []byt
 	}
 
 	sourceURI := fmt.Sprintf("%v/stream/%v_0_0/source/%v", s.broadcaster, mid, fName)
-	source, err = s.downloadSegment(fmt.Sprintf("%v/%v", s.broadcaster, sourceURI))
+	source, err = s.downloadSegment(sourceURI)
 	if err != nil {
 		return nil, nil, "", err
 	}
 
-	return source, rendition, renditionPl.Segments[seqNo].URI, err
+	return source, rendition, rendURI, err
 }
 
 func (s *streamerClient) downloadSegment(url string) ([]byte, error) {
