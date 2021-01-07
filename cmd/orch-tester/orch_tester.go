@@ -622,7 +622,7 @@ func (s *streamerClient) randomSample(ctx context.Context, mid string, orch stri
 		case <-ctx.Done():
 			glog.Info("random sampler timed out")
 			// If we haven't found the segment try to sample from whatever playlist we can
-			rendition, source, renditionUrl, err = s.sampleFromPlaylist(mid)
+			source, rendition, renditionUrl, err = s.sampleFromPlaylist(mid)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -685,8 +685,8 @@ func (s *streamerClient) sampleFromPlaylist(mid string) (source, rendition []byt
 		return nil, nil, "", err
 	}
 
-	sourceURI := fmt.Sprintf("%v_0_0/source.m3u8", mid)
-	sourcePl, err := s.downloadMediaPlaylist(sourceURI)
+	sourcePlURI := fmt.Sprintf("%v_0_0/source.m3u8", mid)
+	sourcePl, err := s.downloadMediaPlaylist(sourcePlURI)
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -717,18 +717,22 @@ func (s *streamerClient) sampleFromPlaylist(mid string) (source, rendition []byt
 
 	r := rand.Int()
 	segIdx := r % int(math.Min(float64(renditionPl.Len()), float64(sourcePl.Len())))
-	seqNo := sourcePl.Segments[segIdx].SeqId // Assumes that segIdx points to the same seqNo in the slice of sources and renditions
-	rendition, err = s.downloadSegment(fmt.Sprintf("%v/%v", s.broadcaster, renditionPl.Segments[seqNo].URI))
+	rendURI := renditionPl.Segments[segIdx].URI
+	urlSplit := strings.Split(rendURI, "/")
+	fName := urlSplit[len(urlSplit)-1]
+
+	rendition, err = s.downloadSegment(fmt.Sprintf("%v/%v", s.broadcaster, rendURI))
 	if err != nil {
 		return nil, nil, "", err
 	}
 
-	source, err = s.downloadSegment(fmt.Sprintf("%v/%v", s.broadcaster, sourcePl.Segments[seqNo].URI))
+	sourceURI := fmt.Sprintf("%v/stream/%v_0_0/source/%v", s.broadcaster, mid, fName)
+	source, err = s.downloadSegment(sourceURI)
 	if err != nil {
 		return nil, nil, "", err
 	}
 
-	return source, rendition, renditionPl.Segments[seqNo].URI, err
+	return source, rendition, rendURI, err
 }
 
 func (s *streamerClient) downloadSegment(url string) ([]byte, error) {
