@@ -96,14 +96,11 @@ func main() {
 	if *testDuration == 0 {
 		glog.Fatalf("-test-dur should be specified")
 	}
-	if *rtmpTemplate != "" && *hlsTemplate == "" {
-		glog.Fatal("Should also specify -hls-template")
-	}
 	if *rtmpTemplate == "" && *hlsTemplate != "" {
 		glog.Fatal("Should also specify -rtmp-template")
 	}
 	if *apiToken != "" && (*rtmpTemplate != "") {
-		glog.Fatal("Should specify either template or API token")
+		glog.Infof("notice: overriding ingest URL returned by %s with %s", *apiServer, *rtmpTemplate)
 	}
 	if *apiToken == "" && *rtmpTemplate == "" {
 		glog.Fatalf("-api-token or -rtmp-template should be specified")
@@ -188,7 +185,12 @@ func main() {
 				go up.StartUpload(sourceFileName, httpIngestURL, manifestID, 0, waitForTarget, timeToStream, 0)
 				return up, nil
 			}
-			rtmpURL := fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.StreamKey)
+			var rtmpURL string
+			if *rtmpTemplate != "" {
+				rtmpURL = fmt.Sprintf(*rtmpTemplate, stream.StreamKey)
+			} else {
+				rtmpURL = fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.StreamKey)
+			}
 			mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingests[0].Playback, stream.PlaybackID)
 			glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 			glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
