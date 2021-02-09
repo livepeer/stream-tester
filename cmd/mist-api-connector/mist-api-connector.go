@@ -37,7 +37,8 @@ func main() {
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
 	consulURI := fs.String("consul", "", "Base URL to access Consul (for example: http://localhost:8500)")
-	playbackDomain := fs.String("playback-domain", "", "domain to create consul routes for (ex: playback.livepeer.live)")
+	consulPrefix := fs.String("consul-prefix", "", "Prefix to be prepended to all created consul routes e.g. 'nyc-'")
+	playbackDomain := fs.String("playback-domain", "", "regex of domain to create consul routes for (ex: playback.livepeer.live)")
 	mistURL := fs.String("consul-mist-url", "", "external URL of this Mist instance (to be put in Consul) (ex: https://mist-server-0.livepeer.live)")
 	baseStreamName := fs.String("base-stream-name", "", "Base stream name to be used in wildcard-based routing scheme")
 	_ = fs.String("config", "", "config file (optional)")
@@ -74,7 +75,7 @@ func main() {
 			glog.Fatalf("Error parsing Consul URL: %v", err)
 		}
 	}
-	mc := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, consulURL,
+	mc := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, consulURL, *consulPrefix,
 		*playbackDomain, *mistURL, *sendAudio, *baseStreamName)
 	if err := mc.SetupTriggers(*ownURI); err != nil {
 		glog.Fatal(err)

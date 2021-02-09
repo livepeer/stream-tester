@@ -20,7 +20,7 @@ import (
 )
 
 const streamPlaybackPrefix = "playback_"
-const traefikRuleTemplate = "Host(`%s`) && PathPrefix(`/hls/%s/`)"
+const traefikRuleTemplate = "HostRegexp(`%s`) && PathPrefix(`/hls/%s/`)"
 const traefikKeyPathRouters = `traefik/http/routers/`
 const traefikKeyPathServices = `traefik/http/services/`
 const traefikKeyPathMiddlewares = `traefik/http/middlewares/`
@@ -57,6 +57,7 @@ type (
 		mistHot        string
 		checkBandwidth bool
 		consulURL      *url.URL
+		consulPrefix   string
 		mistURL        string
 		playbackDomain string
 		sendAudio      string
@@ -65,7 +66,7 @@ type (
 )
 
 // NewMac ...
-func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, consul *url.URL, playbackDomain, mistURL,
+func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, consul *url.URL, consulPrefix, playbackDomain, mistURL,
 	sendAudio, baseStreamName string) IMac {
 	if balancerHost != "" && !strings.Contains(balancerHost, ":") {
 		balancerHost = balancerHost + ":8042" // must set default port for Mist's Load Balancer
@@ -78,6 +79,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		balancerHost:   balancerHost,
 		pub2id:         make(map[string]string), // public key to stream id
 		consulURL:      consul,
+		consulPrefix:   consulPrefix,
 		mistURL:        mistURL,
 		playbackDomain: playbackDomain,
 		sendAudio:      sendAudio,
@@ -251,11 +253,12 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			if id, has := mc.pub2id[playbackID]; has {
 				glog.Infof("Setting stream's manifestID=%s playbackID=%s active status to false", id, playbackID)
 				if mc.consulURL != nil {
-					go consul.DeleteKey(mc.consulURL, traefikKeyPathRouters+playbackID, true)
+					consulPlaybackID := mc.consulPrefix + playbackID
+					go consul.DeleteKey(mc.consulURL, traefikKeyPathRouters+consulPlaybackID, true)
 					// shouldn't exists with new scheme, but keeping here to clean up routes made with old scheme
-					go consul.DeleteKey(mc.consulURL, traefikKeyPathServices+playbackID, true)
+					go consul.DeleteKey(mc.consulURL, traefikKeyPathServices+consulPlaybackID, true)
 					if mc.baseStreamName != "" {
-						go consul.DeleteKey(mc.consulURL, traefikKeyPathMiddlewares+playbackID, true)
+						go consul.DeleteKey(mc.consulURL, traefikKeyPathMiddlewares+consulPlaybackID, true)
 					}
 				}
 				_, err := mc.lapi.SetActive(id, false)
@@ -381,12 +384,12 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			var err error
 			if mc.baseStreamName != "" {
 				wildcardPlaybackID := mc.wildcardPlaybackID(stream)
-				playbackID := stream.PlaybackID
-				serviceName := serviceNameFromMistURL(mc.mistURL)
+				playbackID := mc.consulPrefix + stream.PlaybackID
+				serviceName := mc.consulPrefix + serviceNameFromMistURL(mc.mistURL)
 				err = consul.PutKeysWithCurrentTime(
 					mc.consulURL,
 					traefikKeyPathRouters+playbackID+"/rule",
-					fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, playbackID),
+					fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, stream.PlaybackID),
 					traefikKeyPathRouters+playbackID+"/service",
 					serviceName,
 					traefikKeyPathRouters+playbackID+"/middlewares/0",
@@ -395,7 +398,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 					playbackID+"-2",
 
 					traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/0",
-					`/hls/`+playbackID,
+					`/hls/`+stream.PlaybackID,
 					traefikKeyPathMiddlewares+playbackID+"-2/addprefix/prefix",
 					`/hls/`+wildcardPlaybackID,
 
