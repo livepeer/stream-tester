@@ -33,6 +33,6 @@ require (
 
 exclude github.com/gosuri/uilive v0.0.4 // cause memory corruption
 
-// replace github.com/livepeer/joy4 => /Users/dark/projects/livepeer/joy4
+replace github.com/livepeer/joy4 => /Users/dark/projects/livepeer/joy4
 
 replace github.com/ethereum/go-ethereum => github.com/ethereum/go-ethereum v1.9.3

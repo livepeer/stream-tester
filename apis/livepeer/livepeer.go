@@ -22,7 +22,7 @@ var ErrNotExists = errors.New("Stream does not exists")
 
 const httpTimeout = 4 * time.Second
 
-var httpClient = &http.Client{
+var defaultHTTPClient = &http.Client{
 	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
 	// Transport: &http2.Transport{AllowHTTP: true},
 	Timeout: httpTimeout,
@@ -36,6 +36,9 @@ const (
 
 	livepeerAPIGeolocateURL = "http://livepeer.live/api/geolocate"
 	ProdServer              = "livepeer.com"
+
+	RecordingStatusWaiting = "waiting"
+	RecordingStatusReady   = "ready"
 )
 
 type (
@@ -44,6 +47,7 @@ type (
 		choosenServer string
 		accessToken   string
 		presets       []string
+		httpClient    *http.Client
 	}
 
 	geoResp struct {
@@ -68,6 +72,7 @@ type (
 		// - P240p30fps4x3
 		// - P144p30fps16x9
 		Profiles []Profile `json:"profiles,omitempty"`
+		Record   bool      `json:"record,omitempty"`
 	}
 
 	// Profile transcoding profile
@@ -104,6 +109,13 @@ type (
 		Errors                     []string  `json:"errors,omitempty"`
 	}
 
+	// UserSession user's sessions
+	UserSession struct {
+		CreateStreamResp
+		RecordingStatus string `json:"recordingStatus,omitempty"` // ready, waiting
+		RecordingURL    string `json:"recordingUrl,omitempty"`
+	}
+
 	// // Profile ...
 	// Profile struct {
 	// 	Fps     int    `json:"fps"`
@@ -128,6 +140,24 @@ func NewLivepeer(livepeerToken, serverOverride string, presets []string) *API {
 		choosenServer: addScheme(serverOverride),
 		accessToken:   livepeerToken,
 		presets:       presets,
+		httpClient:    defaultHTTPClient,
+	}
+}
+
+// NewLivepeer2 creates new Livepeer API object
+func NewLivepeer2(livepeerToken, serverOverride string, presets []string, timeout time.Duration) *API {
+	httpClient := defaultHTTPClient
+	if timeout != 0 {
+		httpClient = &http.Client{
+			Timeout: timeout,
+		}
+
+	}
+	return &API{
+		choosenServer: addScheme(serverOverride),
+		accessToken:   livepeerToken,
+		presets:       presets,
+		httpClient:    httpClient,
 	}
 }
 
@@ -157,7 +187,7 @@ func (lapi *API) Init() {
 		return
 	}
 
-	resp, err := httpClient.Do(uhttp.GetRequest(livepeerAPIGeolocateURL))
+	resp, err := lapi.httpClient.Do(uhttp.GetRequest(livepeerAPIGeolocateURL))
 	if err != nil {
 		glog.Fatalf("Error geolocating Livepeer API server (%s) error: %v", livepeerAPIGeolocateURL, err)
 	}
@@ -183,7 +213,7 @@ func (lapi *API) Init() {
 // Broadcasters returns list of hostnames of broadcasters to use
 func (lapi *API) Broadcasters() ([]string, error) {
 	u := fmt.Sprintf("%s/api/broadcaster", lapi.choosenServer)
-	resp, err := httpClient.Do(uhttp.GetRequest(u))
+	resp, err := lapi.httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
 		glog.Errorf("Error getting broadcasters from Livepeer API server (%s) error: %v", u, err)
 		return nil, err
@@ -223,7 +253,7 @@ func (lapi *API) Ingest(all bool) ([]Ingest, error) {
 	if all {
 		u += "?first=false"
 	}
-	resp, err := httpClient.Do(uhttp.GetRequest(u))
+	resp, err := lapi.httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
 		glog.Errorf("Error getting ingests from Livepeer API server (%s) error: %v", u, err)
 		return nil, err
@@ -299,7 +329,7 @@ func (lapi *API) DeleteStream(id string) error {
 		return err
 	}
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
-	resp, err := httpClient.Do(req)
+	resp, err := lapi.httpClient.Do(req)
 	if err != nil {
 		glog.Errorf("Error deleting Livepeer stream %v", err)
 		return err
@@ -326,6 +356,7 @@ func (lapi *API) CreateStreamEx(name string, profiles ...string) (*CreateStreamR
 	reqs := &createStreamReq{
 		Name:    name,
 		Presets: presets,
+		Record:  true,
 	}
 	if len(presets) == 0 {
 		reqs.Profiles = standardProfiles
@@ -343,7 +374,7 @@ func (lapi *API) CreateStreamEx(name string, profiles ...string) (*CreateStreamR
 	}
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
 	req.Header.Add("Content-Type", "application/json")
-	resp, err := httpClient.Do(req)
+	resp, err := lapi.httpClient.Do(req)
 	if err != nil {
 		glog.Errorf("Error creating Livepeer stream %v", err)
 		return nil, err
@@ -399,6 +430,51 @@ func (lapi *API) GetStream(id string) (*CreateStreamResp, error) {
 	return lapi.getStream(u, "get_by_id")
 }
 
+// GetSessions gets user's sessions for the stream by id
+func (lapi *API) GetSessions(id string) ([]UserSession, error) {
+	if id == "" {
+		return nil, errors.New("empty id")
+	}
+	u := fmt.Sprintf("%s/api/stream/%s/sessions", lapi.choosenServer, id)
+	start := time.Now()
+	req := uhttp.GetRequest(u)
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	resp, err := lapi.httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error getting sessions for stream by id from Livepeer API server (%s) error: %v", u, err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		glog.Errorf("Status error getting sessions for stream by id Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, ErrNotExists
+		}
+		err := errors.New(http.StatusText(resp.StatusCode))
+		return nil, err
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error getting sessions for stream by id Livepeer API server (%s) error: %v", u, err)
+		return nil, err
+	}
+	took := time.Since(start)
+	glog.V(model.DEBUG).Infof("sessions request for id=%s took=%s", id, took)
+	bs := string(b)
+	glog.V(model.VERBOSE).Info(bs)
+	if bs == "null" || bs == "" {
+		// API return null if stream does not exists
+		return nil, ErrNotExists
+	}
+	r := []UserSession{}
+	err = json.Unmarshal(b, &r)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
 // SetActive set isActive
 func (lapi *API) SetActive(id string, active bool) (bool, error) {
 	if id == "" {
@@ -417,7 +493,7 @@ func (lapi *API) SetActive(id string, active bool) (bool, error) {
 	}
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
 	req.Header.Add("Content-Type", "application/json")
-	resp, err := httpClient.Do(req)
+	resp, err := lapi.httpClient.Do(req)
 	if err != nil {
 		glog.Errorf("id=%s/setactive Error set active %v", id, err)
 		metrics.APIRequest("set_active", 0, err)
@@ -441,7 +517,7 @@ func (lapi *API) getStream(u, rType string) (*CreateStreamResp, error) {
 	start := time.Now()
 	req := uhttp.GetRequest(u)
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
-	resp, err := httpClient.Do(req)
+	resp, err := lapi.httpClient.Do(req)
 	if err != nil {
 		glog.Errorf("Error getting stream by id from Livepeer API server (%s) error: %v", u, err)
 		metrics.APIRequest(rType, 0, err)

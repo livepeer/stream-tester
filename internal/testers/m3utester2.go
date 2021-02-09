@@ -319,7 +319,10 @@ func (mut *m3utester2) workerLoop() {
 			}
 
 		case dres := <-mut.driftCheckResults:
-			// glog.Infof("MAIN downloaded: %s", dres.String2())
+			glog.Infof("MAIN downloaded: %s", dres.String2())
+			if dres.timeAtFirstPlace.IsZero() {
+
+			}
 			// continue
 			if _, has := results[dres.resolution]; !has {
 				results[dres.resolution] = make([]*downloadResult, 0, 128)
@@ -727,7 +730,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 			if !dres.timeAtFirstPlace.IsZero() {
 				for i := len(results) - 1; i >= 0; i-- {
 					r := results[i]
-					if r.seqNo == dres.seqNo && r.name == r.name {
+					if r.seqNo == dres.seqNo && dres.name == r.name {
 						r.timeAtFirstPlace = dres.timeAtFirstPlace
 						masterDR <- r
 						break
@@ -817,7 +820,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 				latencyResults <- &latencyResult{name: dres.name, resolution: ms.resolution, seqNo: dres.seqNo, latency: latency,
 					speedRatio: speedRatio, successRate: successRate}
 			}
-			// masterDR <- dres
+			masterDR <- dres
 			results = append(results, dres)
 			sort.Slice(results, func(i, j int) bool {
 				return results[i].appTime.Before(results[j].appTime)
