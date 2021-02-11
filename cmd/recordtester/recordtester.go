@@ -154,7 +154,7 @@ func main() {
 	}
 	glog.Infof("All cool!")
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	stream, err := lapi.CreateStreamEx(streamName)
+	stream, err := lapi.CreateStreamEx(streamName, "P240p30fps16x9")
 	if err != nil {
 		glog.Errorf("Error creating stream using Livepeer API: %v", err)
 		exit(253, fileName, *fileArg, err)
@@ -171,10 +171,10 @@ func main() {
 	glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
 
 	sr2 := testers.NewStreamer2(gctx, false, false, false, false, false)
-	// go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, *testDuration)
+	go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, *testDuration)
 
-	uploader := testers.NewRtmpStreamer(gctx, rtmpURL)
-	uploader.StartUpload(fileName, rtmpURL, -1, 30*time.Second)
+	// uploader := testers.NewRtmpStreamer(gctx, rtmpURL)
+	// uploader.StartUpload(fileName, rtmpURL, -1, 30*time.Second)
 
 	exitc := make(chan os.Signal, 1)
 	signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
