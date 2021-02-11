@@ -96,11 +96,11 @@ func main() {
 	if *testDuration == 0 {
 		glog.Fatalf("-test-dur should be specified")
 	}
-	if *rtmpTemplate == "" && *hlsTemplate != "" {
-		glog.Fatal("Should also specify -rtmp-template")
-	}
 	if *apiToken != "" && (*rtmpTemplate != "") {
 		glog.Infof("notice: overriding ingest URL returned by %s with %s", *apiServer, *rtmpTemplate)
+	}
+	if *apiToken != "" && (*hlsTemplate != "") {
+		glog.Infof("notice: overriding playback URL returned by %s with %s", *apiServer, *hlsTemplate)
 	}
 	if *apiToken == "" && *rtmpTemplate == "" {
 		glog.Fatalf("-api-token or -rtmp-template should be specified")
@@ -191,7 +191,13 @@ func main() {
 			} else {
 				rtmpURL = fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.StreamKey)
 			}
-			mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingests[0].Playback, stream.PlaybackID)
+
+			var mediaURL string
+			if *hlsTemplate != "" {
+				mediaURL = fmt.Sprintf(*hlsTemplate, stream.PlaybackID)
+			} else {
+				mediaURL = fmt.Sprintf("%s/%s/index.m3u8", ingests[0].Playback, stream.PlaybackID)
+			}
 			glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 			glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
 			sr2 := testers.NewStreamer2(ctx, false, false, false, false, false)
