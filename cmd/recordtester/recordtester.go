@@ -23,8 +23,45 @@ import (
 	"github.com/peterbourgon/ff/v2"
 )
 
+const useForceURL = false
+
 func init() {
 	format.RegisterAll()
+}
+
+var standardProfiles = []livepeer.Profile{
+	{
+		Name:    "240p0",
+		Fps:     0,
+		Bitrate: 250000,
+		Width:   426,
+		Height:  240,
+		Gop:     "2.0",
+	},
+	{
+		Name:    "360p0",
+		Fps:     0,
+		Bitrate: 800000,
+		Width:   640,
+		Height:  360,
+		Gop:     "2.0",
+	},
+	{
+		Name:    "480p0",
+		Fps:     0,
+		Bitrate: 1600000,
+		Width:   854,
+		Height:  480,
+		Gop:     "2.0",
+	},
+	{
+		Name:    "720p0",
+		Fps:     0,
+		Bitrate: 3000000,
+		Width:   1280,
+		Height:  720,
+		Gop:     "2.0",
+	},
 }
 
 func main() {
@@ -77,6 +114,12 @@ func main() {
 	var err error
 	var fileName string
 
+	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
+	defer gcancel()
+	// es := checkDown(gctx, "https://fra-cdn.livepeer.monster/recordings/474a6bc4-94fd-469d-a8c4-ec94bceb0323/index.m3u8", *testDuration)
+	// os.Exit(es)
+	// return
+
 	// if *profiles == 0 {
 	// 	fmt.Println("Number of profiles couldn't be set to zero")
 	// 	os.Exit(1)
@@ -118,8 +161,6 @@ func main() {
 		}
 		os.Exit(exitCode)
 	}
-	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
-	defer gcancel()
 	lapi = livepeer.NewLivepeer2(*apiToken, *apiServer, nil, 8*time.Second)
 	lapi.Init()
 	glog.Infof("Choosen server: %s", lapi.GetServer())
@@ -154,7 +195,7 @@ func main() {
 	}
 	glog.Infof("All cool!")
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	stream, err := lapi.CreateStreamEx(streamName, "P240p30fps16x9")
+	stream, err := lapi.CreateStreamEx(streamName, nil, standardProfiles...)
 	if err != nil {
 		glog.Errorf("Error creating stream using Livepeer API: %v", err)
 		exit(253, fileName, *fileArg, err)
@@ -190,7 +231,7 @@ func main() {
 	glog.Infof("Streaming stread id=%s done, waiting 10 seconds", stream.ID)
 	time.Sleep(10 * time.Second)
 	// now get sessions
-	sessions, err := lapi.GetSessions(stream.ID)
+	sessions, err := lapi.GetSessions(stream.ID, false)
 	if err != nil {
 		glog.Errorf("Error getting sessions for stream id=%s err=%v", stream.ID, err)
 		exit(252, fileName, *fileArg, err)
@@ -211,9 +252,13 @@ func main() {
 	}
 
 	glog.Info("Streaming done, waiting for recording URL to appear")
-	time.Sleep(5 * time.Minute)
+	if useForceURL {
+		time.Sleep(5 * time.Second)
+	} else {
+		time.Sleep(6*time.Minute + 20*time.Second)
+	}
 
-	sessions, err = lapi.GetSessions(stream.ID)
+	sessions, err = lapi.GetSessions(stream.ID, useForceURL)
 	if err != nil {
 		glog.Errorf("Error getting sessions for stream id=%s err=%v", stream.ID, err)
 		exit(252, fileName, *fileArg, err)
@@ -235,10 +280,36 @@ func main() {
 	// downloader := testers.NewM3utester2(gctx, sess.RecordingURL, false, false, false, false, 5*time.Second, nil)
 	// <-downloader.Done()
 	// glog.Infof(`Pulling stopped after %s`, time.Since(started))
-
 	// exit(55, fileName, *fileArg, err)
-
 	glog.Info("Done")
 	// lapi.DeleteStream(stream.ID)
 	// exit(0, fileName, *fileArg, err)
+	es := checkDown(gctx, sess.RecordingURL, *testDuration)
+	if es == 0 {
+		lapi.DeleteStream(stream.ID)
+		// exit(0, fileName, *fileArg, err)
+	}
+	exit(es, fileName, *fileArg, err)
+}
+
+func checkDown(gctx context.Context, url string, streamDuration time.Duration) int {
+	es := 0
+	started := time.Now()
+	downloader := testers.NewM3utester2(gctx, url, false, false, false, false, 5*time.Second, nil)
+	<-downloader.Done()
+	glog.Infof(`Pulling stopped after %s`, time.Since(started))
+	vs := downloader.VODStats()
+	if len(vs.SegmentsNum) != len(standardProfiles)+1 {
+		glog.Warningf("Number of renditions doesn't match! Has %d should %d", len(vs.SegmentsNum), len(standardProfiles)+1)
+		es = 35
+	}
+	glog.Infof("Stats: %s", vs.String())
+	glog.Infof("Stats raw: %+v", vs)
+	if !vs.IsOk(streamDuration) {
+		glog.Warningf("NOT OK!")
+		es = 36
+	} else {
+		glog.Infoln("All ok!")
+	}
+	return es
 }

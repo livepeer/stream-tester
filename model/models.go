@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/glog"
 	"golang.org/x/text/message"
 )
 
@@ -67,6 +68,12 @@ type IFinite interface {
 	Finished() bool
 }
 
+// IVODTester ...
+type IVODTester interface {
+	IFinite
+	VODStats() VODStats
+}
+
 // ILoadTester gerenal purpose load tester
 type ILoadTester interface {
 	IFinite
@@ -115,6 +122,67 @@ type Latencies struct {
 	P50 time.Duration `json:"p_50"`
 	P95 time.Duration `json:"p_95"`
 	P99 time.Duration `json:"p_99"`
+}
+
+// VODStats stats
+type VODStats struct {
+	SegmentsAll    int
+	DurationAll    time.Duration
+	SegmentsNum    map[string]int
+	SegmentsDur    map[string]time.Duration
+	ParseErrors    int
+	DownloadErrors int
+	ErrorsDet      map[string]int
+}
+
+// IsOk can we consider download successful
+func (vs *VODStats) IsOk(streamDuration time.Duration) bool {
+	if len(vs.SegmentsDur) == 0 {
+		return false
+	}
+	ok := true
+	lsn := 0
+	lres := ""
+	var ldur time.Duration
+
+	for res, sn := range vs.SegmentsNum {
+		if lsn > 0 {
+			diff := lsn - sn
+			if diff < 0 {
+				diff = -diff
+			}
+			if diff > 1 {
+				ok = false
+				glog.Warningf("number of segments between %s and %s differ by %d", lres, res, diff)
+			}
+		}
+		if ldur > 0 {
+			durDiff := ldur - vs.SegmentsDur[res]
+			if durDiff < 0 {
+				durDiff = -durDiff
+			}
+			if durDiff > 3*time.Second {
+				ok = false
+				glog.Warningf("duration of stream between %s and %s differ by %s", lres, res, durDiff)
+			}
+		}
+		lsn = sn
+		lres = res
+		ldur = vs.SegmentsDur[res]
+		if 1-float64(ldur)/float64(streamDuration-2*time.Second) > 0.1 { // 10%
+			ok = false
+			glog.Warningf("media stream %s has duration %s but should be %s", res, ldur, streamDuration)
+		}
+	}
+	return ok
+}
+
+func (vs *VODStats) String() string {
+	durs := make([]string, 0, len(vs.SegmentsDur))
+	for res, sn := range vs.SegmentsNum {
+		durs = append(durs, fmt.Sprintf("%s: %s segs %d", res, vs.SegmentsDur[res].String(), sn))
+	}
+	return fmt.Sprintf("%s; ParseErrors: %d", strings.Join(durs, "; "), vs.ParseErrors)
 }
 
 // StatsMany stats for load tester

@@ -75,6 +75,7 @@ type (
 		stats                  model.Stats1
 		mu                     sync.Mutex
 		globalError            error
+		allResults             map[string][]*downloadResult
 	}
 
 	// m3uMediaStream downloads media stream. Hadle stream changes
@@ -115,7 +116,7 @@ type (
 
 // NewM3utester2 pubic method
 func NewM3utester2(pctx context.Context, u string, wowzaMode, mistMode, failIfTranscodingStops, save bool,
-	waitForTarget time.Duration, sm *segmentsMatcher) model.IFinite {
+	waitForTarget time.Duration, sm *segmentsMatcher) model.IVODTester {
 
 	return newM3utester2(pctx, u, wowzaMode, mistMode, failIfTranscodingStops, save, true, waitForTarget, sm)
 }
@@ -144,11 +145,36 @@ func newM3utester2(pctx context.Context, u string, wowzaMode, mistMode, failIfTr
 		driftCheckResults:      make(chan *downloadResult, 32),
 		latencyResults:         make(chan *latencyResult, 32),
 		segmentsMatcher:        sm,
+		allResults:             make(map[string][]*downloadResult),
 	}
 	mut.stats.Started = true
 	go mut.workerLoop()
 	go mut.manifestPullerLoop(waitForTarget)
 	return mut
+}
+
+func (mut *m3utester2) VODStats() model.VODStats {
+	vs := model.VODStats{
+		SegmentsNum: make(map[string]int),
+		SegmentsDur: make(map[string]time.Duration),
+	}
+	glog.Infof("==> all results: %+v", mut.allResults)
+	for resolution, drs := range mut.allResults {
+		if mut.sourceRes == resolution {
+		} else {
+		}
+		for _, seg := range drs {
+			vs.SegmentsDur[resolution] += seg.duration
+			vs.SegmentsNum[resolution]++
+			vs.SegmentsAll++
+			vs.DurationAll += seg.duration
+			if seg.videoParseError != nil {
+				vs.ParseErrors++
+			}
+		}
+
+	}
+	return vs
 }
 
 func (mut *m3utester2) doSavePlaylist() {
@@ -319,11 +345,14 @@ func (mut *m3utester2) workerLoop() {
 			}
 
 		case dres := <-mut.driftCheckResults:
-			glog.Infof("MAIN downloaded: %s", dres.String2())
 			if dres.timeAtFirstPlace.IsZero() {
-
+				glog.Infof("MAIN downloaded: %s", dres.String2())
+				// if _, has := mut.allResults[dres.resolution]; !has {
+				// 	results[dres.resolution] = make([]*downloadResult, 0, 128)
+				// }
+				mut.allResults[dres.resolution] = append(mut.allResults[dres.resolution], dres)
+				continue
 			}
-			// continue
 			if _, has := results[dres.resolution]; !has {
 				results[dres.resolution] = make([]*downloadResult, 0, 128)
 				seenResolutions = append(seenResolutions, dres.resolution)

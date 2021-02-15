@@ -312,8 +312,8 @@ var standardProfiles = []Profile{
 }
 
 // CreateStream creates stream with specified name and profiles
-func (lapi *API) CreateStream(name string, profiles ...string) (string, error) {
-	csr, err := lapi.CreateStreamEx(name, profiles...)
+func (lapi *API) CreateStream(name string, presets ...string) (string, error) {
+	csr, err := lapi.CreateStreamEx(name, presets)
 	if err != nil {
 		return "", err
 	}
@@ -347,12 +347,12 @@ func (lapi *API) DeleteStream(id string) error {
 }
 
 // CreateStreamEx creates stream with specified name and profiles
-func (lapi *API) CreateStreamEx(name string, profiles ...string) (*CreateStreamResp, error) {
-	presets := profiles
-	if len(presets) == 0 {
-		presets = lapi.presets
-	}
-	glog.Infof("Creating Livepeer stream '%s' with profile '%v'", name, presets)
+func (lapi *API) CreateStreamEx(name string, presets []string, profiles ...Profile) (*CreateStreamResp, error) {
+	// presets := profiles
+	// if len(presets) == 0 {
+	// 	presets = lapi.presets
+	// }
+	glog.Infof("Creating Livepeer stream '%s' with presets '%v' and profiles %+v", name, presets, profiles)
 	reqs := &createStreamReq{
 		Name:    name,
 		Presets: presets,
@@ -360,6 +360,9 @@ func (lapi *API) CreateStreamEx(name string, profiles ...string) (*CreateStreamR
 	}
 	if len(presets) == 0 {
 		reqs.Profiles = standardProfiles
+	}
+	if len(profiles) > 0 {
+		reqs.Profiles = profiles
 	}
 	b, err := json.Marshal(reqs)
 	if err != nil {
@@ -431,11 +434,14 @@ func (lapi *API) GetStream(id string) (*CreateStreamResp, error) {
 }
 
 // GetSessions gets user's sessions for the stream by id
-func (lapi *API) GetSessions(id string) ([]UserSession, error) {
+func (lapi *API) GetSessions(id string, forceUrl bool) ([]UserSession, error) {
 	if id == "" {
 		return nil, errors.New("empty id")
 	}
 	u := fmt.Sprintf("%s/api/stream/%s/sessions", lapi.choosenServer, id)
+	if forceUrl {
+		u += "?forceUrl=1"
+	}
 	start := time.Now()
 	req := uhttp.GetRequest(u)
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)

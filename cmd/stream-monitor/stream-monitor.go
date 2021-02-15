@@ -116,7 +116,7 @@ func main() {
 		}
 		glog.Infof("Got broadcasters: %+v", broadcasters)
 		streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format(time.RFC3339Nano))
-		stream, err := lapi.CreateStreamEx(streamName)
+		stream, err := lapi.CreateStreamEx(streamName, nil)
 		if err != nil {
 			panic(err)
 		}
