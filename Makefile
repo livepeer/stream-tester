@@ -25,6 +25,10 @@ lapi:
 mapi:
 	go build -ldflags="$(ldflags)" cmd/mapi/mapi.go
 
+.PHONY: recordtester
+recordtester:
+	go build -ldflags="$(ldflags)" cmd/recordtester/recordtester.go
+
 .PHONY: connector
 connector:
 	go build -ldflags="$(ldflags)" cmd/mist-api-connector/mist-api-connector.go
