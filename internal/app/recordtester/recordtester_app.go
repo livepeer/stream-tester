@@ -17,7 +17,7 @@ type (
 	// IRecordTester ...
 	IRecordTester interface {
 		// Start start test. Blocks until finished.
-		Start(fileName string, testDuration time.Duration) (int, error)
+		Start(fileName string, testDuration, pauseDuration time.Duration) (int, error)
 		Cancel()
 		Done() <-chan struct{}
 		VODStats() model.VODStats
@@ -79,7 +79,7 @@ func NewRecordTester(gctx context.Context, lapi *livepeer.API, useForceURL bool)
 	return rt
 }
 
-func (rt *recordTester) Start(fileName string, testDuration time.Duration) (int, error) {
+func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.Duration) (int, error) {
 	defer rt.cancel()
 	ingests, err := rt.lapi.Ingest(false)
 	if err != nil {
@@ -129,7 +129,7 @@ func (rt *recordTester) Start(fileName string, testDuration time.Duration) (int,
 	sr2 := testers.NewStreamer2(rt.ctx, false, false, false, false, false)
 	go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
 	<-sr2.Done()
-	glog.Infof("Streaming stread id=%s done, waiting 10 seconds", stream.ID)
+	glog.Infof("Streaming stream id=%s done", stream.ID)
 	stats, err := sr2.Stats()
 	if err != nil {
 		glog.Warning("Stats returned error err=%v", err)
@@ -141,6 +141,27 @@ func (rt *recordTester) Start(fileName string, testDuration time.Duration) (int,
 		return 20, fmt.Errorf("context cancelled")
 	default:
 	}
+	if pauseDuration > 0 {
+		glog.Infof("Pause specified, waiting %s before streaming second time", pauseDuration)
+		time.Sleep(pauseDuration)
+		sr2 := testers.NewStreamer2(rt.ctx, false, false, false, false, false)
+		go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
+		<-sr2.Done()
+		glog.Infof("Streaming second stream id=%s done", stream.ID)
+		stats, err := sr2.Stats()
+		if err != nil {
+			glog.Warning("Stats returned error err=%v", err)
+			return 21, err
+		}
+		glog.Infof("Streaming second time success rate=%v", stats.SuccessRate)
+		select {
+		case <-rt.ctx.Done():
+			return 20, fmt.Errorf("context cancelled")
+		default:
+		}
+		testDuration *= 2
+	}
+	glog.Infof("Waiting 10 seconds")
 	time.Sleep(10 * time.Second)
 	// now get sessions
 	sessions, err := rt.lapi.GetSessions(stream.ID, false)
@@ -158,7 +179,7 @@ func (rt *recordTester) Start(fileName string, testDuration time.Duration) (int,
 	}
 	sess := sessions[0]
 	if len(sess.Profiles) != len(stream.Profiles) {
-		err := fmt.Errorf("Got %d, but should have", len(sess.Profiles), len(stream.Profiles))
+		err := fmt.Errorf("Got %d, but should have %d", len(sess.Profiles), len(stream.Profiles))
 		return 251, err
 		// exit(251, fileName, *fileArg, err)
 	}

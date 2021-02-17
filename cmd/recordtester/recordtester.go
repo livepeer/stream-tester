@@ -23,7 +23,7 @@ import (
 	"github.com/peterbourgon/ff/v2"
 )
 
-const useForceURL = false
+const useForceURL = true
 
 func init() {
 	format.RegisterAll()
@@ -40,6 +40,7 @@ func main() {
 
 	// startDelay := fs.Duration("start-delay", 0*time.Second, "time delay before start")
 	testDuration := fs.Duration("test-dur", 0, "How long to run overall test")
+	pauseDuration := fs.Duration("pause-dur", 0, "How long to wait between two consecutive RTMP streams that will comprise one user session")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
 	// httpIngest := fs.Bool("http-ingest", false, "Use Livepeer HTTP HLS ingest")
@@ -73,7 +74,11 @@ func main() {
 	model.ProfilesNum = 0
 
 	if *fileArg == "" {
-		fmt.Println("Should provide -file argumnet")
+		fmt.Println("Should provide -file argument")
+		os.Exit(1)
+	}
+	if *pauseDuration > 5*time.Minute {
+		fmt.Println("Pause should be less than 5 min")
 		os.Exit(1)
 	}
 	var err error
@@ -152,6 +157,6 @@ func main() {
 		time.Sleep(2 * time.Second)
 		// exit(0, fn, fa, nil)
 	}(fileName, *fileArg)
-	es, err := rt.Start(fileName, *testDuration)
+	es, err := rt.Start(fileName, *testDuration, *pauseDuration)
 	exit(es, fileName, *fileArg, err)
 }
