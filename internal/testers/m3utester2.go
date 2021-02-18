@@ -346,7 +346,7 @@ func (mut *m3utester2) workerLoop() {
 
 		case dres := <-mut.driftCheckResults:
 			if dres.timeAtFirstPlace.IsZero() {
-				glog.Infof("MAIN downloaded: %s", dres.String2())
+				glog.V(model.VVERBOSE).Infof("MAIN downloaded: %s", dres.String2())
 				// if _, has := mut.allResults[dres.resolution]; !has {
 				// 	results[dres.resolution] = make([]*downloadResult, 0, 128)
 				// }
