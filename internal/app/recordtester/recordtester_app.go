@@ -106,7 +106,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 254, errors.New("Empty list of ingests")
 		// exit(254, fileName, *fileArg, errors.New("Empty list of ingests"))
 	}
-	glog.Infof("All cool!")
+	// glog.Infof("All cool!")
 	hostName, _ := os.Hostname()
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	stream, err := rt.lapi.CreateStreamEx(streamName, nil, standardProfiles...)
@@ -205,9 +205,13 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	glog.Infof("Sessions: %+v", sessions)
 
 	sess = sessions[0]
-	if sess.RecordingStatus != livepeer.RecordingStatusReady {
-		err := fmt.Errorf("Recording status is %s but should be %s", sess.RecordingStatus, livepeer.RecordingStatusReady)
-		return 250, err
+	statusShould := livepeer.RecordingStatusReady
+	if rt.useForceURL {
+		statusShould = livepeer.RecordingStatusWaiting
+	}
+	if sess.RecordingStatus != statusShould {
+		err := fmt.Errorf("Recording status is %s but should be %s", sess.RecordingStatus, statusShould)
+		return 240, err
 		// exit(250, fileName, *fileArg, err)
 	}
 	if sess.RecordingURL == "" {
@@ -225,7 +229,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	glog.Info("Done")
 	// lapi.DeleteStream(stream.ID)
 	// exit(0, fileName, *fileArg, err)
-	es := rt.checkDown(sess.RecordingURL, testDuration)
+	es := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
 	if es == 0 {
 		rt.lapi.DeleteStream(stream.ID)
 		// exit(0, fileName, *fileArg, err)
@@ -236,21 +240,21 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	return es, nil
 }
 
-func (rt *recordTester) checkDown(url string, streamDuration time.Duration) int {
+func (rt *recordTester) checkDown(stream *livepeer.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) int {
 	es := 0
 	started := time.Now()
 	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil)
 	<-downloader.Done()
-	glog.Infof(`Pulling stopped after %s`, time.Since(started))
+	glog.Infof(`Pulling for %s (%s) stopped after %s`, stream.ID, stream.PlaybackID, time.Since(started))
 	vs := downloader.VODStats()
 	rt.vodeStats = vs
 	if len(vs.SegmentsNum) != len(standardProfiles)+1 {
 		glog.Warningf("Number of renditions doesn't match! Has %d should %d", len(vs.SegmentsNum), len(standardProfiles)+1)
 		es = 35
 	}
-	glog.Infof("Stats: %s", vs.String())
-	glog.Infof("Stats raw: %+v", vs)
-	if !vs.IsOk(streamDuration) {
+	glog.Infof("Stats for %s: %s", stream.ID, vs.String())
+	glog.Infof("Stats for %s raw: %+v", stream.ID, vs)
+	if !vs.IsOk(streamDuration, doubled) {
 		glog.Warningf("NOT OK!")
 		es = 36
 	} else {

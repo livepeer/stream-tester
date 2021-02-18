@@ -136,7 +136,7 @@ type VODStats struct {
 }
 
 // IsOk can we consider download successful
-func (vs *VODStats) IsOk(streamDuration time.Duration) bool {
+func (vs *VODStats) IsOk(streamDuration time.Duration, doubled bool) bool {
 	if len(vs.SegmentsDur) == 0 {
 		return false
 	}
@@ -144,6 +144,14 @@ func (vs *VODStats) IsOk(streamDuration time.Duration) bool {
 	lsn := 0
 	lres := ""
 	var ldur time.Duration
+	segDiffShould := 1
+	if doubled {
+		segDiffShould = 2
+	}
+	durDiffShould := 3 * time.Second
+	if doubled {
+		durDiffShould *= durDiffShould
+	}
 
 	for res, sn := range vs.SegmentsNum {
 		if lsn > 0 {
@@ -151,7 +159,7 @@ func (vs *VODStats) IsOk(streamDuration time.Duration) bool {
 			if diff < 0 {
 				diff = -diff
 			}
-			if diff > 1 {
+			if diff > segDiffShould {
 				ok = false
 				glog.Warningf("number of segments between %s and %s differ by %d", lres, res, diff)
 			}
@@ -161,7 +169,7 @@ func (vs *VODStats) IsOk(streamDuration time.Duration) bool {
 			if durDiff < 0 {
 				durDiff = -durDiff
 			}
-			if durDiff > 3*time.Second {
+			if durDiff > durDiffShould {
 				ok = false
 				glog.Warningf("duration of stream between %s and %s differ by %s", lres, res, durDiff)
 			}
