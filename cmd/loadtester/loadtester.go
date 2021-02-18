@@ -169,7 +169,7 @@ func main() {
 			manifestID := fmt.Sprintf("%s_%d", hostName, id)
 			id++
 			mu.Unlock()
-			stream, err := lapi.CreateStreamEx(manifestID, nil)
+			stream, err := lapi.CreateStreamEx(manifestID, false, nil)
 			if err != nil {
 				glog.Errorf("Error creating stream using Livepeer API: %v", err)
 				return nil, err

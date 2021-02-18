@@ -109,7 +109,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	// glog.Infof("All cool!")
 	hostName, _ := os.Hostname()
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	stream, err := rt.lapi.CreateStreamEx(streamName, nil, standardProfiles...)
+	stream, err := rt.lapi.CreateStreamEx(streamName, true, nil, standardProfiles...)
 	if err != nil {
 		glog.Errorf("Error creating stream using Livepeer API: %v", err)
 		// exit(253, fileName, *fileArg, err)

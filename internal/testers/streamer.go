@@ -227,7 +227,7 @@ func (sr *streamer) startStreams(baseManfistID, sourceFileName string, repeatNum
 			rtmpURL := fmt.Sprintf(rtmpURLTemplate, bhost, nRtmpPort, manifestID)
 			mediaURL := fmt.Sprintf(mediaURLTemplate, mhost, nMediaPort, manifestID)
 			if sr.lapi != nil {
-				stream, err := sr.lapi.CreateStreamEx(manifestID, nil)
+				stream, err := sr.lapi.CreateStreamEx(manifestID, false, nil)
 				if err != nil {
 					glog.Fatalf("Error creating stream using Livepeer API: %v", err)
 					// return err

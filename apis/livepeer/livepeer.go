@@ -347,7 +347,7 @@ func (lapi *API) DeleteStream(id string) error {
 }
 
 // CreateStreamEx creates stream with specified name and profiles
-func (lapi *API) CreateStreamEx(name string, presets []string, profiles ...Profile) (*CreateStreamResp, error) {
+func (lapi *API) CreateStreamEx(name string, record bool, presets []string, profiles ...Profile) (*CreateStreamResp, error) {
 	// presets := profiles
 	// if len(presets) == 0 {
 	// 	presets = lapi.presets
@@ -356,7 +356,7 @@ func (lapi *API) CreateStreamEx(name string, presets []string, profiles ...Profi
 	reqs := &createStreamReq{
 		Name:    name,
 		Presets: presets,
-		Record:  true,
+		Record:  record,
 	}
 	if len(presets) == 0 {
 		reqs.Profiles = standardProfiles

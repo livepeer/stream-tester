@@ -323,7 +323,7 @@ func main() {
 		}
 		glog.Infof("Got ingests: %+v", ingests)
 		streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format(time.RFC3339Nano))
-		stream, err := lapi.CreateStreamEx(streamName, nil)
+		stream, err := lapi.CreateStreamEx(streamName, false, nil)
 		if err != nil {
 			panic(err)
 		}
