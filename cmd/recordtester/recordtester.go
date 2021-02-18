@@ -36,7 +36,7 @@ func main() {
 	flag.Set("logtostderr", "true")
 	vFlag := flag.Lookup("v")
 
-	fs := flag.NewFlagSet("loadteter", flag.ExitOnError)
+	fs := flag.NewFlagSet("recordtester", flag.ExitOnError)
 
 	verbosity := fs.String("v", "", "Log verbosity.  {4|5|6}")
 	version := fs.Bool("version", false, "Print out the version")
@@ -56,13 +56,13 @@ func main() {
 	ff.Parse(fs, os.Args[1:],
 		ff.WithConfigFileFlag("config"),
 		ff.WithConfigFileParser(ff.PlainParser),
-		ff.WithEnvVarPrefix("LOADTESTER"),
+		ff.WithEnvVarPrefix("RECORDTESTER"),
 	)
 	flag.CommandLine.Parse(nil)
 	vFlag.Value.Set(*verbosity)
 
 	hostName, _ := os.Hostname()
-	fmt.Println("Loadtester version: " + model.Version)
+	fmt.Println("Recordtester version: " + model.Version)
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
 	fmt.Printf("Production: %v\n", model.Production)
