@@ -313,7 +313,7 @@ var standardProfiles = []Profile{
 
 // CreateStream creates stream with specified name and profiles
 func (lapi *API) CreateStream(name string, presets ...string) (string, error) {
-	csr, err := lapi.CreateStreamEx(name, presets)
+	csr, err := lapi.CreateStreamEx(name, false, presets)
 	if err != nil {
 		return "", err
 	}
