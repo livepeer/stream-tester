@@ -25,7 +25,7 @@ import (
 	"github.com/peterbourgon/ff/v2"
 )
 
-const useForceURL = false
+const useForceURL = true
 
 func init() {
 	format.RegisterAll()
@@ -132,6 +132,9 @@ func main() {
 		cleanup(fn, fa)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
+		}
+		if exitCode != 0 {
+			glog.Errorf("Record test failed exitCode=%d err=%v", exitCode, err)
 		}
 		os.Exit(exitCode)
 	}
