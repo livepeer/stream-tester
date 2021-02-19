@@ -223,7 +223,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			}
 		}
 		// We should get this in two cases:
-		// 1. When in RTMP_PUSH_REWRITE we got request for unknown stream and thus
+		// 1. When in PUSH_REWRITE we got request for unknown stream and thus
 		//    haven't created new stream in Mist
 		// 2. When someone pulls HLS for stream that exists but is not active (no
 		//    RTMP stream coming in).
@@ -274,35 +274,50 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		w.Write([]byte("yes"))
 		return
 	}
-	if trigger != "RTMP_PUSH_REWRITE" {
+	if trigger != "PUSH_REWRITE" {
 		glog.Errorf("Got unsupported trigger: '%s'", trigger)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
 		return
 	}
-	if len(lines) < 2 {
-		glog.Errorf("Expected 2 lines, got %d, request \n%s", len(lines), bs)
+	if len(lines) != 3 {
+		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), bs)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
 		return
 	}
 	// glog.V(model.INSANE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
 	pu, err := url.Parse(lines[0])
-	responseURL := lines[0]
 	if err != nil {
 		glog.Errorf("Error parsing url=%s err=%v", lines[0], err)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
 		return
 	}
-	pp := strings.Split(pu.Path, "/")
-	if len(pp) != 3 {
-		glog.Errorf("URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
+	var streamKey string
+	if pu.Scheme == "rtmp" {
+		pp := strings.Split(pu.Path, "/")
+		if len(pp) != 3 {
+			glog.Errorf("URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("false"))
+			return
+		}
+		streamKey = pp[2]
+	} else if pu.Scheme == "srt" {
+		streamKey = pu.Query().Get("streamid")
+		if streamKey == "" {
+			glog.Errorf("missing SRT stream id")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("false"))
+			return
+		}
+	} else {
+		glog.Errorf("Unknown scheme: %s", pu.Scheme)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
 		return
 	}
-	streamKey := pp[2]
 	glog.V(model.VVERBOSE).Infof("Requested stream key is '%s'", streamKey)
 	// ask API
 	stream, err := mc.lapi.GetStreamByKey(streamKey)
@@ -338,6 +353,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}
 	doLogRequestEnd = true
 
+	var responseName string
 	if stream.PlaybackID != "" {
 		mc.mu.Lock()
 		defer mc.mu.Unlock()
@@ -348,12 +364,10 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			streamKey = streamPlaybackPrefix + streamKey
 		}
 		if mc.baseStreamName == "" {
-			pp[2] = streamKey
+			responseName = streamKey
 		} else {
-			pp[2] = mc.wildcardPlaybackID(stream)
+			responseName = mc.wildcardPlaybackID(stream)
 		}
-		pu.Path = strings.Join(pp, "/")
-		responseURL = pu.String()
 		ok, err := mc.lapi.SetActive(stream.ID, true)
 		if err != nil {
 			glog.Error(err)
@@ -376,7 +390,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	w.Write([]byte(responseURL))
+	w.Write([]byte(responseName))
 	metrics.StartStream()
 	if mc.consulURL != nil {
 		// now create routing rule in the Consul for HLS playback
@@ -430,7 +444,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			}
 		}()
 	}
-	glog.Infof("Responded with '%s'", responseURL)
+	glog.Infof("Responded with '%s'", responseName)
 }
 
 func (mc *mac) wildcardPlaybackID(stream *livepeer.CreateStreamResp) string {
@@ -523,7 +537,7 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 	if triggers == nil {
 		triggers = make(mistapi.TriggersMap)
 	}
-	added := mc.addTrigger(triggers, "RTMP_PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000", "", true)
+	added := mc.addTrigger(triggers, "PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000", "", true)
 	// DEFAULT_STREAM needed when using Mist's load balancing
 	// added = mc.addTrigger(triggers, "DEFAULT_STREAM", ownURI, "false", "", true) || added
 	if mc.checkBandwidth {
