@@ -177,7 +177,7 @@ func PutKeysEx(u *url.URL, ks []GetKeyResponse) error {
 	start := time.Now()
 	var cu url.URL = *u
 	cu.Path = "v1/txn"
-	glog.V(model.VERBOSE).Infof("Making transaction PUT request to %s", cu.String())
+	// glog.V(model.VERBOSE).Infof("Making transaction PUT request to %s", cu.String())
 	var body io.Reader
 	bodyParts := make([]string, 0, len(ks))
 	for _, kvi := range ks {
@@ -186,7 +186,7 @@ func PutKeysEx(u *url.URL, ks []GetKeyResponse) error {
 	}
 	bodyStr := `[` + strings.Join(bodyParts, ",") + `]`
 	body = bytes.NewReader([]byte(bodyStr))
-	glog.V(model.VVERBOSE).Infof("Making transaction PUT request to %s body: '%s'", cu.String(), bodyStr)
+	glog.V(model.VERBOSE).Infof("Making transaction PUT request to %s body: '%s'", cu.String(), bodyStr)
 
 	ctx, cancel := context.WithTimeout(context.Background(), httpTimeout)
 	resp, err := http.DefaultClient.Do(uhttp.NewRequestWithContext(ctx, "PUT", cu.String(), body))
