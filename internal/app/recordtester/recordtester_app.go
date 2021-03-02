@@ -243,7 +243,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 func (rt *recordTester) checkDown(stream *livepeer.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) int {
 	es := 0
 	started := time.Now()
-	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil)
+	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil, false)
 	<-downloader.Done()
 	glog.Infof(`Pulling for %s (%s) stopped after %s`, stream.ID, stream.PlaybackID, time.Since(started))
 	vs := downloader.VODStats()

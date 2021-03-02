@@ -91,6 +91,7 @@ func main() {
 	channelID := flag.String("channel-id", "", "Discord's channel id (can be list of channels, separated by comma)")
 	statsFile := flag.String("stats-file", "", "Path to where to store the stream stats, in JSON")
 	rtmpInfinitePush := flag.Bool("rtmp-infinite-push", false, "Just push file infinitely to -rtmp-url and do not read anything back")
+	statsOnly := flag.Bool("stats-only", false, "Do not actually download segments in infinite-pull")
 	_ = flag.String("config", "", "config file (optional)")
 
 	ff.Parse(flag.CommandLine, os.Args[1:],
@@ -157,9 +158,12 @@ func main() {
 		// sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
 		// sr2.StartPulling(*mediaURL)
 		started := time.Now()
-		downloader := testers.NewM3utester2(gctx, *infinitePull, *wowza, *mist, false, *save, 30*time.Second, nil) // starts to download at creation
+		downloader := testers.NewM3utester2(gctx, *infinitePull, *wowza, *mist,
+			false, *save, 30*time.Second, nil, *statsOnly) // starts to download at creation
 		<-downloader.Done()
 		glog.Infof(`Pulling stopped after %s`, time.Since(started))
+		vs := downloader.VODStats()
+		glog.Infof("Stats: %s", vs.String())
 		return
 	}
 	var lapi *livepeer.API

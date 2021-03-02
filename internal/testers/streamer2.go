@@ -80,7 +80,8 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	go func() {
 		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, timeToStream, waitForTarget)
 	}()
-	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.wowzaMode, sr.mistMode, sr.failIfTranscodingStops, sr.save, sr.printStats, waitForTarget, sm) // starts to download at creation
+	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.wowzaMode, sr.mistMode,
+		sr.failIfTranscodingStops, sr.save, sr.printStats, waitForTarget, sm, false) // starts to download at creation
 	go func() {
 		select {
 		case <-sr.ctx.Done():

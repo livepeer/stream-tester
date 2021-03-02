@@ -76,6 +76,7 @@ type (
 		mu                     sync.Mutex
 		globalError            error
 		allResults             map[string][]*downloadResult
+		statsOnly              bool
 	}
 
 	// m3uMediaStream downloads media stream. Hadle stream changes
@@ -97,6 +98,7 @@ type (
 		savePlayList           *m3u8.MediaPlaylist
 		savePlayListName       string
 		saveDirName            string
+		statsOnly              bool
 	}
 
 	nameAndURI struct {
@@ -116,13 +118,14 @@ type (
 
 // NewM3utester2 pubic method
 func NewM3utester2(pctx context.Context, u string, wowzaMode, mistMode, failIfTranscodingStops, save bool,
-	waitForTarget time.Duration, sm *segmentsMatcher) model.IVODTester {
+	waitForTarget time.Duration, sm *segmentsMatcher, statsOnly bool) model.IVODTester {
 
-	return newM3utester2(pctx, u, wowzaMode, mistMode, failIfTranscodingStops, save, true, waitForTarget, sm)
+	return newM3utester2(pctx, u, wowzaMode, mistMode, failIfTranscodingStops,
+		save, true, waitForTarget, sm, statsOnly)
 }
 
 func newM3utester2(pctx context.Context, u string, wowzaMode, mistMode, failIfTranscodingStops, save, printStats bool,
-	waitForTarget time.Duration, sm *segmentsMatcher) *m3utester2 {
+	waitForTarget time.Duration, sm *segmentsMatcher, statsOnly bool) *m3utester2 {
 
 	iu, err := url.Parse(u)
 	if err != nil {
@@ -146,6 +149,7 @@ func newM3utester2(pctx context.Context, u string, wowzaMode, mistMode, failIfTr
 		latencyResults:         make(chan *latencyResult, 32),
 		segmentsMatcher:        sm,
 		allResults:             make(map[string][]*downloadResult),
+		statsOnly:              statsOnly,
 	}
 	mut.stats.Started = true
 	go mut.workerLoop()
@@ -158,7 +162,7 @@ func (mut *m3utester2) VODStats() model.VODStats {
 		SegmentsNum: make(map[string]int),
 		SegmentsDur: make(map[string]time.Duration),
 	}
-	glog.Infof("==> all results: %+v", mut.allResults)
+	// glog.Infof("==> all results: %+v", mut.allResults)
 	for resolution, drs := range mut.allResults {
 		if mut.sourceRes == resolution {
 		} else {
@@ -208,7 +212,7 @@ func (mut *m3utester2) initSave(streamURL, mediaURL string) {
 }
 
 func newM3uMediaStream(ctx context.Context, cancel context.CancelFunc, name, resolution string, u *url.URL, wowzaMode bool, masterDR chan *downloadResult,
-	sm *segmentsMatcher, latencyResults chan *latencyResult, save, failIfTranscodingStops bool) *m3uMediaStream {
+	sm *segmentsMatcher, latencyResults chan *latencyResult, save, failIfTranscodingStops, statsOnly bool) *m3uMediaStream {
 
 	ms := &m3uMediaStream{
 		finite: finite{
@@ -224,6 +228,7 @@ func newM3uMediaStream(ctx context.Context, cancel context.CancelFunc, name, res
 		streamSwitchedTo:       make(chan nameAndURI),
 		segmentsMatcher:        sm,
 		downTasks:              make(chan downloadTask, 256),
+		statsOnly:              statsOnly,
 	}
 	go ms.workerLoop(masterDR, latencyResults)
 	go ms.manifestPullerLoop(wowzaMode)
@@ -618,7 +623,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 				mut.doSavePlaylist()
 			}
 			stream := newM3uMediaStream(mut.ctx, mut.cancel, mediaName, mres, mut.initialURL, mut.wowzaMode, mut.driftCheckResults, mut.segmentsMatcher, mut.latencyResults,
-				mut.save, mut.failIfTranscodingStops)
+				mut.save, mut.failIfTranscodingStops, mut.statsOnly)
 			mut.streams[resolution(mres)] = stream
 			return
 		}
@@ -697,7 +702,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 				mut.sourceRes = ress
 			}
 			stream := newM3uMediaStream(mut.ctx, mut.cancel, variant.URI, ress, pvrui, mut.wowzaMode, mut.driftCheckResults,
-				mut.segmentsMatcher, mut.latencyResults, mut.save, mut.failIfTranscodingStops)
+				mut.segmentsMatcher, mut.latencyResults, mut.save, mut.failIfTranscodingStops, mut.statsOnly)
 			mut.streams[res] = stream
 			if mut.save {
 				needSavePlaylist = true
@@ -1039,9 +1044,14 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 				}
 				segSeqNo := pl.SeqNo + uint64(i)
 				glog.V(model.INSANE).Infof("===> adding task to download %s: %s seqNo=%d", ms.resolution, segment.URI, segSeqNo)
-				ms.downTasks <- downloadTask{baseURL: ms.u, url: segment.URI, seqNo: segSeqNo, title: segment.Title, duration: segment.Duration, appTime: now}
-				ms.segmentsToDownload++
-				metrics.Census.IncSegmentsToDownload()
+				if ms.statsOnly {
+					ms.downloadResults <- &downloadResult{name: segment.URI, seqNo: segSeqNo, status: "200 OK",
+						duration: time.Duration(segment.Duration * float64(time.Second))}
+				} else {
+					ms.downTasks <- downloadTask{baseURL: ms.u, url: segment.URI, seqNo: segSeqNo, title: segment.Title, duration: segment.Duration, appTime: now}
+					ms.segmentsToDownload++
+					metrics.Census.IncSegmentsToDownload()
+				}
 				lastTimeDownloadStarted = time.Now()
 				now = now.Add(time.Millisecond)
 				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
