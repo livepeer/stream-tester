@@ -166,6 +166,8 @@ type (
 		Authorize    *authReq `json:"authorize,omitempty"`
 		Minimal      int      `json:"minimal,omitempty"`
 		Deletestream []string `json:"deletestream,omitempty"`
+		StopSessions []string `json:"stop_sessions,omitempty"`
+		NukeStream   string   `json:"nuke_stream,omitempty"` // Stops running stream (forces RTMP to disconnect)
 	}
 )
 
@@ -310,6 +312,21 @@ func (mapi *API) DeleteStreams(names ...string) error {
 	}
 	for _, s := range names {
 		reqs.Deletestream = append(reqs.Deletestream, s)
+	}
+	_, err := mapi.post(reqs, false)
+	return err
+}
+
+// NukeStream removes streams from Mist server
+func (mapi *API) NukeStream(name string) error {
+	glog.Infof("Nuking Mist stream '%v'", name)
+	reqs := &deleteStreamReq{
+		Authorize: &authReq{
+			Username: mapi.login,
+			Password: mapi.challengeRepsonse,
+		},
+		Minimal:    1,
+		NukeStream: name,
 	}
 	_, err := mapi.post(reqs, false)
 	return err

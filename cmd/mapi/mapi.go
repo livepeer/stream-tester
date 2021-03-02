@@ -104,6 +104,24 @@ func main() {
 		},
 	}
 
+	nuke := &ffcli.Command{
+		Name:       "nuke",
+		ShortUsage: "mapi nuke [stream_name]",
+		ShortHelp:  "Stop incoming RTMP stream on the Mist server.",
+		Exec: func(_ context.Context, args []string) error {
+			if *host == "" {
+				return fmt.Errorf("Mist's host name should be provided")
+			}
+			if *mistCreds == "" {
+				return fmt.Errorf("Mist's credentials should be provided")
+			}
+			if len(args) == 0 {
+				return fmt.Errorf("Stream name should be provided")
+			}
+			return nuke(*host, *mistCreds, args[0])
+		},
+	}
+
 	pullPicarto := &ffcli.Command{
 		Name:       "pull",
 		ShortUsage: "mapi picarto pull <username>",
@@ -146,7 +164,7 @@ func main() {
 	root := &ffcli.Command{
 		ShortUsage:  "mapi [flags] <subcommand>",
 		FlagSet:     rootFlagSet,
-		Subcommands: []*ffcli.Command{create, ls, rm, picarto},
+		Subcommands: []*ffcli.Command{create, ls, rm, picarto, nuke},
 	}
 
 	// if err := root.ParseAndRun(context.Background(), os.Args[1:]); err != nil {
@@ -213,12 +231,24 @@ func rm(host, creds, streamName string) error {
 	if err != nil {
 		panic(err)
 	}
+	// mapi.DeleteStreams(streamName)
 	for sn := range streams {
 		if strings.HasPrefix(sn, streamName) {
 			mapi.DeleteStreams(sn)
 		}
 	}
 	return nil
+}
+
+func nuke(host, creds, streamName string) error {
+	if len(streamName) < 2 {
+		return errors.New("Stream name too short")
+	}
+	credsp := strings.Split(creds, ":")
+
+	mapi := mist.NewMist(host, credsp[0], credsp[1], "", mistPort)
+	mapi.Login()
+	return mapi.NukeStream(streamName)
 }
 
 func picartoLS(country string, adult, gaming bool) error {
