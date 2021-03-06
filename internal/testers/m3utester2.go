@@ -42,6 +42,8 @@ const (
 	reportStatsEvery2 = 30 * time.Minute
 	// timeFormat        = "2006-01-02T15:04:05.9999"
 	timeFormat = "15:04:05.9999"
+
+	messengerStats = false
 )
 
 type (
@@ -289,7 +291,9 @@ func (mut *m3utester2) workerLoop() {
 			}
 			msg += "```"
 		}
-		messenger.SendMessage(msg)
+		if messengerStats {
+			messenger.SendMessage(msg)
+		}
 	}
 	problems := 0
 	var lastTimeDriftReportTime time.Time
@@ -434,7 +438,9 @@ func (mut *m3utester2) workerLoop() {
 							}
 							if time.Since(lastTimeDriftReportTime) > 5*time.Minute {
 								glog.Info(msg)
-								messenger.SendMessage(msg)
+								if messengerStats {
+									messenger.SendMessage(msg)
+								}
 								lastTimeDriftReportTime = time.Now()
 							}
 							// if problems > 100 {
@@ -553,7 +559,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 		default:
 		}
 		if waitForTarget > 0 && !gotManifest && time.Since(startedAt) > waitForTarget {
-			mut.fatalEnd(fmt.Errorf("Can't get playlist %s for %s, giving up.", surl, time.Since(startedAt)))
+			mut.fatalEnd(fmt.Errorf("can't get playlist %s for %s, giving up", surl, time.Since(startedAt)))
 			return
 		}
 		// glog.Infof("requesting %s", surl)
@@ -565,6 +571,15 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 				countTimeouts++
 				if countTimeouts > 32 {
 					mut.fatalEnd(fmt.Errorf("Fatal timeout error trying to get playlist %s: %v", surl, err))
+					return
+				}
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			if strings.Contains(err.Error(), "connection reset by peer") {
+				countTimeouts++
+				if countTimeouts > 32 {
+					mut.fatalEnd(fmt.Errorf("Fatal connection reset error trying to get master playlist %s: %v", surl, err))
 					return
 				}
 				time.Sleep(2 * time.Second)
@@ -903,7 +918,9 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					return
 				}
 				if time.Since(lastMessageSentAt) > 5*60*time.Second {
-					messenger.SendMessage(fatalProblem)
+					if messengerStats {
+						messenger.SendMessage(fatalProblem)
+					}
 					lastMessageSentAt = time.Now()
 
 				}

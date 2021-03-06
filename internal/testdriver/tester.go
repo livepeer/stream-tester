@@ -185,7 +185,7 @@ func (t *Tester) Run(ctx context.Context, NumProfiles uint) (*Result, error) {
 
 		select {
 		case <-ctx.Done():
-			return &Result{}, fmt.Errorf("context cancelled")
+			return &Result{}, context.Canceled
 		default:
 		}
 
@@ -203,7 +203,7 @@ func (t *Tester) Run(ctx context.Context, NumProfiles uint) (*Result, error) {
 		for {
 			select {
 			case <-ctx.Done():
-				return &Result{}, fmt.Errorf("context cancelled")
+				return &Result{}, context.Canceled
 			case <-c.C:
 				stats, err = t.stats()
 				if err != nil {

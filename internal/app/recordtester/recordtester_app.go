@@ -10,6 +10,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/testers"
+	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 )
 
@@ -115,6 +116,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		// exit(253, fileName, *fileArg, err)
 		return 253, err
 	}
+	messenger.SendMessage(fmt.Sprintf(":information_source: Created stream id=%s", stream.ID))
 	// createdAPIStreams = append(createdAPIStreams, stream.ID)
 	glog.V(model.VERBOSE).Infof("Created Livepeer stream id=%s streamKey=%s playbackId=%s name=%s", stream.ID, stream.StreamKey, stream.PlaybackID, streamName)
 	// glog.Infof("Waiting 5 second for stream info to propagate to the Postgres replica")
@@ -136,10 +138,8 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 21, err
 	}
 	glog.Infof("Streaming success rate=%v", stats.SuccessRate)
-	select {
-	case <-rt.ctx.Done():
-		return 20, fmt.Errorf("context cancelled")
-	default:
+	if err = rt.isCancelled(); err != nil {
+		return 0, err
 	}
 	if pauseDuration > 0 {
 		glog.Infof("Pause specified, waiting %s before streaming second time", pauseDuration)
@@ -154,10 +154,8 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			return 21, err
 		}
 		glog.Infof("Streaming second time success rate=%v", stats.SuccessRate)
-		select {
-		case <-rt.ctx.Done():
-			return 20, fmt.Errorf("context cancelled")
-		default:
+		if err = rt.isCancelled(); err != nil {
+			return 0, err
 		}
 		testDuration *= 2
 	}
@@ -188,12 +186,18 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 250, err
 		// exit(250, fileName, *fileArg, err)
 	}
+	if err = rt.isCancelled(); err != nil {
+		return 0, err
+	}
 
 	glog.Info("Streaming done, waiting for recording URL to appear")
 	if rt.useForceURL {
 		time.Sleep(5 * time.Second)
 	} else {
 		time.Sleep(6*time.Minute + 20*time.Second)
+	}
+	if err = rt.isCancelled(); err != nil {
+		return 0, err
 	}
 
 	sessions, err = rt.lapi.GetSessions(stream.ID, rt.useForceURL)
@@ -203,6 +207,9 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		// exit(252, fileName, *fileArg, err)
 	}
 	glog.Infof("Sessions: %+v", sessions)
+	if err = rt.isCancelled(); err != nil {
+		return 0, err
+	}
 
 	sess = sessions[0]
 	statusShould := livepeer.RecordingStatusReady
@@ -229,7 +236,10 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	glog.Info("Done")
 	// lapi.DeleteStream(stream.ID)
 	// exit(0, fileName, *fileArg, err)
-	es := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
+	if err = rt.isCancelled(); err != nil {
+		return 0, err
+	}
+	es, err := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
 	if es == 0 {
 		rt.lapi.DeleteStream(stream.ID)
 		// exit(0, fileName, *fileArg, err)
@@ -237,15 +247,27 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 
 	// uploader := testers.NewRtmpStreamer(gctx, rtmpURL)
 	// uploader.StartUpload(fileName, rtmpURL, -1, 30*time.Second)
-	return es, nil
+	return es, err
 }
 
-func (rt *recordTester) checkDown(stream *livepeer.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) int {
+func (rt *recordTester) isCancelled() error {
+	select {
+	case <-rt.ctx.Done():
+		return context.Canceled
+	default:
+	}
+	return nil
+}
+
+func (rt *recordTester) checkDown(stream *livepeer.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
 	es := 0
 	started := time.Now()
 	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil, false)
 	<-downloader.Done()
 	glog.Infof(`Pulling for %s (%s) stopped after %s`, stream.ID, stream.PlaybackID, time.Since(started))
+	if err := rt.isCancelled(); err != nil {
+		return 0, err
+	}
 	vs := downloader.VODStats()
 	rt.vodeStats = vs
 	if len(vs.SegmentsNum) != len(standardProfiles)+1 {
@@ -260,7 +282,7 @@ func (rt *recordTester) checkDown(stream *livepeer.CreateStreamResp, url string,
 	} else {
 		glog.Infoln("All ok!")
 	}
-	return es
+	return es, nil
 }
 
 func (rt *recordTester) Cancel() {

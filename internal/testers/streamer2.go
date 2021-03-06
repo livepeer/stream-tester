@@ -94,7 +94,9 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	started := time.Now()
 	<-sr.uploader.Done()
 	msg := fmt.Sprintf(`Streaming stopped after %s`, time.Since(started))
-	messenger.SendMessage(msg)
+	if messengerStats {
+		messenger.SendMessage(msg)
+	}
 	sr.cancel()
 }
 

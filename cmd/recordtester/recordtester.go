@@ -21,6 +21,7 @@ import (
 	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/internal/utils"
+	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/peterbourgon/ff/v2"
 )
@@ -50,6 +51,10 @@ func main() {
 	// httpIngest := fs.Bool("http-ingest", false, "Use Livepeer HTTP HLS ingest")
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
 	// ignoreNoCodecError := fs.Bool("ignore-no-codec-error", true, "Do not stop streaming if segment without codec's info downloaded")
+	continuousTest := fs.Duration("continuous-test", 0, "Do continuous testing")
+	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
+	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
+	discordUsersToNotify := fs.String("discord-users", "", "Id's of users to notify in case of failure")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -130,11 +135,15 @@ func main() {
 	}
 	exit := func(exitCode int, fn, fa string, err error) {
 		cleanup(fn, fa)
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-		}
-		if exitCode != 0 {
-			glog.Errorf("Record test failed exitCode=%d err=%v", exitCode, err)
+		if err != context.Canceled {
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+			}
+			if exitCode != 0 {
+				glog.Errorf("Record test failed exitCode=%d err=%v", exitCode, err)
+			}
+		} else {
+			exitCode = 0
 		}
 		os.Exit(exitCode)
 	}
@@ -201,6 +210,15 @@ func main() {
 		took := time.Since(start)
 		glog.Infof("%d streams test ended in %s success %f%%", *sim, took, float64(succ)/float64(len(eses))*100.0)
 		exit(es, fileName, *fileArg, err)
+		return
+	} else if *continuousTest > 0 {
+		messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
+		crt := recordtester.NewContinuousRecordTester(gctx, lapi)
+		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
+		if err != nil {
+			glog.Warningf("Continuous test ended with err=%v", err)
+		}
+		exit(0, fileName, *fileArg, err)
 		return
 	}
 	// just one stream
