@@ -576,7 +576,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			if strings.Contains(err.Error(), "connection reset by peer") {
+			if strings.Contains(err.Error(), "connection reset by peer") || strings.Contains(err.Error(), "closed") {
 				countTimeouts++
 				if countTimeouts > 32 {
 					mut.fatalEnd(fmt.Errorf("Fatal connection reset error trying to get master playlist %s: %v", surl, err))
@@ -972,7 +972,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			if strings.Contains(err.Error(), "connection reset by peer") {
+			if strings.Contains(err.Error(), "connection reset by peer") || strings.Contains(err.Error(), "closed") {
 				countResets++
 				if countResets > 15 {
 					ms.fatalEnd(fmt.Errorf("Fatal connection reset error trying to get media playlist %s: %v", surl, err))
