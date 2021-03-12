@@ -19,6 +19,7 @@ import (
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/app/recordtester"
 	"github.com/livepeer/stream-tester/internal/metrics"
+	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/messenger"
@@ -55,6 +56,7 @@ func main() {
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
 	discordUsersToNotify := fs.String("discord-users", "", "Id's of users to notify in case of failure")
+	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -212,6 +214,8 @@ func main() {
 		exit(es, fileName, *fileArg, err)
 		return
 	} else if *continuousTest > 0 {
+		metricServer := server.NewMetricsServer()
+		go metricServer.Start(gctx, *bind)
 		messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
 		crt := recordtester.NewContinuousRecordTester(gctx, lapi)
 		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
