@@ -29,5 +29,12 @@ jobs:
       run: |
         docker tag livepeer/streamtester:record-tester livepeer/streamtester:record-tester${{ steps.get_version.outputs.VERSION }}
         docker push livepeer/streamtester:record-tester${{ steps.get_version.outputs.VERSION }}
+    - name: Describe
+      id: describe
+      run: |
+        VER=$(git describe)
+        echo "version_from_git=$VER" >> $GITHUB_ENV
     - name: Push Docker Container to Registry
-      run: docker push livepeer/streamtester:record-tester
+      run: |
+        docker tag livepeer/streamtester:record-tester livepeer/streamtester:record-tester-${{ env.version_from_git }}
+        docker push livepeer/streamtester:record-tester
