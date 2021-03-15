@@ -975,16 +975,16 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 		b, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			if strings.Contains(err.Error(), "connection reset by peer") {
+			if isRetryable(err) {
 				countResets++
 				if countResets > 15 {
-					ms.fatalEnd(fmt.Errorf("Fatal connection reset error trying to get media playlist %s: %v", surl, err))
+					ms.fatalEnd(fmt.Errorf("fatal connection reset error trying to get media playlist %s: %v try %d", surl, err, countResets))
 					return
 				}
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			ms.fatalEnd(fmt.Errorf("Fatal error trying to read media playlist %s: %v", surl, err))
+			ms.fatalEnd(fmt.Errorf("fatal error trying to read media playlist %s: %v try %d", surl, err, countResets))
 			return
 		}
 		countResets = 0
