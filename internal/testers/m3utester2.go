@@ -569,13 +569,13 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			if isRetryable(err) {
 				countTimeouts++
 				if countTimeouts > 32 {
-					mut.fatalEnd(fmt.Errorf("Fatal timeout error trying to get playlist %s: %v", surl, err))
+					mut.fatalEnd(fmt.Errorf("fatal timeout error trying to get playlist %s: %v try %d", surl, err, countTimeouts))
 					return
 				}
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			mut.fatalEnd(fmt.Errorf("Fatal error trying to get playlist %s: %v", surl, err))
+			mut.fatalEnd(fmt.Errorf("fatal error trying to get playlist %s: %v try %d", surl, err, countTimeouts))
 			return
 		}
 		countTimeouts = 0
@@ -955,16 +955,15 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 			if isRetryable(err) {
 				countTimeouts++
 				if countTimeouts > 15 {
-					ms.fatalEnd(fmt.Errorf("Fatal timeout error trying to get media playlist %s: %v", surl, err))
+					ms.fatalEnd(fmt.Errorf("fatal timeout error trying to get media playlist %s: %v try %d", surl, err, countTimeouts))
 					return
 				}
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			ms.fatalEnd(fmt.Errorf("Fatal error trying to get media playlist %s: %v", surl, err))
+			ms.fatalEnd(fmt.Errorf("fatal error trying to get media playlist %s: %v try %d", surl, err, countTimeouts))
 			return
 		}
-		countTimeouts = 0
 		countTimeouts = 0
 		if resp.StatusCode != http.StatusOK {
 			b, _ := ioutil.ReadAll(resp.Body)
