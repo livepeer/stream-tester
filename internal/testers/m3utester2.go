@@ -566,20 +566,10 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 		resp, err := httpClient.Do(uhttp.GetRequest(surl))
 		// glog.Infof("DONE requesting %s", surl)
 		if err != nil {
-			uerr := err.(*url.Error)
-			if uerr.Timeout() {
+			if isRetryable(err) {
 				countTimeouts++
 				if countTimeouts > 32 {
 					mut.fatalEnd(fmt.Errorf("Fatal timeout error trying to get playlist %s: %v", surl, err))
-					return
-				}
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			if strings.Contains(err.Error(), "connection reset by peer") || strings.Contains(err.Error(), "closed") {
-				countTimeouts++
-				if countTimeouts > 32 {
-					mut.fatalEnd(fmt.Errorf("Fatal connection reset error trying to get master playlist %s: %v", surl, err))
 					return
 				}
 				time.Sleep(2 * time.Second)
@@ -962,20 +952,10 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 		}
 		resp, err := httpClient.Do(uhttp.GetRequest(surl))
 		if err != nil {
-			uerr := err.(*url.Error)
-			if uerr.Timeout() {
+			if isRetryable(err) {
 				countTimeouts++
 				if countTimeouts > 15 {
 					ms.fatalEnd(fmt.Errorf("Fatal timeout error trying to get media playlist %s: %v", surl, err))
-					return
-				}
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			if strings.Contains(err.Error(), "connection reset by peer") || strings.Contains(err.Error(), "closed") {
-				countResets++
-				if countResets > 15 {
-					ms.fatalEnd(fmt.Errorf("Fatal connection reset error trying to get media playlist %s: %v", surl, err))
 					return
 				}
 				time.Sleep(2 * time.Second)
@@ -1195,4 +1175,17 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 		// glog.Infof("Download %s result: %s len %d timeStart %s segment duration %s sent to channel", fsurl, resp.Status, len(b), fsttim, dur)
 		return
 	}
+}
+
+func isRetryable(err error) bool {
+	uerr := err.(*url.Error)
+	if uerr != nil && uerr.Timeout() {
+		return true
+	}
+	es := err.Error()
+	if strings.Contains(es, "connection reset by peer") || strings.Contains(es, "closed") ||
+		strings.Contains(es, "EOF") {
+		return true
+	}
+	return false
 }
