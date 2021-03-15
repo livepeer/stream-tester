@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/PagerDuty/go-pagerduty"
+
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/messenger"
@@ -21,23 +23,27 @@ type (
 	}
 
 	continuousRecordTester struct {
-		lapi   *livepeer.API
-		ctx    context.Context
-		cancel context.CancelFunc
-		host   string // API host being tested
+		lapi                    *livepeer.API
+		ctx                     context.Context
+		cancel                  context.CancelFunc
+		host                    string // API host being tested
+		pagerDutyIntegrationKey string
+		pagerDutyComponent      string
 	}
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDutyIntegrationKey, pagerDutyComponent string) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	server := lapi.GetServer()
 	u, _ := url.Parse(server)
 	crt := &continuousRecordTester{
-		lapi:   lapi,
-		ctx:    ctx,
-		cancel: cancel,
-		host:   u.Host,
+		lapi:                    lapi,
+		ctx:                     ctx,
+		cancel:                  cancel,
+		host:                    u.Host,
+		pagerDutyIntegrationKey: pagerDutyIntegrationKey,
+		pagerDutyComponent:      pagerDutyComponent,
 	}
 	return crt
 }
@@ -58,6 +64,24 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			msg := fmt.Sprintf(":rotating_light: Test of %s ended with err=%v errCode=%v", crt.host, err, es)
 			messenger.SendFatalMessage(msg)
 			glog.Warning(msg)
+			if crt.pagerDutyIntegrationKey != "" {
+				event := pagerduty.V2Event{
+					RoutingKey: crt.pagerDutyIntegrationKey,
+					Action:     "trigger",
+					Payload: &pagerduty.V2Payload{
+						Source:    crt.host,
+						Component: crt.pagerDutyComponent,
+						Severity:  "error",
+						Summary:   err.Error(),
+					},
+				}
+				resp, err := pagerduty.ManageEvent(event)
+				if err != nil {
+					glog.Error(err)
+				} else {
+					glog.Infof("Incident status: %s message: %s", resp.Status, resp.Message)
+				}
+			}
 		} else {
 			msg := fmt.Sprintf(":white_check_mark: Test of %s succeed", crt.host)
 			messenger.SendMessage(msg)

@@ -136,9 +136,9 @@ type VODStats struct {
 }
 
 // IsOk can we consider download successful
-func (vs *VODStats) IsOk(streamDuration time.Duration, doubled bool) bool {
+func (vs *VODStats) IsOk(streamDuration time.Duration, doubled bool) (bool, string) {
 	if len(vs.SegmentsDur) == 0 {
-		return false
+		return false, "no segments"
 	}
 	ok := true
 	lsn := 0
@@ -152,6 +152,7 @@ func (vs *VODStats) IsOk(streamDuration time.Duration, doubled bool) bool {
 	if doubled {
 		durDiffShould *= durDiffShould
 	}
+	var errs []string
 
 	for res, sn := range vs.SegmentsNum {
 		if lsn > 0 {
@@ -161,7 +162,9 @@ func (vs *VODStats) IsOk(streamDuration time.Duration, doubled bool) bool {
 			}
 			if diff > segDiffShould {
 				ok = false
-				glog.Warningf("number of segments between %s and %s differ by %d", lres, res, diff)
+				ers := fmt.Sprintf("number of segments between %s and %s differ by %d", lres, res, diff)
+				errs = append(errs, ers)
+				glog.Warningf(ers)
 			}
 		}
 		if ldur > 0 {
@@ -171,7 +174,9 @@ func (vs *VODStats) IsOk(streamDuration time.Duration, doubled bool) bool {
 			}
 			if durDiff > durDiffShould {
 				ok = false
-				glog.Warningf("duration of stream between %s and %s differ by %s", lres, res, durDiff)
+				ers := fmt.Sprintf("duration of stream between %s and %s differ by %s", lres, res, durDiff)
+				errs = append(errs, ers)
+				glog.Warningf(ers)
 			}
 		}
 		lsn = sn
@@ -179,10 +184,12 @@ func (vs *VODStats) IsOk(streamDuration time.Duration, doubled bool) bool {
 		ldur = vs.SegmentsDur[res]
 		if 1-float64(ldur)/float64(streamDuration-2*time.Second) > 0.1 { // 10%
 			ok = false
-			glog.Warningf("media stream %s has duration %s but should be %s", res, ldur, streamDuration)
+			ers := fmt.Sprintf("media stream %s has duration %s but should be %s", res, ldur, streamDuration)
+			errs = append(errs, ers)
+			glog.Warningf(ers)
 		}
 	}
-	return ok
+	return ok, strings.Join(errs, ",")
 }
 
 func (vs *VODStats) String() string {

@@ -56,6 +56,8 @@ func main() {
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
 	discordUsersToNotify := fs.String("discord-users", "", "Id's of users to notify in case of failure")
+	pagerDutyIntegrationKey := fs.String("pagerduty-integration-key", "", "PagerDuty integration key")
+	pagerDutyComponent := fs.String("pagerduty-component", "", "PagerDuty component")
 	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
 
 	_ = fs.String("config", "", "config file (optional)")
@@ -217,7 +219,7 @@ func main() {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
 		messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
-		crt := recordtester.NewContinuousRecordTester(gctx, lapi)
+		crt := recordtester.NewContinuousRecordTester(gctx, lapi, *pagerDutyIntegrationKey, *pagerDutyComponent)
 		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 		if err != nil {
 			glog.Warningf("Continuous test ended with err=%v", err)

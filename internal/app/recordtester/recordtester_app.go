@@ -276,9 +276,10 @@ func (rt *recordTester) checkDown(stream *livepeer.CreateStreamResp, url string,
 	}
 	glog.Infof("Stats for %s: %s", stream.ID, vs.String())
 	glog.Infof("Stats for %s raw: %+v", stream.ID, vs)
-	if !vs.IsOk(streamDuration, doubled) {
-		glog.Warningf("NOT OK!")
+	if ok, ers := vs.IsOk(streamDuration, doubled); !ok {
+		glog.Warningf("NOT OK! (%s)", ers)
 		es = 36
+		return es, errors.New(ers)
 	} else {
 		glog.Infoln("All ok!")
 	}

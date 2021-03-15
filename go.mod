@@ -8,6 +8,7 @@ require (
 	github.com/Azure/azure-storage-blob-go v0.8.0
 	github.com/Azure/go-autorest/autorest/adal v0.9.5 // indirect
 	github.com/Necroforger/dgrouter v0.0.0-20190528143456-040421b5a83e
+	github.com/PagerDuty/go-pagerduty v1.3.0 // indirect
 	github.com/bwmarrin/discordgo v0.20.2
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/gorilla/websocket v1.4.1 // indirect
