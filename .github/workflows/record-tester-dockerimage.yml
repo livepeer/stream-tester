@@ -38,3 +38,4 @@ jobs:
       run: |
         docker tag livepeer/streamtester:record-tester livepeer/streamtester:record-tester-${{ env.version_from_git }}
         docker push livepeer/streamtester:record-tester
+        docker push livepeer/streamtester:record-tester-${{ env.version_from_git }}
