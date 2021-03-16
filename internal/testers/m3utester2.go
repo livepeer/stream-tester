@@ -832,7 +832,7 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 			dres.task = nil
 
 			if dres.videoParseError != nil {
-				msg := fmt.Sprintf("Error parsing video segment: %v", dres.videoParseError)
+				msg := fmt.Sprintf("Error parsing video segment: %v (dres=%+v)", dres.videoParseError, dres)
 				if IgnoreNoCodecError && (errors.Is(dres.videoParseError, jerrors.ErrNoAudioInfoFound) || errors.Is(dres.videoParseError, jerrors.ErrNoVideoInfoFound)) {
 					messenger.SendFatalMessage(msg)
 					continue
