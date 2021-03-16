@@ -1183,7 +1183,7 @@ func isRetryable(err error) bool {
 	}
 	es := err.Error()
 	if strings.Contains(es, "connection reset by peer") || strings.Contains(es, "closed") ||
-		strings.Contains(es, "EOF") {
+		strings.Contains(es, "EOF") || strings.Contains(es, "broken") {
 		return true
 	}
 	return false
