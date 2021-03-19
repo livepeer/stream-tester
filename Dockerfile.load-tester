@@ -21,6 +21,7 @@ RUN echo $version
 
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/streamtester/streamtester.go
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/loadtester/loadtester.go
+RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/recordtester/recordtester.go
 
 
 FROM debian:stretch-slim
@@ -31,6 +32,7 @@ RUN apt update && apt install -y ca-certificates && apt clean
 
 COPY --from=builder /root/streamtester streamtester
 COPY --from=builder /root/loadtester loadtester
+COPY --from=builder /root/recordtester recordtester
 
 RUN apt-get update && apt-get install -y curl
 
