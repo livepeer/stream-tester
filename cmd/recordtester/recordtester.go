@@ -210,6 +210,7 @@ func main() {
 		}
 		took := time.Since(start)
 		glog.Infof("%d streams test ended in %s success %f%%", *sim, took, float64(succ)/float64(len(eses))*100.0)
+		time.Sleep(1 * time.Hour)
 		exit(es, fileName, *fileArg, err)
 		return
 	} else if *continuousTest > 0 {
