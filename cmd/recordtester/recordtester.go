@@ -172,6 +172,7 @@ func main() {
 		time.Sleep(2 * time.Second)
 		// exit(0, fn, fa, nil)
 	}(fileName, *fileArg)
+	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
 
 	if *sim > 1 {
 		var testers []recordtester.IRecordTester
@@ -216,7 +217,6 @@ func main() {
 	} else if *continuousTest > 0 {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
-		messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
 		crt := recordtester.NewContinuousRecordTester(gctx, lapi, *pagerDutyIntegrationKey, *pagerDutyComponent)
 		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 		if err != nil {
