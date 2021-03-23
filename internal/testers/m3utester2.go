@@ -76,7 +76,6 @@ type (
 		sourceRes              string
 		stats                  model.Stats1
 		mu                     sync.Mutex
-		globalError            error
 		allResults             map[string][]*downloadResult
 		statsOnly              bool
 	}

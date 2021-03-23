@@ -28,6 +28,7 @@ type (
 		save                   bool
 		failIfTranscodingStops bool
 		printStats             bool
+		err                    error
 	}
 )
 
@@ -45,6 +46,10 @@ func NewStreamer2(pctx context.Context, wowzaMode, mistMode, save, failIfTransco
 		failIfTranscodingStops: failIfTranscodingStops,
 		printStats:             printStats,
 	}
+}
+
+func (sr *streamer2) Err() error {
+	return sr.err
 }
 
 func (sr *streamer2) Stats() (model.Stats1, error) {
@@ -93,7 +98,10 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	}()
 	started := time.Now()
 	<-sr.uploader.Done()
-	msg := fmt.Sprintf(`Streaming stopped after %s`, time.Since(started))
+	if sr.uploader.Err() != nil {
+		sr.err = sr.uploader.Err()
+	}
+	msg := fmt.Sprintf(`Streaming stopped after %s err=%v`, time.Since(started), sr.err)
 	if messengerStats {
 		messenger.SendMessage(msg)
 	}

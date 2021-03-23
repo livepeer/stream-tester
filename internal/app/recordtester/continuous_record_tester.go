@@ -2,6 +2,7 @@ package recordtester
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
+	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/messenger"
 )
 
@@ -50,6 +52,7 @@ func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDu
 
 func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error {
 	glog.Infof("Starting continuous test of %s", crt.host)
+	try := 0
 	for {
 		msg := fmt.Sprintf(":arrow_right: Starting %s recordings test stream to %s", 2*testDuration, crt.host)
 		glog.Info(msg)
@@ -61,6 +64,15 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			messenger.SendMessage(msg)
 			return err
 		} else if err != nil || es != 0 {
+			var re *testers.RTMPError
+			if errors.As(err, &re) && try == 0 {
+				msg := fmt.Sprintf(":rotating_light: Test of %s ended with RTMP err=%v errCode=%v try=0, trying second time", crt.host, err, es)
+				messenger.SendMessage(msg)
+				rt.Clean()
+				try++
+				time.Sleep(10 * time.Second)
+				continue
+			}
 			msg := fmt.Sprintf(":rotating_light: Test of %s ended with err=%v errCode=%v", crt.host, err, es)
 			messenger.SendFatalMessage(msg)
 			glog.Warning(msg)
@@ -72,8 +84,13 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 						Source:    crt.host,
 						Component: crt.pagerDutyComponent,
 						Severity:  "error",
-						Summary:   err.Error(),
+						Summary:   crt.host + ": " + err.Error(),
 					},
+				}
+				sid := rt.StreamID()
+				if sid != "" {
+					link := "https://livepeer.com/app/stream/" + sid
+					event.Links = append(event.Links, link)
 				}
 				resp, err := pagerduty.ManageEvent(event)
 				if err != nil {
@@ -87,6 +104,8 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			messenger.SendMessage(msg)
 			glog.Warning(msg)
 		}
+		try = 0
+		rt.Clean()
 		glog.Infof("Waiting %s before next test", pauseBetweenTests)
 		time.Sleep(pauseBetweenTests)
 		select {

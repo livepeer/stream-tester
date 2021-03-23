@@ -88,6 +88,8 @@ type Streamer2 interface {
 	StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget, timeToStream time.Duration)
 	// Stats get stats
 	Stats() (Stats1, error)
+	//
+	Err() error
 }
 
 // OneTestStream represents one running test stream

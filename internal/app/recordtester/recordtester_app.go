@@ -22,6 +22,8 @@ type (
 		Cancel()
 		Done() <-chan struct{}
 		VODStats() model.VODStats
+		Clean()
+		StreamID() string
 	}
 
 	recordTester struct {
@@ -30,6 +32,7 @@ type (
 		ctx         context.Context
 		cancel      context.CancelFunc
 		vodeStats   model.VODStats
+		streamID    string
 	}
 )
 
@@ -116,6 +119,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		// exit(253, fileName, *fileArg, err)
 		return 253, err
 	}
+	rt.streamID = stream.ID
 	messenger.SendMessage(fmt.Sprintf(":information_source: Created stream id=%s", stream.ID))
 	// createdAPIStreams = append(createdAPIStreams, stream.ID)
 	glog.V(model.VERBOSE).Infof("Created Livepeer stream id=%s streamKey=%s playbackId=%s name=%s", stream.ID, stream.StreamKey, stream.PlaybackID, streamName)
@@ -131,7 +135,12 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	sr2 := testers.NewStreamer2(rt.ctx, false, false, false, false, false)
 	go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
 	<-sr2.Done()
-	glog.Infof("Streaming stream id=%s done", stream.ID)
+	srerr := sr2.Err()
+	glog.Infof("Streaming stream id=%s done err=%v", stream.ID, srerr)
+	var re *testers.RTMPError
+	if errors.As(srerr, &re) {
+		return 2, re
+	}
 	stats, err := sr2.Stats()
 	if err != nil {
 		glog.Warning("Stats returned error err=%v", err)
@@ -296,4 +305,14 @@ func (rt *recordTester) Done() <-chan struct{} {
 
 func (rt *recordTester) VODStats() model.VODStats {
 	return rt.vodeStats
+}
+
+func (rt *recordTester) Clean() {
+	if rt.streamID != "" {
+		rt.lapi.DeleteStream(rt.streamID)
+	}
+}
+
+func (rt *recordTester) StreamID() string {
+	return rt.streamID
 }

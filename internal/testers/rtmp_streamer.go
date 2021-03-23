@@ -20,6 +20,15 @@ import (
 	"github.com/livepeer/stream-tester/model"
 )
 
+type RTMPError struct {
+	Msg string
+	Err error
+}
+
+func (re *RTMPError) Error() string {
+	return fmt.Sprintf("RTMP error: %s: %v", re.Msg, re.Err.Error())
+}
+
 var segLen = 2 * time.Second
 
 // rtmpStreamer streams one video file to RTMP server
@@ -36,6 +45,7 @@ type rtmpStreamer struct {
 	segmentsMatcher *segmentsMatcher
 	hasBar          bool
 	started         time.Time
+	err             error
 }
 
 // IRTMPStreamer public interface
@@ -164,6 +174,10 @@ func (rs *rtmpStreamer) Stop() {
 	rs.file.Close()
 }
 
+func (rs *rtmpStreamer) Err() error {
+	return rs.err
+}
+
 // StartUpload starts RTMP stream. Blocks until end.
 func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, streamDuration, waitForTarget time.Duration) {
 	var err error
@@ -191,6 +205,8 @@ func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, streamDuration, waitForT
 			if waitForTarget > 0 {
 				if time.Since(started) > waitForTarget {
 					msg := fmt.Sprintf(`Can't connect to %s for %s`, rtmpURL, waitForTarget)
+					rs.err = &RTMPError{Msg: msg, Err: err}
+
 					fmt.Println(msg)
 					messenger.SendFatalMessage(msg)
 					rs.file.Close()
@@ -209,6 +225,8 @@ func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, streamDuration, waitForT
 
 	var onError = func(err error) {
 		msg := fmt.Sprintf("onError finishing upload to %s after %s: %v", rtmpURL, time.Since(started), err)
+		rs.err = &RTMPError{Msg: msg, Err: err}
+
 		messenger.SendFatalMessage(msg)
 		glog.Error(msg)
 		rs.connectionLost = true
@@ -216,7 +234,6 @@ func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, streamDuration, waitForT
 		conn.Close()
 		time.Sleep(4 * time.Second)
 		rs.closeDone()
-		return
 	}
 
 	// filters := pktque.Filters{&pktque.Walltime{}, &printKeyFrame{}, rs.counter}
