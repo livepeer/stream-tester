@@ -163,7 +163,7 @@ func main() {
 	*/
 
 	exitc := make(chan os.Signal, 1)
-	signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	go func(fn, fa string) {
 		<-exitc
 		fmt.Println("Got Ctrl-C, cancelling")

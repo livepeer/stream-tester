@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -1176,9 +1177,15 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 }
 
 func isRetryable(err error) bool {
-	uerr := err.(*url.Error)
-	if uerr != nil && uerr.Timeout() {
-		return true
+	if uerr, ok := err.(*url.Error); ok {
+		if uerr.Timeout() {
+			return true
+		}
+	}
+	if uerr, ok := err.(*net.OpError); ok {
+		if uerr.Timeout() {
+			return true
+		}
 	}
 	es := err.Error()
 	if strings.Contains(es, "connection reset by peer") || strings.Contains(es, "closed") ||
