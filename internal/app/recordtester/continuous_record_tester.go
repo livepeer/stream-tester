@@ -94,7 +94,8 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 				}
 				resp, err := pagerduty.ManageEvent(event)
 				if err != nil {
-					glog.Error(err)
+					glog.Error(fmt.Errorf("PAGERDUTY Error: %w", err))
+					messenger.SendFatalMessage(fmt.Sprintf("Error creating PagerDuty event: %v", err))
 				} else {
 					glog.Infof("Incident status: %s message: %s", resp.Status, resp.Message)
 				}
