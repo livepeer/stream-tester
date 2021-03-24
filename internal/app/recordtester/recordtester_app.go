@@ -156,7 +156,12 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		sr2 := testers.NewStreamer2(rt.ctx, false, false, false, false, false)
 		go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
 		<-sr2.Done()
+		srerr := sr2.Err()
 		glog.Infof("Streaming second stream id=%s done", stream.ID)
+		var re *testers.RTMPError
+		if errors.As(srerr, &re) {
+			return 2, re
+		}
 		stats, err := sr2.Stats()
 		if err != nil {
 			glog.Warning("Stats returned error err=%v", err)
