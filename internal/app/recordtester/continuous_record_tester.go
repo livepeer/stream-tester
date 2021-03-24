@@ -32,6 +32,11 @@ type (
 		pagerDutyIntegrationKey string
 		pagerDutyComponent      string
 	}
+
+	pagerDutyLink struct {
+		Href string `json:"href,omitempty"`
+		Text string `json:"text,omitempty"`
+	}
 )
 
 // NewContinuousRecordTester returns new object
@@ -89,7 +94,10 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 				}
 				sid := rt.StreamID()
 				if sid != "" {
-					link := "https://livepeer.com/app/stream/" + sid
+					link := pagerDutyLink{
+						Href: "https://livepeer.com/app/stream/" + sid,
+						Text: "Stream",
+					}
 					event.Links = append(event.Links, link)
 				}
 				resp, err := pagerduty.ManageEvent(event)
