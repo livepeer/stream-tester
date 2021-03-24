@@ -24,6 +24,7 @@ type (
 		VODStats() model.VODStats
 		Clean()
 		StreamID() string
+		Stream() *livepeer.CreateStreamResp
 	}
 
 	recordTester struct {
@@ -33,6 +34,7 @@ type (
 		cancel      context.CancelFunc
 		vodeStats   model.VODStats
 		streamID    string
+		stream      *livepeer.CreateStreamResp
 	}
 )
 
@@ -120,6 +122,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 253, err
 	}
 	rt.streamID = stream.ID
+	rt.stream = stream
 	messenger.SendMessage(fmt.Sprintf(":information_source: Created stream id=%s", stream.ID))
 	// createdAPIStreams = append(createdAPIStreams, stream.ID)
 	glog.V(model.VERBOSE).Infof("Created Livepeer stream id=%s streamKey=%s playbackId=%s name=%s", stream.ID, stream.StreamKey, stream.PlaybackID, streamName)
@@ -320,4 +323,8 @@ func (rt *recordTester) Clean() {
 
 func (rt *recordTester) StreamID() string {
 	return rt.streamID
+}
+
+func (rt *recordTester) Stream() *livepeer.CreateStreamResp {
+	return rt.stream
 }

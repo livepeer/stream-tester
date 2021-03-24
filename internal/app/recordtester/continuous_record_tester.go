@@ -99,6 +99,14 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 						Text: "Stream",
 					}
 					event.Links = append(event.Links, link)
+					stream := rt.Stream()
+					if stream != nil {
+						plink := pagerDutyLink{
+							Href: "https://my.papertrailapp.com/events?q=" + stream.ID + "+OR+" + stream.StreamKey + "+OR+" + stream.PlaybackID,
+							Text: "Papertrail",
+						}
+						event.Links = append(event.Links, plink)
+					}
 				}
 				resp, err := pagerduty.ManageEvent(event)
 				if err != nil {
