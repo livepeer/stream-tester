@@ -433,6 +433,21 @@ func (lapi *API) GetStream(id string) (*CreateStreamResp, error) {
 	return lapi.getStream(u, "get_by_id")
 }
 
+// GetSessionsR gets user's sessions for the stream by id
+func (lapi *API) GetSessionsR(id string, forceUrl bool) ([]UserSession, error) {
+	var apiTry int
+	for {
+		sessions, err := lapi.GetSessions(id, forceUrl)
+		if err != nil {
+			if Timedout(err) && apiTry < 3 {
+				apiTry++
+				continue
+			}
+		}
+		return sessions, err
+	}
+}
+
 // GetSessions gets user's sessions for the stream by id
 func (lapi *API) GetSessions(id string, forceUrl bool) ([]UserSession, error) {
 	if id == "" {
@@ -561,4 +576,11 @@ func (lapi *API) getStream(u, rType string) (*CreateStreamResp, error) {
 		return nil, err
 	}
 	return r, nil
+}
+
+func Timedout(e error) bool {
+	t, ok := e.(interface {
+		Timeout() bool
+	})
+	return ok && t.Timeout() || (e != nil && strings.Contains(e.Error(), "Client.Timeout"))
 }

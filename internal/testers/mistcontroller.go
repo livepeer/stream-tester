@@ -677,7 +677,7 @@ func mistGetTimeFromSegURI(segURI string) int {
 	return pts
 }
 
-func timedout(e error) bool {
+func Timedout(e error) bool {
 	t, ok := e.(interface {
 		Timeout() bool
 	})
@@ -831,6 +831,6 @@ func (p picartoSortedSegments) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
 func isFatalError(err error, try int) bool {
 	// return err == ErrZeroStreams || err == ErrStreamOpenFailed || timedout(err) || errors.Is(err, io.EOF) || err == ErrNoAudioInStream
-	return err == ErrZeroStreams || err == utils.ErrStreamOpenFailed || (timedout(err) && try > 3) || err == ErrNoAudioInStream ||
+	return err == ErrZeroStreams || err == utils.ErrStreamOpenFailed || (Timedout(err) && try > 3) || err == ErrNoAudioInStream ||
 		err == ErrBigTimeDifference || err == ErrNoMatchingSegments || errors.Is(err, ErrTooBigDurationsDeviation)
 }

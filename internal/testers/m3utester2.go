@@ -1177,7 +1177,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 }
 
 func isRetryable(err error) bool {
-	if timedout(err) || temporary(err) {
+	if Timedout(err) || temporary(err) {
 		return true
 	}
 	if uerr, ok := err.(*url.Error); ok {

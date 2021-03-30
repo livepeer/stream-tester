@@ -87,17 +87,37 @@ func NewRecordTester(gctx context.Context, lapi *livepeer.API, useForceURL bool)
 
 func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.Duration) (int, error) {
 	defer rt.cancel()
-	ingests, err := rt.lapi.Ingest(false)
-	if err != nil {
-		// exit(255, fileName, *fileArg, err)
-		return 255, err
+	var err error
+	var ingests []livepeer.Ingest
+	apiTry := 0
+	for {
+		ingests, err = rt.lapi.Ingest(false)
+		if err != nil {
+			if testers.Timedout(err) && apiTry < 3 {
+				apiTry++
+				continue
+			}
+			// exit(255, fileName, *fileArg, err)
+			return 255, err
+		}
+		break
 	}
+	apiTry = 0
 	glog.Infof("Got ingests: %+v", ingests)
-	broadcasters, err := rt.lapi.Broadcasters()
-	if err != nil {
-		// exit(255, fileName, *fileArg, err)
-		return 255, err
+	var broadcasters []string
+	for {
+		broadcasters, err = rt.lapi.Broadcasters()
+		if err != nil {
+			if testers.Timedout(err) && apiTry < 3 {
+				apiTry++
+				continue
+			}
+			// exit(255, fileName, *fileArg, err)
+			return 255, err
+		}
+		break
 	}
+	apiTry = 0
 	glog.Infof("Got broadcasters: %+v", broadcasters)
 	fmt.Printf("Streaming video file '%s'\n", fileName)
 	httpIngestURLTemplates := make([]string, 0, len(broadcasters))
@@ -115,12 +135,21 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	// glog.Infof("All cool!")
 	hostName, _ := os.Hostname()
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	stream, err := rt.lapi.CreateStreamEx(streamName, true, nil, standardProfiles...)
-	if err != nil {
-		glog.Errorf("Error creating stream using Livepeer API: %v", err)
-		// exit(253, fileName, *fileArg, err)
-		return 253, err
+	var stream *livepeer.CreateStreamResp
+	for {
+		stream, err = rt.lapi.CreateStreamEx(streamName, true, nil, standardProfiles...)
+		if err != nil {
+			if testers.Timedout(err) && apiTry < 3 {
+				apiTry++
+				continue
+			}
+			glog.Errorf("Error creating stream using Livepeer API: %v", err)
+			// exit(253, fileName, *fileArg, err)
+			return 253, err
+		}
+		break
 	}
+	apiTry = 0
 	rt.streamID = stream.ID
 	rt.stream = stream
 	messenger.SendMessage(fmt.Sprintf(":information_source: Created stream id=%s", stream.ID))
@@ -179,7 +208,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	glog.Infof("Waiting 10 seconds")
 	time.Sleep(10 * time.Second)
 	// now get sessions
-	sessions, err := rt.lapi.GetSessions(stream.ID, false)
+	sessions, err := rt.lapi.GetSessionsR(stream.ID, false)
 	if err != nil {
 		glog.Errorf("Error getting sessions for stream id=%s err=%v", stream.ID, err)
 		// exit(252, fileName, *fileArg, err)
@@ -217,9 +246,9 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 0, err
 	}
 
-	sessions, err = rt.lapi.GetSessions(stream.ID, rt.useForceURL)
+	sessions, err = rt.lapi.GetSessionsR(stream.ID, rt.useForceURL)
 	if err != nil {
-		err := fmt.Errorf("Error getting sessions for stream id=%s err=%v", stream.ID, err)
+		err := fmt.Errorf("error getting sessions for stream id=%s err=%v", stream.ID, err)
 		return 252, err
 		// exit(252, fileName, *fileArg, err)
 	}
