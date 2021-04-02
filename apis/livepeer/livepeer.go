@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -27,6 +28,8 @@ var defaultHTTPClient = &http.Client{
 	// Transport: &http2.Transport{AllowHTTP: true},
 	Timeout: httpTimeout,
 }
+
+var hostName, _ = os.Hostname()
 
 const (
 	// ESHServer GCP? server
@@ -130,7 +133,8 @@ type (
 	}
 
 	setActiveReq struct {
-		Active bool `json:"active"`
+		Active   bool   `json:"active,omitempty"`
+		HostName string `json:"hostName,omitempty"`
 	}
 )
 
@@ -504,7 +508,8 @@ func (lapi *API) SetActive(id string, active bool) (bool, error) {
 	start := time.Now()
 	u := fmt.Sprintf("%s/api/stream/%s/setactive", lapi.choosenServer, id)
 	ar := setActiveReq{
-		Active: active,
+		Active:   active,
+		HostName: hostName,
 	}
 	b, _ := json.Marshal(&ar)
 	req, err := uhttp.NewRequest("PUT", u, bytes.NewBuffer(b))
