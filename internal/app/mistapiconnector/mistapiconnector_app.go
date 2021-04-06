@@ -21,6 +21,7 @@ import (
 
 const streamPlaybackPrefix = "playback_"
 const traefikRuleTemplate = "HostRegexp(`%s`) && PathPrefix(`/hls/%s/`)"
+const traefikRuleTemplateDouble = "HostRegexp(`%s`) && (PathPrefix(`/hls/%s/`) || PathPrefix(`/hls/%s/`))"
 const traefikKeyPathRouters = `traefik/http/routers/`
 const traefikKeyPathServices = `traefik/http/services/`
 const traefikKeyPathMiddlewares = `traefik/http/middlewares/`
@@ -389,7 +390,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 				err = consul.PutKeysWithCurrentTime(
 					mc.consulURL,
 					traefikKeyPathRouters+playbackID+"/rule",
-					fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, stream.PlaybackID),
+					fmt.Sprintf(traefikRuleTemplateDouble, mc.playbackDomain, stream.PlaybackID, wildcardPlaybackID),
 					traefikKeyPathRouters+playbackID+"/service",
 					serviceName,
 					traefikKeyPathRouters+playbackID+"/middlewares/0",
@@ -399,6 +400,8 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 
 					traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/0",
 					`/hls/`+stream.PlaybackID,
+					traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/1",
+					`/hls/`+wildcardPlaybackID,
 					traefikKeyPathMiddlewares+playbackID+"-2/addprefix/prefix",
 					`/hls/`+wildcardPlaybackID,
 
