@@ -23,7 +23,7 @@ func AzureInit(azureStorageAccount, azureAccessKey, _azureContainer string) erro
 		return nil
 	}
 	if azureStorageAccount == "" || azureAccessKey == "" || _azureContainer == "" {
-		return errors.New("Should specify all of azure-storage-account, azure-access-key, azure-container")
+		return errors.New("should specify all of azure-storage-account, azure-access-key, azure-container")
 	}
 	azureContainer = _azureContainer
 

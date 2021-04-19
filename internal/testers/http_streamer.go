@@ -264,7 +264,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	if err != nil {
 		glog.Error("Error getting mime type ", err, manifestID)
 		panic(err)
-		return
+		// return
 	}
 	glog.V(model.VERBOSE).Infof("mediaType=%s params=%+v", mediaType, params)
 	if glog.V(model.VVERBOSE) {
@@ -274,7 +274,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	}
 	var segments [][]byte
 	var urls []string
-	if "multipart/mixed" == mediaType {
+	if mediaType == "multipart/mixed" {
 		mr := multipart.NewReader(resp.Body, params["boundary"])
 		for {
 			p, merr := mr.NextPart()

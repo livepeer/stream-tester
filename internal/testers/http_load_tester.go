@@ -82,7 +82,7 @@ func (hlt *HTTPLoadTester) StartStreams(sourceFileName, bhost, rtmpPort, ohost, 
 			return "", err
 		}
 		if len(broadcasters) == 0 {
-			return "", fmt.Errorf("Empty list of broadcasters")
+			return "", fmt.Errorf("empty list of broadcasters")
 		}
 		httpIngestURLTemplates = make([]string, 0, len(broadcasters))
 		// httpIngestURLTemplate = fmt.Sprintf("%s/live/%%s", broadcasters[0])

@@ -120,16 +120,18 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	apiTry = 0
 	glog.Infof("Got broadcasters: %+v", broadcasters)
 	fmt.Printf("Streaming video file '%s'\n", fileName)
-	httpIngestURLTemplates := make([]string, 0, len(broadcasters))
-	for _, b := range broadcasters {
-		httpIngestURLTemplates = append(httpIngestURLTemplates, fmt.Sprintf("%s/live/%%s", b))
-	}
+	/*
+		httpIngestURLTemplates := make([]string, 0, len(broadcasters))
+		for _, b := range broadcasters {
+			httpIngestURLTemplates = append(httpIngestURLTemplates, fmt.Sprintf("%s/live/%%s", b))
+		}
+	*/
 	httpIngest := false
 	if httpIngest && len(broadcasters) == 0 {
 		// exit(254, fileName, *fileArg, errors.New("Empty list of broadcasters"))
-		return 254, errors.New("Empty list of broadcasters")
+		return 254, errors.New("empty list of broadcasters")
 	} else if !httpIngest && len(ingests) == 0 {
-		return 254, errors.New("Empty list of ingests")
+		return 254, errors.New("empty list of ingests")
 		// exit(254, fileName, *fileArg, errors.New("Empty list of ingests"))
 	}
 	// glog.Infof("All cool!")
