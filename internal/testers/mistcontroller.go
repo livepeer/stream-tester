@@ -751,7 +751,7 @@ func (mc *MistController) pullMediaPL(userName, uri string, i int, out chan *plP
 		glog.Infof("Playlist for uri=%s has zero segments", uri)
 		out <- &plPullRes{err: ErrZeroStreams, i: i}
 		panic("no segments")
-		return nil, ErrZeroStreams
+		// return nil, ErrZeroStreams
 	}
 	var verr error
 	if i == 0 {
