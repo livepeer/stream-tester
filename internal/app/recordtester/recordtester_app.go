@@ -175,6 +175,10 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	if errors.As(srerr, &re) {
 		return 2, re
 	}
+	if srerr != nil {
+		glog.Warning("Streaming returned error err=%v", srerr)
+		return 3, err
+	}
 	stats, err := sr2.Stats()
 	if err != nil {
 		glog.Warning("Stats returned error err=%v", err)
@@ -195,6 +199,10 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		var re *testers.RTMPError
 		if errors.As(srerr, &re) {
 			return 2, re
+		}
+		if srerr != nil {
+			glog.Warning("Streaming second returned error err=%v", srerr)
+			return 3, err
 		}
 		stats, err := sr2.Stats()
 		if err != nil {

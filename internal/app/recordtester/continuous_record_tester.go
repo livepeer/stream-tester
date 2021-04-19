@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/PagerDuty/go-pagerduty"
@@ -58,6 +59,7 @@ func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDu
 func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error {
 	glog.Infof("Starting continuous test of %s", crt.host)
 	try := 0
+	notRtmpTry := 0
 	for {
 		msg := fmt.Sprintf(":arrow_right: Starting %s recordings test stream to %s", 2*testDuration, crt.host)
 		glog.Info(msg)
@@ -70,12 +72,22 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			return err
 		} else if err != nil || es != 0 {
 			var re *testers.RTMPError
-			if errors.As(err, &re) && try == 0 {
-				msg := fmt.Sprintf(":rotating_light: Test of %s ended with RTMP err=%v errCode=%v try=0, trying second time", crt.host, err, es)
+			if errors.As(err, &re) && try < 4 {
+				msg := fmt.Sprintf(":rotating_light: Test of %s ended with RTMP err=%v errCode=%v try=%d, trying %s time",
+					crt.host, err, es, try, getNth(try+2))
 				messenger.SendMessage(msg)
 				rt.Clean()
 				try++
 				time.Sleep(10 * time.Second)
+				continue
+			}
+			if notRtmpTry < 3 {
+				msg := fmt.Sprintf(":rotating_light: Test of %s ended with some err=%v errCode=%v try=%d, trying %s time",
+					crt.host, err, es, notRtmpTry, getNth(notRtmpTry+2))
+				messenger.SendMessage(msg)
+				rt.Clean()
+				notRtmpTry++
+				time.Sleep(5 * time.Second)
 				continue
 			}
 			msg := fmt.Sprintf(":rotating_light: Test of %s ended with err=%v errCode=%v", crt.host, err, es)
@@ -122,6 +134,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			glog.Warning(msg)
 		}
 		try = 0
+		notRtmpTry = 0
 		rt.Clean()
 		glog.Infof("Waiting %s before next test", pauseBetweenTests)
 		time.Sleep(pauseBetweenTests)
@@ -139,4 +152,13 @@ func (crt *continuousRecordTester) Cancel() {
 
 func (crt *continuousRecordTester) Done() <-chan struct{} {
 	return crt.ctx.Done()
+}
+
+var nth = []string{"0", "first", "second", "third", "forth", "fifth"}
+
+func getNth(i int) string {
+	if i > 0 && i < len(nth) {
+		return nth[i]
+	}
+	return strconv.Itoa(i)
 }
