@@ -377,62 +377,62 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	w.Write([]byte(responseURL))
-	metrics.StartStream()
 	if mc.consulURL != nil {
 		// now create routing rule in the Consul for HLS playback
-		go func() {
-			var err error
-			if mc.baseStreamName != "" {
-				wildcardPlaybackID := mc.wildcardPlaybackID(stream)
-				playbackID := mc.consulPrefix + stream.PlaybackID
-				serviceName := mc.consulPrefix + serviceNameFromMistURL(mc.mistURL)
-				err = consul.PutKeysWithCurrentTime(
-					mc.consulURL,
-					traefikKeyPathRouters+playbackID+"/rule",
-					fmt.Sprintf(traefikRuleTemplateDouble, mc.playbackDomain, stream.PlaybackID, wildcardPlaybackID),
-					traefikKeyPathRouters+playbackID+"/service",
-					serviceName,
-					traefikKeyPathRouters+playbackID+"/middlewares/0",
-					playbackID+"-1",
-					traefikKeyPathRouters+playbackID+"/middlewares/1",
-					playbackID+"-2",
+		if mc.baseStreamName != "" {
+			wildcardPlaybackID := mc.wildcardPlaybackID(stream)
+			playbackID := mc.consulPrefix + stream.PlaybackID
+			serviceName := mc.consulPrefix + serviceNameFromMistURL(mc.mistURL)
+			err = consul.PutKeysWithCurrentTimeRetry(
+				4,
+				mc.consulURL,
+				traefikKeyPathRouters+playbackID+"/rule",
+				fmt.Sprintf(traefikRuleTemplateDouble, mc.playbackDomain, stream.PlaybackID, wildcardPlaybackID),
+				traefikKeyPathRouters+playbackID+"/service",
+				serviceName,
+				traefikKeyPathRouters+playbackID+"/middlewares/0",
+				playbackID+"-1",
+				traefikKeyPathRouters+playbackID+"/middlewares/1",
+				playbackID+"-2",
 
-					traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/0",
-					`/hls/`+stream.PlaybackID,
-					traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/1",
-					`/hls/`+wildcardPlaybackID,
-					traefikKeyPathMiddlewares+playbackID+"-2/addprefix/prefix",
-					`/hls/`+wildcardPlaybackID,
+				traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/0",
+				`/hls/`+stream.PlaybackID,
+				traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/1",
+				`/hls/`+wildcardPlaybackID,
+				traefikKeyPathMiddlewares+playbackID+"-2/addprefix/prefix",
+				`/hls/`+wildcardPlaybackID,
 
-					// traefikKeyPathMiddlewares+playbackID+"/replacepathregex/regex",
-					// fmt.Sprintf(`^/hls/%s\+(.*)`, mc.baseNameForStream(stream)),
-					// traefikKeyPathMiddlewares+playbackID+"/replacepathregex/replacement",
-					// `/hls/$1`,
+				// traefikKeyPathMiddlewares+playbackID+"/replacepathregex/regex",
+				// fmt.Sprintf(`^/hls/%s\+(.*)`, mc.baseNameForStream(stream)),
+				// traefikKeyPathMiddlewares+playbackID+"/replacepathregex/replacement",
+				// `/hls/$1`,
 
-					traefikKeyPathServices+serviceName+"/loadbalancer/servers/0/url",
-					mc.mistURL,
-					traefikKeyPathServices+serviceName+"/loadbalancer/passhostheader",
-					"false",
-				)
-			} else {
-				err = consul.PutKeys(
-					mc.consulURL,
-					traefikKeyPathRouters+streamKey+"/rule",
-					fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, streamKey),
-					traefikKeyPathRouters+streamKey+"/service",
-					streamKey,
-					traefikKeyPathServices+streamKey+"/loadbalancer/servers/0/url",
-					mc.mistURL,
-					traefikKeyPathServices+streamKey+"/loadbalancer/passhostheader",
-					"false",
-				)
-			}
-			if err != nil {
-				glog.Errorf("Error creating Traefik rule err=%v", err)
-			}
-		}()
+				traefikKeyPathServices+serviceName+"/loadbalancer/servers/0/url",
+				mc.mistURL,
+				traefikKeyPathServices+serviceName+"/loadbalancer/passhostheader",
+				"false",
+			)
+		} else {
+			err = consul.PutKeys(
+				mc.consulURL,
+				traefikKeyPathRouters+streamKey+"/rule",
+				fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, streamKey),
+				traefikKeyPathRouters+streamKey+"/service",
+				streamKey,
+				traefikKeyPathServices+streamKey+"/loadbalancer/servers/0/url",
+				mc.mistURL,
+				traefikKeyPathServices+streamKey+"/loadbalancer/passhostheader",
+				"false",
+			)
+		}
+		if err != nil {
+			glog.Errorf("Error creating Traefik rule err=%v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("false"))
+		}
 	}
+	w.Write([]byte(responseURL))
+	metrics.StartStream()
 	glog.Infof("Responded with '%s'", responseURL)
 }
 

@@ -32,10 +32,10 @@ type GetKeyResponse struct {
 }
 
 // ErrNotFound returned if key is not found
-var ErrNotFound = errors.New("Key not found")
-var ErrConfilct = errors.New("Conflict")
+var ErrNotFound = errors.New("ney not found")
+var ErrConfilct = errors.New("conflict")
 
-const httpTimeout = 2 * time.Second
+const httpTimeout = 1 * time.Second
 
 // GetKey retrieves key from Consul's KV storage
 func GetKey(u *url.URL, path string) (string, error) {
@@ -147,7 +147,7 @@ func PutKey(u *url.URL, path, value string) error {
 //  content of the keys is the same)
 func PutKeysWithCurrentTime(u *url.URL, kvs ...string) error {
 	if len(kvs) == 0 || len(kvs)%2 != 0 {
-		return errors.New("Number of arguments should be even")
+		return errors.New("number of arguments should be even")
 	}
 	now := time.Now().UnixNano() / int64(time.Millisecond)
 	ks := make([]GetKeyResponse, 0, len(kvs)/2)
@@ -157,10 +157,25 @@ func PutKeysWithCurrentTime(u *url.URL, kvs ...string) error {
 	return PutKeysEx(u, ks)
 }
 
+// PutKeysWithCurrentTimeRetry calls PutKeysWithCurrentTime retry times in case of failure
+func PutKeysWithCurrentTimeRetry(retry int, u *url.URL, kvs ...string) error {
+	var err error
+	for try := 0; try < retry; try++ {
+		err = PutKeysWithCurrentTime(u, kvs...)
+		if err == nil {
+			return nil
+		}
+	}
+	if err != nil {
+		glog.Errorf("Error putting keys '%s' to Consul at %s error: %v try %d", kvs[0], u.String(), err, retry)
+	}
+	return err
+}
+
 // PutKeys puts keys in one transaction
 func PutKeys(u *url.URL, kvs ...string) error {
 	if len(kvs) == 0 || len(kvs)%2 != 0 {
-		return errors.New("Number of arguments should be even")
+		return errors.New("number of arguments should be even")
 	}
 	ks := make([]GetKeyResponse, 0, len(kvs)/2)
 	for i := 0; i < len(kvs); i += 2 {
@@ -172,7 +187,7 @@ func PutKeys(u *url.URL, kvs ...string) error {
 // PutKeysEx puts keys in one transaction
 func PutKeysEx(u *url.URL, ks []GetKeyResponse) error {
 	if len(ks) == 0 {
-		return errors.New("Number of arguments should be greater than zero")
+		return errors.New("number of arguments should be greater than zero")
 	}
 	start := time.Now()
 	var cu url.URL = *u
@@ -192,7 +207,7 @@ func PutKeysEx(u *url.URL, ks []GetKeyResponse) error {
 	resp, err := http.DefaultClient.Do(uhttp.NewRequestWithContext(ctx, "PUT", cu.String(), body))
 	cancel()
 	if err != nil {
-		glog.Errorf("Error putting keys '%s' to Consul at %s error: %v", ks[0].Key, cu.String(), err)
+		glog.Errorf("Failed putting keys '%s' to Consul at %s error: %v", ks[0].Key, cu.String(), err)
 		metrics.ConsulRequest("put", 0, err)
 		return err
 	}
@@ -263,7 +278,7 @@ func DeleteKey(u *url.URL, path string, recurse bool) (bool, error) {
 // DeleteKeysCas delete keys from Consul's KV storage
 func DeleteKeysCas(u *url.URL, ks []GetKeyResponse) (bool, error) {
 	if len(ks) == 0 {
-		return false, errors.New("Number of arguments should be greater than zero")
+		return false, errors.New("number of arguments should be greater than zero")
 	}
 	start := time.Now()
 	var cu url.URL = *u
