@@ -86,6 +86,7 @@ func main() {
 	picartoExternalHost := flag.String("picarto-external-host", "", "Host name of the Picarto server to be used in the messages to Discord")
 	picartoStatsInterval := flag.Duration("picarto-stats-interval", 0, "Interval between stats messages sent to Discord")
 	picartoSDCutOff := flag.Float64("picarto-standad-deviation-cutoff", 0.0, "Do not start streams that have standard deviation of segments durations more than that")
+	picartoCountry := flag.String("picarto-country", "us-east1", "Picartor country")
 	delayStart := flag.Duration("delay-start", 0, "Delay start")
 	botToken := flag.String("bot-token", "", "Discord's bot token")
 	channelID := flag.String("channel-id", "", "Discord's channel id (can be list of channels, separated by comma)")
@@ -212,7 +213,7 @@ func main() {
 		mapi.Login()
 
 		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, *save, mapi,
-			*picartoBlackList, *picartoExternalHost, *picartoStatsInterval, *picartoSDCutOff)
+			*picartoBlackList, *picartoExternalHost, *picartoStatsInterval, *picartoSDCutOff, *picartoCountry)
 		// emsg := fmt.Sprintf("Starting **%d** Picarto streams (ver %s)", *picartoStreams, model.Version)
 		// messenger.SendMessage(emsg)
 		go startWebServer() // needed for /metrics endpoint

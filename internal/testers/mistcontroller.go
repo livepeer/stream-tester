@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	picartoCountry       = "us-east1"
+	// picartoCountry       = "us-east1"
 	hlsURLTemplate       = "http://%s:8080/hls/golive+%s/index.m3u8"
 	baseStreamName       = "golive"
 	streamsStartStep     = 5
@@ -41,6 +41,7 @@ type (
 	// new stream)
 	MistController struct {
 		mapi               *mist.API
+		picartoCountry     string
 		mistHot            string
 		profilesNum        int // transcoding profiles number. Should be one for now.
 		adult              bool
@@ -83,7 +84,7 @@ var (
 
 // NewMistController creates new MistController
 func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gaming, save bool, mapi *mist.API, blackListedStreams, externalHost string,
-	statsInterval time.Duration, sdCutOff float64) *MistController {
+	statsInterval time.Duration, sdCutOff float64, country string) *MistController {
 
 	statsDelay := 4 * 60 * time.Second
 	if !model.Production {
@@ -96,6 +97,7 @@ func NewMistController(mistHost string, streamsNum, profilesNum int, adult, gami
 
 	ctx, cancel := context.WithCancel(context.Background())
 	return &MistController{
+		picartoCountry:     country,
 		mapi:               mapi,
 		mistHot:            mistHost,
 		adult:              adult,
@@ -240,7 +242,7 @@ func (mc *MistController) workLoop(ec chan error, firstTime bool) error {
 					mc.startStreams(failedStreams, toBeStarted)
 				*/
 				// toBeStarted := mc.streamsNum - len(mc.downloaders) + len(starting)
-				ps, err := picarto.GetOnlineUsers(picartoCountry, mc.adult, mc.gaming)
+				ps, err := picarto.GetOnlineUsers(mc.picartoCountry, mc.adult, mc.gaming)
 				if err != nil {
 					if firstTime {
 						ec <- err
