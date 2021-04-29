@@ -24,7 +24,7 @@ var httpClient = &http.Client{
 }
 
 const (
-	apiURL = "https://api.picarto.tv/v1/"
+	apiURL = "https://api.picarto.tv/api/v1/"
 )
 
 type (
