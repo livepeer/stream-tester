@@ -41,6 +41,7 @@ func main() {
 	// startDelay := fs.Duration("start-delay", 0*time.Second, "time delay before start")
 	streamDuration := fs.Duration("stream-dur", 0, "How long to stream each stream (0 to stream whole file)")
 	testDuration := fs.Duration("test-dur", 0, "How long to run overall test")
+	waitForTargetDuration := fs.Duration("wait-for-target", 30*time.Second, "How long to wait for a new stream to appear before giving up")
 
 	// profiles := fs.Uint("profiles", 2, "number of transcoded profiles should be in output")
 	sim := fs.Uint("sim", 1, "Number of simulteneous streams to stream")
@@ -243,7 +244,7 @@ func main() {
 		// exit(0, fn, fa, nil)
 	}(fileName, *fileArg)
 
-	err = loadTester.Start(fileName, 30*time.Second, *streamDuration, *testDuration, int(*sim))
+	err = loadTester.Start(fileName, *waitForTargetDuration, *streamDuration, *testDuration, int(*sim))
 	if err != nil {
 		glog.Errorf("Error starting test: %v", err)
 		exit(255, fileName, *fileArg, err)
