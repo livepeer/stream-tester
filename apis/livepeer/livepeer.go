@@ -35,7 +35,8 @@ const (
 	// ESHServer GCP? server
 	ESHServer = "esh.livepeer.live"
 	// ACServer Atlantic Crypto server
-	ACServer = "chi.livepeer-ac.live"
+	// ACServer = "chi.livepeer-ac.live"
+	ACServer = "livepeer.monster"
 
 	livepeerAPIGeolocateURL = "http://livepeer.live/api/geolocate"
 	ProdServer              = "livepeer.com"
@@ -280,7 +281,7 @@ func (lapi *API) Ingest(all bool) ([]Ingest, error) {
 	return ingests, nil
 }
 
-var standardProfiles = []Profile{
+var StandardProfiles = []Profile{
 	{
 		Name:    "240p0",
 		Fps:     0,
@@ -363,7 +364,7 @@ func (lapi *API) CreateStreamEx(name string, record bool, presets []string, prof
 		Record:  record,
 	}
 	if len(presets) == 0 {
-		reqs.Profiles = standardProfiles
+		reqs.Profiles = StandardProfiles
 	}
 	if len(profiles) > 0 {
 		reqs.Profiles = profiles

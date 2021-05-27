@@ -50,6 +50,7 @@ func main() {
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
 	continuousTest := fs.Duration("continuous-test", 0, "Do continuous testing")
+	useHttp := fs.Bool("http", false, "Do HTTP tests instead of RTMP")
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
 	discordUsersToNotify := fs.String("discord-users", "", "Id's of users to notify in case of failure")
@@ -183,7 +184,7 @@ func main() {
 		start := time.Now()
 
 		for i := 0; i < *sim; i++ {
-			rt := recordtester.NewRecordTester(gctx, lapi, useForceURL)
+			rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp)
 			eses = append(eses, 0)
 			testers = append(testers, rt)
 			wg.Add(1)
@@ -217,7 +218,7 @@ func main() {
 	} else if *continuousTest > 0 {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
-		crt := recordtester.NewContinuousRecordTester(gctx, lapi, *pagerDutyIntegrationKey, *pagerDutyComponent)
+		crt := recordtester.NewContinuousRecordTester(gctx, lapi, *pagerDutyIntegrationKey, *pagerDutyComponent, *useHttp)
 		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 		if err != nil {
 			glog.Warningf("Continuous test ended with err=%v", err)
@@ -226,7 +227,7 @@ func main() {
 		return
 	}
 	// just one stream
-	rt := recordtester.NewRecordTester(gctx, lapi, useForceURL)
+	rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp)
 	es, err := rt.Start(fileName, *testDuration, *pauseDuration)
 	exit(es, fileName, *fileArg, err)
 }

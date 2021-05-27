@@ -20,7 +20,8 @@ func main() {
 	fmt.Printf("Got %d records\n", len(ps))
 	for _, pr := range ps {
 		if pr.Adult {
-			fmt.Printf("%s %v %s\n", pr.Name, pr.Adult, pr.Title)
+			// fmt.Printf("%s %v %s %s\n", pr.Name, pr.Adult, pr.Title, pr.Thumbnails["web"])
+			fmt.Printf("https://picarto.tv/%s  %s\n", pr.Name, pr.Thumbnails["web"])
 		}
 	}
 }

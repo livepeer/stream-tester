@@ -179,10 +179,19 @@ func transcodeSegment(token, presets, sid, seq, outFmt, name string) error {
 	lapi := livepeer.NewLivepeer(token, server, nil)
 	lapi.Init()
 	if sid == "" {
-		sid, _, err = createStream(token, presets, "lapi_stream")
+		// sid, _, err = createStream(token, presets, "lapi_stream")
+		// prof := ffmpeg.P720p25fps16x9
+		prof := livepeer.StandardProfiles[3]
+		prof.Gop = ""
+		prof.Profile = "H264High"
+		prof.Profile = "h264high"
+		prof.Fps = 0
+		prof.FpsDen = 0
+		resp, err := lapi.CreateStreamEx("lapi_stream_2", false, nil, prof)
 		if err != nil {
 			panic(err)
 		}
+		sid = resp.ID
 	}
 	bs, err := lapi.Broadcasters()
 	if err != nil {
