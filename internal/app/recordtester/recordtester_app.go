@@ -1,13 +1,18 @@
 package recordtester
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/joy4/format/mp4"
+	"github.com/livepeer/joy4/format/mp4/mp4io"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/messenger"
@@ -36,6 +41,7 @@ type (
 		streamID    string
 		stream      *livepeer.CreateStreamResp
 		useHTTP     bool
+		mp4         bool
 	}
 )
 
@@ -75,7 +81,7 @@ var standardProfiles = []livepeer.Profile{
 }
 
 // NewRecordTester ...
-func NewRecordTester(gctx context.Context, lapi *livepeer.API, useForceURL, useHTTP bool) IRecordTester {
+func NewRecordTester(gctx context.Context, lapi *livepeer.API, useForceURL, useHTTP, mp4 bool) IRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	rt := &recordTester{
 		lapi:        lapi,
@@ -83,6 +89,7 @@ func NewRecordTester(gctx context.Context, lapi *livepeer.API, useForceURL, useH
 		ctx:         ctx,
 		cancel:      cancel,
 		useHTTP:     useHTTP,
+		mp4:         mp4,
 	}
 	return rt
 }
@@ -167,15 +174,26 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 	glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
 	if rt.useHTTP {
-		hs := testers.NewHTTPStreamer(rt.ctx, false, "not used")
-		go hs.StartUpload(fileName)
-		<-hs.Done()
-
+		sterr := rt.doOneHTTPStream(fileName, streamName, broadcasters[0], testDuration, stream)
+		if sterr != nil {
+			glog.Warning("Streaming returned error err=%v", sterr)
+			return 3, err
+		}
+		if pauseDuration > 0 {
+			glog.Infof("Pause specified, waiting %s before streaming second time", pauseDuration)
+			time.Sleep(pauseDuration)
+			sterr = rt.doOneHTTPStream(fileName, streamName, broadcasters[0], testDuration, stream)
+			if sterr != nil {
+				glog.Warning("Second time streaming returned error err=%v", sterr)
+				return 3, err
+			}
+			testDuration *= 2
+		}
 	} else {
 
 		sr2 := testers.NewStreamer2(rt.ctx, false, false, false, false, false)
-		go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
-		<-sr2.Done()
+		sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
+		// <-sr2.Done()
 		srerr := sr2.Err()
 		glog.Infof("Streaming stream id=%s done err=%v", stream.ID, srerr)
 		var re *testers.RTMPError
@@ -223,10 +241,13 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			testDuration *= 2
 		}
 	}
+	if err := rt.isCancelled(); err != nil {
+		return 0, err
+	}
 	glog.Infof("Waiting 10 seconds")
 	time.Sleep(10 * time.Second)
 	// now get sessions
-	sessions, err := rt.lapi.GetSessionsR(stream.ID, false)
+	sessions, err := rt.lapi.GetSessionsNewR(stream.ID, false)
 	if err != nil {
 		glog.Errorf("Error getting sessions for stream id=%s err=%v", stream.ID, err)
 		// exit(252, fileName, *fileArg, err)
@@ -234,19 +255,20 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	}
 	glog.Infof("Sessions: %+v", sessions)
 	if len(sessions) != 1 {
-		err := fmt.Errorf("Should have one session, got %d", len(sessions))
+		err := fmt.Errorf("should have one session, got %d", len(sessions))
 		glog.Error(err)
 		// exit(251, fileName, *fileArg, err)
 		return 251, err
 	}
 	sess := sessions[0]
 	if len(sess.Profiles) != len(stream.Profiles) {
-		err := fmt.Errorf("Got %d, but should have %d", len(sess.Profiles), len(stream.Profiles))
+		glog.Infof("session: %+v")
+		err := fmt.Errorf("got %d, but should have %d", len(sess.Profiles), len(stream.Profiles))
 		return 251, err
 		// exit(251, fileName, *fileArg, err)
 	}
 	if sess.RecordingStatus != livepeer.RecordingStatusWaiting {
-		err := fmt.Errorf("Recording status is %s but should be %s", sess.RecordingStatus, livepeer.RecordingStatusWaiting)
+		err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, livepeer.RecordingStatusWaiting)
 		return 250, err
 		// exit(250, fileName, *fileArg, err)
 	}
@@ -264,7 +286,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 0, err
 	}
 
-	sessions, err = rt.lapi.GetSessionsR(stream.ID, rt.useForceURL)
+	sessions, err = rt.lapi.GetSessionsNewR(stream.ID, rt.useForceURL)
 	if err != nil {
 		err := fmt.Errorf("error getting sessions for stream id=%s err=%v", stream.ID, err)
 		return 252, err
@@ -281,12 +303,12 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		statusShould = livepeer.RecordingStatusWaiting
 	}
 	if sess.RecordingStatus != statusShould {
-		err := fmt.Errorf("Recording status is %s but should be %s", sess.RecordingStatus, statusShould)
+		err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
 		return 240, err
 		// exit(250, fileName, *fileArg, err)
 	}
 	if sess.RecordingURL == "" {
-		err := fmt.Errorf("Recording URL should appear by now")
+		err := fmt.Errorf("recording URL should appear by now")
 		return 249, err
 		// exit(249, fileName, *fileArg, err)
 	}
@@ -303,6 +325,13 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	if err = rt.isCancelled(); err != nil {
 		return 0, err
 	}
+	if rt.mp4 {
+		es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration, pauseDuration > 0)
+		if err != nil {
+			return es, err
+		}
+	}
+
 	es, err := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
 	if es == 0 {
 		rt.lapi.DeleteStream(stream.ID)
@@ -314,6 +343,34 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	return es, err
 }
 
+func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL string, testDuration time.Duration, stream *livepeer.CreateStreamResp) error {
+	var session *livepeer.CreateStreamResp
+	var err error
+	apiTry := 0
+	for {
+		session, err = rt.lapi.CreateStreamEx2(streamName, true, stream.ID, nil, standardProfiles...)
+		if err != nil {
+			if testers.Timedout(err) && apiTry < 3 {
+				apiTry++
+				continue
+			}
+			glog.Errorf("Error creating stream session using Livepeer API: %v", err)
+			// exit(253, fileName, *fileArg, err)
+			return err
+		}
+		break
+	}
+	hs := testers.NewHTTPStreamer(rt.ctx, false, "not used")
+	httpIngestBaseURL := fmt.Sprintf("%s/live/%s", broadcasterURL, session.ID)
+	glog.Infof("httpIngestBaseURL=%s", httpIngestBaseURL)
+	hs.StartUpload(fileName, httpIngestBaseURL, stream.ID, -1, -1, testDuration, 0)
+	// <-hs.Done()
+	stats, err := hs.Stats()
+	glog.Infof("Streaming stream id=%s done err=%v", stream.ID, err)
+	glog.Infof("Stats: %+v", stats)
+	return err
+}
+
 func (rt *recordTester) isCancelled() error {
 	select {
 	case <-rt.ctx.Done():
@@ -321,6 +378,56 @@ func (rt *recordTester) isCancelled() error {
 	default:
 	}
 	return nil
+}
+
+func (rt *recordTester) checkDownMp4(stream *livepeer.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
+	es := 0
+	started := time.Now()
+	glog.V(model.VERBOSE).Infof("Downloading mp4 url=%s stream id=%s", url, stream.ID)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		glog.Warningf("Error downloading mp4 for manifestID=%s url=%s", stream.ID, url)
+		return 3, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		glog.Warningf("HTTP error downloading mp4 for manifestID=%s url=%s status=%s", stream.ID, url, resp.Status)
+		return 3, err
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Warningf("HTTP error downloading mp4 for manifestID=%s url=%s err=%v", stream.ID, url, err)
+		return 3, err
+	}
+	glog.Infof("Downloaded bytes=%b manifestID=%s url=%s took=%s", len(body), stream.ID, url, time.Since(started))
+	bodyR := bytes.NewReader(body)
+	dem := mp4.NewDemuxer(bodyR)
+	streams, err := dem.Streams()
+	if err != nil {
+		glog.Warningf("Error parsing mp4 for manifestID=%s url=%s err=%v", stream.ID, url, err)
+		return 203, err
+	}
+	glog.Infof("Got %d streams in mp4 file manifestID=%s url=%s", len(streams), stream.ID, url)
+	dur, err := calcMP4FileDuration(body)
+	if err != nil {
+		glog.Warningf("Error parsing mp4 for manifestID=%s url=%s err=%v", stream.ID, url, err)
+		return 203, err
+	}
+	durDiffShould := 2 * time.Second
+	if doubled {
+		durDiffShould *= durDiffShould
+	}
+	durDiff := streamDuration - dur
+	if durDiff < 0 {
+		durDiff = -durDiff
+	}
+	if durDiff > durDiffShould {
+		ers := fmt.Errorf("duration of mp4 differ by %s (got %s, should %s)", durDiff, dur, streamDuration)
+		glog.Error(ers)
+		return 300, err
+	}
+	return es, nil
 }
 
 func (rt *recordTester) checkDown(stream *livepeer.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
@@ -374,4 +481,59 @@ func (rt *recordTester) StreamID() string {
 
 func (rt *recordTester) Stream() *livepeer.CreateStreamResp {
 	return rt.stream
+}
+
+type visitor = func(mp4io.Atom) bool
+
+func walker(atoms []mp4io.Atom, visitor visitor) bool {
+	res := false
+	for _, atom := range atoms {
+		if res = visitor(atom); res {
+			break
+		}
+		if res = walker(atom.Children(), visitor); res {
+			break
+		}
+	}
+	return res
+}
+
+func calcFileDuration(atoms []mp4io.Atom) time.Duration {
+	var timeScale int32
+	var duration, fragmentBaseTime float64
+	var durationDuration, fragmentBaseTimeDuration time.Duration
+	walker(atoms, func(atom mp4io.Atom) bool {
+		if atom.Tag() == mp4io.MVHD {
+			mvhd := atom.(*mp4io.MovieHeader)
+			durationDuration = time.Duration(mvhd.Duration) * time.Second / time.Duration(mvhd.TimeScale)
+			duration = float64(mvhd.Duration) / float64(mvhd.TimeScale)
+			fmt.Printf("MVHD duration %d time scale %d (%fsec) dur %s (%d)\n", mvhd.Duration, mvhd.TimeScale, duration, durationDuration, int64(durationDuration))
+		}
+		if atom.Tag() == mp4io.MDHD {
+			mvhd := atom.(*mp4io.MediaHeader)
+			timeScale = mvhd.TimeScale
+			fmt.Printf("MDHD duration %d time scale %d (%fsec)\n", mvhd.Duration, mvhd.TimeScale, float64(mvhd.Duration)/float64(mvhd.TimeScale))
+			duration = float64(mvhd.Duration) / float64(mvhd.TimeScale)
+		}
+		if atom.Tag() == mp4io.TFDT {
+			mvhd := atom.(*mp4io.TrackFragDecodeTime)
+			fragmentBaseTime = float64(mvhd.BaseMediaDecodeTime) / float64(timeScale)
+			fragmentBaseTimeDuration = time.Duration(mvhd.BaseMediaDecodeTime) * time.Second / time.Duration(timeScale)
+			fmt.Printf("TFDT base time %d time scale %d (%fsec) %s (%d)\n", mvhd.BaseMediaDecodeTime, timeScale, fragmentBaseTime,
+				fragmentBaseTimeDuration, int64(fragmentBaseTimeDuration))
+		}
+		return false
+	})
+	fmt.Printf("Header duration %f fragment base time %f total duration %fsec\n", duration, fragmentBaseTime, duration+fragmentBaseTime)
+	return durationDuration + fragmentBaseTimeDuration
+}
+
+func calcMP4FileDuration(data []byte) (time.Duration, error) {
+	dataR := bytes.NewReader(data)
+	atoms, err := mp4io.ReadFileAtoms(dataR)
+	if err != nil {
+		return 0, err
+	}
+	dur := calcFileDuration(atoms)
+	return dur, nil
 }

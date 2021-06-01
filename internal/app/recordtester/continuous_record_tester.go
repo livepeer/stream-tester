@@ -33,6 +33,7 @@ type (
 		pagerDutyIntegrationKey string
 		pagerDutyComponent      string
 		useHTTP                 bool
+		mp4                     bool
 	}
 
 	pagerDutyLink struct {
@@ -42,7 +43,7 @@ type (
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDutyIntegrationKey, pagerDutyComponent string, useHTTP bool) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDutyIntegrationKey, pagerDutyComponent string, useHTTP, mp4 bool) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	server := lapi.GetServer()
 	u, _ := url.Parse(server)
@@ -54,6 +55,7 @@ func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDu
 		pagerDutyIntegrationKey: pagerDutyIntegrationKey,
 		pagerDutyComponent:      pagerDutyComponent,
 		useHTTP:                 useHTTP,
+		mp4:                     mp4,
 	}
 	return crt
 }
@@ -66,7 +68,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		msg := fmt.Sprintf(":arrow_right: Starting %s recordings test stream to %s", 2*testDuration, crt.host)
 		glog.Info(msg)
 		messenger.SendMessage(msg)
-		rt := NewRecordTester(crt.ctx, crt.lapi, true, crt.useHTTP)
+		rt := NewRecordTester(crt.ctx, crt.lapi, true, crt.useHTTP, crt.mp4)
 		es, err := rt.Start(fileName, testDuration, pauseDuration)
 		if err == context.Canceled {
 			msg := fmt.Sprintf("Test of %s cancelled", crt.host)
