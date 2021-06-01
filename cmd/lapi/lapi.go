@@ -78,12 +78,30 @@ func main() {
 		ShortHelp:  "Transcodes segment using Livepeer API.",
 		Exec: func(_ context.Context, args []string) error {
 			if len(args) == 0 {
-				return fmt.Errorf("File name should be provided")
+				return fmt.Errorf("file name should be provided")
 			}
 			if *token == "" && *streamID == "" {
-				return fmt.Errorf("Token or stream id should be provided")
+				return fmt.Errorf("token or stream id should be provided")
 			}
 			return transcodeSegment(*token, *presets, *streamID, *seq, *outFmt, args[0])
+		},
+	}
+
+	sessions := &ffcli.Command{
+		Name:       "sessions",
+		ShortUsage: "lapi sessions streamId ",
+		ShortHelp:  "List user sessions for stream",
+		Exec: func(_ context.Context, args []string) error {
+			if *token == "" {
+				return fmt.Errorf("token should be provided")
+			}
+			if len(args) == 0 && *streamID == "" {
+				return fmt.Errorf("stream id should be provided")
+			}
+			if *streamID == "" {
+				*streamID = args[0]
+			}
+			return listSessions(*token, *streamID)
 		},
 	}
 
@@ -93,7 +111,7 @@ func main() {
 		ShortHelp:  "Lists available broadcasters.",
 		Exec: func(_ context.Context, args []string) error {
 			if *token == "" {
-				return fmt.Errorf("Token should be provided")
+				return fmt.Errorf("token should be provided")
 			}
 			lapi := livepeer.NewLivepeer(*token, server, nil) // hardcode AC server for now
 			lapi.Init()
@@ -135,7 +153,7 @@ func main() {
 	root := &ffcli.Command{
 		ShortUsage:  "lapi [flags] <subcommand>",
 		FlagSet:     rootFlagSet,
-		Subcommands: []*ffcli.Command{create, transcode, ls, setActive},
+		Subcommands: []*ffcli.Command{create, transcode, ls, setActive, sessions},
 	}
 
 	// if err := root.ParseAndRun(context.Background(), os.Args[1:]); err != nil {
@@ -173,16 +191,41 @@ func createStream(token, presets, name string) (string, *livepeer.API, error) {
 	return sid, lapi, nil
 }
 
+func listSessions(token, id string) error {
+	// profiles := strings.Split(presets, ",")
+	lapi := livepeer.NewLivepeer(token, server, nil)
+	lapi.Init()
+	sessions, err := lapi.GetSessionsNewR(id, false)
+	if err != nil {
+		panic(err)
+	}
+	glog.Infof("For stream id=%s got %d sessions:", id, len(sessions))
+	for _, sess := range sessions {
+		glog.Infof("%+v", sess)
+		glog.Infof("id %s recordingStatus %s recordingUrl %s Mp4Url %s", sess.ID, sess.RecordingStatus, sess.RecordingURL, sess.Mp4Url)
+	}
+	return nil
+}
+
 func transcodeSegment(token, presets, sid, seq, outFmt, name string) error {
 	var err error
 	// profiles := strings.Split(presets, ",")
 	lapi := livepeer.NewLivepeer(token, server, nil)
 	lapi.Init()
 	if sid == "" {
-		sid, _, err = createStream(token, presets, "lapi_stream")
+		// sid, _, err = createStream(token, presets, "lapi_stream")
+		// prof := ffmpeg.P720p25fps16x9
+		prof := livepeer.StandardProfiles[3]
+		prof.Gop = ""
+		prof.Profile = "H264High"
+		prof.Profile = "h264high"
+		prof.Fps = 0
+		prof.FpsDen = 0
+		resp, err := lapi.CreateStreamEx("lapi_stream_2", false, nil, prof)
 		if err != nil {
 			panic(err)
 		}
+		sid = resp.ID
 	}
 	bs, err := lapi.Broadcasters()
 	if err != nil {
@@ -191,7 +234,7 @@ func transcodeSegment(token, presets, sid, seq, outFmt, name string) error {
 	sort.Strings(bs)
 	fmt.Printf("Got broadcasters list: %+v\n", bs)
 	if len(bs) == 0 {
-		return errors.New("Broadcasters list are empty")
+		return errors.New("broadcasters list are empty")
 	}
 	// base := filepath.Base(name)
 	_, f := filepath.Split(name)

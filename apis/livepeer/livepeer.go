@@ -35,7 +35,8 @@ const (
 	// ESHServer GCP? server
 	ESHServer = "esh.livepeer.live"
 	// ACServer Atlantic Crypto server
-	ACServer = "chi.livepeer-ac.live"
+	// ACServer = "chi.livepeer-ac.live"
+	ACServer = "livepeer.monster"
 
 	livepeerAPIGeolocateURL = "http://livepeer.live/api/geolocate"
 	ProdServer              = "livepeer.com"
@@ -117,6 +118,7 @@ type (
 		CreateStreamResp
 		RecordingStatus string `json:"recordingStatus,omitempty"` // ready, waiting
 		RecordingURL    string `json:"recordingUrl,omitempty"`
+		Mp4Url          string `json:"mp4Url,omitempty"`
 	}
 
 	// // Profile ...
@@ -280,7 +282,7 @@ func (lapi *API) Ingest(all bool) ([]Ingest, error) {
 	return ingests, nil
 }
 
-var standardProfiles = []Profile{
+var StandardProfiles = []Profile{
 	{
 		Name:    "240p0",
 		Fps:     0,
@@ -352,6 +354,11 @@ func (lapi *API) DeleteStream(id string) error {
 
 // CreateStreamEx creates stream with specified name and profiles
 func (lapi *API) CreateStreamEx(name string, record bool, presets []string, profiles ...Profile) (*CreateStreamResp, error) {
+	return lapi.CreateStreamEx2(name, record, "", presets, profiles...)
+}
+
+// CreateStreamEx creates stream with specified name and profiles
+func (lapi *API) CreateStreamEx2(name string, record bool, parentID string, presets []string, profiles ...Profile) (*CreateStreamResp, error) {
 	// presets := profiles
 	// if len(presets) == 0 {
 	// 	presets = lapi.presets
@@ -363,7 +370,7 @@ func (lapi *API) CreateStreamEx(name string, record bool, presets []string, prof
 		Record:  record,
 	}
 	if len(presets) == 0 {
-		reqs.Profiles = standardProfiles
+		reqs.Profiles = StandardProfiles
 	}
 	if len(profiles) > 0 {
 		reqs.Profiles = profiles
@@ -375,6 +382,9 @@ func (lapi *API) CreateStreamEx(name string, record bool, presets []string, prof
 	}
 	glog.Infof("Sending: %s", b)
 	u := fmt.Sprintf("%s/api/stream", lapi.choosenServer)
+	if parentID != "" {
+		u = fmt.Sprintf("%s/api/stream/%s/stream", lapi.choosenServer, parentID)
+	}
 	req, err := uhttp.NewRequest("POST", u, bytes.NewBuffer(b))
 	if err != nil {
 		return nil, err
@@ -450,6 +460,69 @@ func (lapi *API) GetSessionsR(id string, forceUrl bool) ([]UserSession, error) {
 		}
 		return sessions, err
 	}
+}
+
+// GetSessionsNewR gets user's sessions for the stream by id
+func (lapi *API) GetSessionsNewR(id string, forceUrl bool) ([]UserSession, error) {
+	var apiTry int
+	for {
+		sessions, err := lapi.GetSessionsNew(id, forceUrl)
+		if err != nil {
+			if Timedout(err) && apiTry < 3 {
+				apiTry++
+				continue
+			}
+		}
+		return sessions, err
+	}
+}
+
+func (lapi *API) GetSessionsNew(id string, forceUrl bool) ([]UserSession, error) {
+	if id == "" {
+		return nil, errors.New("empty id")
+	}
+	u := fmt.Sprintf("%s/api/session?parentId=%s", lapi.choosenServer, id)
+	if forceUrl {
+		u += "&forceUrl=1"
+	}
+	start := time.Now()
+	req := uhttp.GetRequest(u)
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	resp, err := lapi.httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error getting sessions for stream by id from Livepeer API server (%s) error: %v", u, err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		glog.Errorf("Status error getting sessions for stream by id Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, ErrNotExists
+		}
+		err := errors.New(http.StatusText(resp.StatusCode))
+		return nil, err
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error getting sessions for stream by id Livepeer API server (%s) error: %v", u, err)
+		return nil, err
+	}
+	took := time.Since(start)
+	glog.V(model.DEBUG).Infof("sessions request for id=%s took=%s", id, took)
+	bs := string(b)
+	glog.Info(bs)
+	glog.V(model.VERBOSE).Info(bs)
+	if bs == "null" || bs == "" {
+		// API return null if stream does not exists
+		return nil, ErrNotExists
+	}
+	r := []UserSession{}
+	err = json.Unmarshal(b, &r)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 // GetSessions gets user's sessions for the stream by id

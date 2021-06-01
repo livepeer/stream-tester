@@ -44,6 +44,7 @@ type httpStreamer struct {
 	started        bool
 	dstats         httpStats
 	mu             sync.RWMutex
+	wg             *sync.WaitGroup
 }
 
 type httpStats struct {
@@ -72,6 +73,7 @@ func NewHTTPStreamer(pctx context.Context, saveLatencies bool, baseManifestID st
 		},
 		saveLatencies:  saveLatencies,
 		baseManifestID: baseManifestID,
+		wg:             &sync.WaitGroup{},
 	}
 	hs.dstats.errors = make(map[string]int)
 	return hs
@@ -92,7 +94,7 @@ func pushHLSSegments(ctx context.Context, manifestFileName string, stopAfter tim
 	f.Close()
 	pl, ok := p.(*m3u8.MediaPlaylist)
 	if !ok {
-		return fmt.Errorf("Expecting media PL")
+		return fmt.Errorf("expecting media PL")
 	}
 	dir := path.Dir(manifestFileName)
 	go pushHLSSegmentsLoop(dir, pl, stopAfter, out)
@@ -163,8 +165,11 @@ outloop:
 		}
 		glog.V(model.VERBOSE).Infof("Got segment out of segmenter mainfest=%s seqNo=%d pts=%s dur=%s since last=%s", manifestID, seg.seqNo, seg.pts, seg.duration, time.Since(lastSeg))
 		lastSeg = time.Now()
+		hs.wg.Add(1)
 		go hs.pushSegment(httpURL, manifestID, seg)
 	}
+	glog.V(model.VERBOSE).Infof("Waiting for all segments to be pushed mainfest=%s", manifestID)
+	hs.wg.Wait()
 	hs.mu.Lock()
 	hs.dstats.finished = true
 	metrics.StopStream(hs.dstats.failedToSend == 0)
@@ -172,6 +177,7 @@ outloop:
 }
 
 func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment) {
+	defer hs.wg.Done()
 	hs.mu.Lock()
 	var firstOne bool
 	if hs.dstats.started.IsZero() {
@@ -295,7 +301,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 			}
 			body, merr := ioutil.ReadAll(p)
 			if merr != nil {
-				glog.Errorf("Error reading body manifest=%s seqNo=%d err=%v", manifestID, seg.seqNo, merr)
+				glog.Errorf("error reading body manifest=%s seqNo=%d err=%v", manifestID, seg.seqNo, merr)
 				err = merr
 				break
 			}
