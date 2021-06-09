@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -215,7 +216,7 @@ func (mapi *API) Login() error {
 		if auth.Authorize.Status == "OK" {
 			return nil
 		}
-		return fmt.Errorf("Unexpected status: %s", auth.Authorize.Status)
+		return fmt.Errorf("unexpected status: %s", auth.Authorize.Status)
 	}
 
 	mapi.challenge = auth.Authorize.Challenge
@@ -231,7 +232,7 @@ func (mapi *API) Login() error {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		glog.Errorf("===== status error contacting Mist server (%s) status %d body: %s", u, resp.StatusCode, string(b))
-		return fmt.Errorf("Status error %s", resp.Status)
+		return fmt.Errorf("status error %s", resp.Status)
 	}
 	b, err = ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
@@ -239,7 +240,7 @@ func (mapi *API) Login() error {
 		glog.Errorf("Error authenticating to Mist server (%s) error: %v", mapi.apiURL, err)
 		return err
 	}
-	glog.Info(string(b))
+	glog.Infof("Authorize response: %s", string(b))
 	return nil
 }
 
@@ -368,6 +369,9 @@ func (mapi *API) GetTriggers() (TriggersMap, error) {
 		return nil, err
 	}
 	glog.Infof("Got config: %+v", config)
+	if config == nil {
+		return nil, errors.New("not authorized")
+	}
 
 	return config.Triggers, nil
 }

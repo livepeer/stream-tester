@@ -1,6 +1,9 @@
 package mistapiconnector
 
 import (
+	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -17,6 +20,9 @@ import (
 	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
+	"go.etcd.io/etcd/client/pkg/v3/transport"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
 )
 
 const streamPlaybackPrefix = "playback_"
@@ -29,6 +35,9 @@ const audioAlways = "always"
 const audioNever = "never"
 const audioRecord = "record"
 const audioEnabledStreamSuffix = "rec"
+const etcdDialTimeout = 5 * time.Second
+const etcdAutoSyncInterval = 5 * time.Minute
+const etcdSessionTTL = 5 // in seconds
 
 type (
 	// IMac creates new Mist API Connector application
@@ -63,14 +72,52 @@ type (
 		playbackDomain string
 		sendAudio      string
 		baseStreamName string
+		useEtcd        bool
+		etcdClient     *clientv3.Client
+		etcdSession    *concurrency.Session
+		etcdPub2rev    map[string]int64 // public key to revision of ETCD keys
 	}
 )
 
 // NewMac ...
 func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, consul *url.URL, consulPrefix, playbackDomain, mistURL,
-	sendAudio, baseStreamName string) IMac {
+	sendAudio, baseStreamName string, etcdEndpoints []string, etcdCaCert, etcdCert, etcdKey string) (IMac, error) {
 	if balancerHost != "" && !strings.Contains(balancerHost, ":") {
 		balancerHost = balancerHost + ":8042" // must set default port for Mist's Load Balancer
+	}
+	useEtcd := false
+	var cli *clientv3.Client
+	var sess *concurrency.Session
+	var err error
+	if len(etcdEndpoints) > 0 {
+		var tcfg *tls.Config
+		if etcdCaCert != "" || etcdCert != "" || etcdKey != "" {
+			tlsifo := transport.TLSInfo{
+				CertFile:      etcdCert,
+				KeyFile:       etcdKey,
+				TrustedCAFile: etcdCaCert,
+			}
+			tcfg, err = tlsifo.ClientConfig()
+			if err != nil {
+				return nil, err
+			}
+		}
+		useEtcd = true
+		cli, err = clientv3.New(clientv3.Config{
+			Endpoints:        etcdEndpoints,
+			DialTimeout:      etcdDialTimeout,
+			AutoSyncInterval: etcdAutoSyncInterval,
+			TLS:              tcfg,
+		})
+		if err != nil {
+			err = fmt.Errorf("mist-api-connector: Error connecting ETCD err=%w", err)
+			return nil, err
+		}
+		sess, err = concurrency.NewSession(cli, concurrency.WithTTL(etcdSessionTTL))
+		if err != nil {
+			err = fmt.Errorf("mist-api-connector: Error creating ETCD session err=%w", err)
+			return nil, err
+		}
 	}
 	return &mac{
 		mistHot:        mistHost,
@@ -85,7 +132,11 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		playbackDomain: playbackDomain,
 		sendAudio:      sendAudio,
 		baseStreamName: baseStreamName,
-	}
+		useEtcd:        useEtcd,
+		etcdClient:     cli,
+		etcdSession:    sess,
+		etcdPub2rev:    make(map[string]int64), // public key to revision of ETCD keys
+	}, nil
 }
 
 // LivepeerProfiles2MistProfiles converts Livepeer's API profiles to Mist's ones
@@ -262,6 +313,9 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 						go consul.DeleteKey(mc.consulURL, traefikKeyPathMiddlewares+consulPlaybackID, true)
 					}
 				}
+				if mc.useEtcd {
+					mc.deleteEtcdKeys(playbackID)
+				}
 				_, err := mc.lapi.SetActive(id, false)
 				if err != nil {
 					glog.Error(err)
@@ -431,9 +485,120 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			w.Write([]byte("false"))
 		}
 	}
+	if mc.useEtcd {
+		// now create routing rule in the ETCD for HLS playback
+		if mc.baseStreamName != "" {
+			wildcardPlaybackID := mc.wildcardPlaybackID(stream)
+			playbackID := mc.consulPrefix + stream.PlaybackID
+			serviceName := mc.consulPrefix + serviceNameFromMistURL(mc.mistURL)
+			err = mc.putEtcdKeys(stream.PlaybackID,
+				traefikKeyPathRouters+playbackID+"/rule",
+				fmt.Sprintf(traefikRuleTemplateDouble, mc.playbackDomain, stream.PlaybackID, wildcardPlaybackID),
+				traefikKeyPathRouters+playbackID+"/service",
+				serviceName,
+				traefikKeyPathRouters+playbackID+"/middlewares/0",
+				playbackID+"-1",
+				traefikKeyPathRouters+playbackID+"/middlewares/1",
+				playbackID+"-2",
+
+				traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/0",
+				`/hls/`+stream.PlaybackID,
+				traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/1",
+				`/hls/`+wildcardPlaybackID,
+				traefikKeyPathMiddlewares+playbackID+"-2/addprefix/prefix",
+				`/hls/`+wildcardPlaybackID,
+
+				traefikKeyPathServices+serviceName+"/loadbalancer/servers/0/url",
+				mc.mistURL,
+				traefikKeyPathServices+serviceName+"/loadbalancer/passhostheader",
+				"false",
+			)
+		} else {
+			err = mc.putEtcdKeys(
+				stream.PlaybackID,
+				traefikKeyPathRouters+streamKey+"/rule",
+				fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, streamKey),
+				traefikKeyPathRouters+streamKey+"/service",
+				streamKey,
+				traefikKeyPathServices+streamKey+"/loadbalancer/servers/0/url",
+				mc.mistURL,
+				traefikKeyPathServices+streamKey+"/loadbalancer/passhostheader",
+				"false",
+			)
+		}
+		if err != nil {
+			glog.Errorf("Error creating ETCD Traefik rule for playbackID=%s streamID=%s err=%v", stream.PlaybackID, stream.ID, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("false"))
+		}
+	}
 	w.Write([]byte(responseURL))
 	metrics.StartStream()
 	glog.Infof("Responded with '%s'", responseURL)
+}
+
+// putEtcdKeys puts keys in one transaction
+func (mc *mac) putEtcdKeys(playbackID string, kvs ...string) error {
+	if len(kvs) == 0 || len(kvs)%2 != 0 {
+		return errors.New("number of arguments should be even")
+	}
+	cmp := clientv3.Compare(clientv3.CreateRevision(kvs[0]), ">", -1) // basically noop - will always be true
+	thn := make([]clientv3.Op, 0, len(kvs)/2)
+	get := clientv3.OpGet(kvs[0])
+	for i := 0; i < len(kvs); i += 2 {
+		thn = append(thn, clientv3.OpPut(kvs[i], kvs[i+1], clientv3.WithLease(mc.etcdSession.Lease())))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
+	resp, err := mc.etcdClient.Txn(ctx).If(cmp).Then(thn...).Else(get).Commit()
+	cancel()
+	if err != nil {
+		glog.Errorf("mist-api-connector: error putting keys for playbackID=%s err=%v", playbackID, err)
+		return err
+	}
+	if !resp.Succeeded {
+		panic("unexpected")
+	}
+	glog.Infof("for playbackID=%s created %d keys in ETCD revision=%d", playbackID, len(kvs)/2, resp.Header.Revision)
+	mc.etcdPub2rev[playbackID] = resp.Header.Revision
+	return nil
+}
+
+func (mc *mac) deleteEtcdKeys(playbackID string) {
+	etcdPlaybackID := mc.consulPrefix + playbackID
+	if rev, ok := mc.etcdPub2rev[playbackID]; ok {
+		pathKey := traefikKeyPathRouters + etcdPlaybackID
+		ruleKey := pathKey + "/rule"
+		cmp := clientv3.Compare(clientv3.ModRevision(ruleKey), "=", rev)
+		ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
+		thn := []clientv3.Op{
+			clientv3.OpDelete(pathKey, clientv3.WithRange(pathKey+"~")),
+		}
+		if mc.baseStreamName != "" {
+			middleWaresKey := traefikKeyPathMiddlewares + etcdPlaybackID
+			thn = append(thn,
+				clientv3.OpDelete(middleWaresKey, clientv3.WithRange(middleWaresKey+"~")),
+			)
+		}
+		get := clientv3.OpGet(ruleKey)
+		resp, err := mc.etcdClient.Txn(ctx).If(cmp).Then(thn...).Else(get).Commit()
+		cancel()
+		delete(mc.etcdPub2rev, playbackID)
+		if err != nil {
+			glog.Errorf("mist-api-connector: error deleting keys for playbackID=%s err=%v", playbackID, err)
+		}
+		if resp.Succeeded {
+			glog.Errorf("mist-api-connector: success deleting keys for playbackID=%s rev=%d", playbackID, rev)
+		} else {
+			var curRev int64
+			if len(resp.Responses) > 0 && len(resp.Responses[0].GetResponseRange().Kvs) > 0 {
+				curRev = resp.Responses[0].GetResponseRange().Kvs[0].CreateRevision
+			}
+			glog.Errorf("mist-api-connector: unsuccessful deleting keys for playbackID=%s myRev=%d curRev=%d pathKey=%s",
+				playbackID, rev, curRev, pathKey)
+		}
+	} else {
+		glog.Errorf("mist-api-connector: ETCD revision for stream playbackID=%s not found", playbackID)
+	}
 }
 
 func (mc *mac) wildcardPlaybackID(stream *livepeer.CreateStreamResp) string {

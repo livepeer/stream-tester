@@ -11,7 +11,7 @@ require (
 	github.com/PagerDuty/go-pagerduty v1.3.0
 	github.com/bwmarrin/discordgo v0.20.2
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
-	github.com/gorilla/websocket v1.4.1 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/livepeer/joy4 v0.1.2-0.20210601043311-c1b885884cc7
@@ -23,11 +23,13 @@ require (
 	github.com/peterbourgon/ff/v2 v2.0.0
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.15.0
-	go.etcd.io/etcd/client/v3 v3.5.0-alpha.0
+	go.etcd.io/etcd/client/pkg/v3 v3.5.0-rc.0
+	go.etcd.io/etcd/client/v3 v3.5.0-rc.0
 	go.opencensus.io v0.23.0
 	golang.org/x/net v0.0.0-20210503060351-7fd8e65b6420
 	golang.org/x/text v0.3.6
 	google.golang.org/api v0.46.0
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
 exclude github.com/gosuri/uilive v0.0.4 // cause memory corruption

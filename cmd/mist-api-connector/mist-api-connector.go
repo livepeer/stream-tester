@@ -41,6 +41,10 @@ func main() {
 	playbackDomain := fs.String("playback-domain", "", "regex of domain to create consul routes for (ex: playback.livepeer.live)")
 	mistURL := fs.String("consul-mist-url", "", "external URL of this Mist instance (to be put in Consul) (ex: https://mist-server-0.livepeer.live)")
 	baseStreamName := fs.String("base-stream-name", "", "Base stream name to be used in wildcard-based routing scheme")
+	fEtcdEndpoints := fs.String("etcd-endpoints", "", "Comma-separated list of ETCD endpoints")
+	etcdCaCert := fs.String("etcd-cacert", "", "ETCD CA file name")
+	etcdCert := fs.String("etcd-cert", "", "ETCD client certificate file name")
+	etcdKey := fs.String("etcd-key", "", "ETCD client certificate key file name")
 	_ = fs.String("config", "", "config file (optional)")
 
 	ff.Parse(fs, os.Args[1:],
@@ -66,6 +70,7 @@ func main() {
 	mapi = mistapi.NewMist(*mistHost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 	mapi.Login()
 	metrics.InitCensus(hostName, model.Version, "mistconnector")
+	etcdEndpoints := strings.Split(*fEtcdEndpoints, ",")
 
 	var consulURL *url.URL
 	var err error
@@ -75,8 +80,11 @@ func main() {
 			glog.Fatalf("Error parsing Consul URL: %v", err)
 		}
 	}
-	mc := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, consulURL, *consulPrefix,
-		*playbackDomain, *mistURL, *sendAudio, *baseStreamName)
+	mc, err := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, consulURL, *consulPrefix,
+		*playbackDomain, *mistURL, *sendAudio, *baseStreamName, etcdEndpoints, *etcdCaCert, *etcdCert, *etcdKey)
+	if err != nil {
+		glog.Fatalf("Error creating mist-api-connector %v", err)
+	}
 	if err := mc.SetupTriggers(*ownURI); err != nil {
 		glog.Fatal(err)
 	}
