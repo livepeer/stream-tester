@@ -29,6 +29,7 @@ require (
 	golang.org/x/net v0.0.0-20210503060351-7fd8e65b6420
 	golang.org/x/text v0.3.6
 	google.golang.org/api v0.46.0
+	google.golang.org/grpc v1.38.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 

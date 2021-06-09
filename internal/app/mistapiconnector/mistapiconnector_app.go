@@ -23,6 +23,7 @@ import (
 	"go.etcd.io/etcd/client/pkg/v3/transport"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
+	"google.golang.org/grpc"
 )
 
 const streamPlaybackPrefix = "playback_"
@@ -108,6 +109,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 			DialTimeout:      etcdDialTimeout,
 			AutoSyncInterval: etcdAutoSyncInterval,
 			TLS:              tcfg,
+			DialOptions:      []grpc.DialOption{grpc.WithBlock()},
 		})
 		if err != nil {
 			err = fmt.Errorf("mist-api-connector: Error connecting ETCD err=%w", err)
