@@ -90,6 +90,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 	var cli *clientv3.Client
 	var sess *concurrency.Session
 	var err error
+	glog.Infof("etcd endpoints: %+v, len %d", etcdEndpoints, len(etcdEndpoints))
 	if len(etcdEndpoints) > 0 {
 		var tcfg *tls.Config
 		if etcdCaCert != "" || etcdCert != "" || etcdKey != "" {

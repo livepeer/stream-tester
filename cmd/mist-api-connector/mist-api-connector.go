@@ -70,7 +70,10 @@ func main() {
 	mapi = mistapi.NewMist(*mistHost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 	mapi.Login()
 	metrics.InitCensus(hostName, model.Version, "mistconnector")
-	etcdEndpoints := strings.Split(*fEtcdEndpoints, ",")
+	var etcdEndpoints []string
+	if len(*fEtcdEndpoints) > 0 {
+		etcdEndpoints = strings.Split(*fEtcdEndpoints, ",")
+	}
 
 	var consulURL *url.URL
 	var err error
