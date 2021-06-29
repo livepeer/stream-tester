@@ -38,7 +38,7 @@ const audioRecord = "record"
 const audioEnabledStreamSuffix = "rec"
 const etcdDialTimeout = 5 * time.Second
 const etcdAutoSyncInterval = 5 * time.Minute
-const etcdSessionTTL = 5 // in seconds
+const etcdSessionTTL = 10 // in seconds
 
 type (
 	// IMac creates new Mist API Connector application
@@ -121,6 +121,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 			err = fmt.Errorf("mist-api-connector: Error creating ETCD session err=%w", err)
 			return nil, err
 		}
+		glog.Info("etcd got lease %d", sess.Lease())
 	}
 	return &mac{
 		mistHot:        mistHost,
