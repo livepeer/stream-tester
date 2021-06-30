@@ -539,6 +539,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	w.Write([]byte(responseURL))
 	metrics.StartStream()
 	glog.Infof("Responded with '%s'", responseURL)
+	mc.startPushTargets(stream)
 }
 
 // putEtcdKeys puts keys in one transaction
@@ -727,4 +728,27 @@ func serviceNameFromMistURL(murl string) string {
 	murl = strings.ReplaceAll(murl, ".", "-")
 	murl = strings.ReplaceAll(murl, "/", "-")
 	return murl
+}
+
+func (mc *mac) startPushTargets(stream *livepeer.CreateStreamResp) {
+	if stream.PushTargets == nil {
+		return
+	}
+	wildcardPlaybackID := mc.wildcardPlaybackID(stream)
+	for _, target := range stream.PushTargets {
+		go func(target livepeer.StreamPushTarget) {
+			time.Sleep(3 * time.Second) // hack hack hack
+			pushTarget, err := mc.lapi.GetPushTarget(target.ID)
+			if err != nil {
+				glog.Errorf("Error downloading PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
+				return
+			}
+			err = mc.mapi.StartPush(wildcardPlaybackID, pushTarget.URL)
+			if err != nil {
+				glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
+				return
+			}
+			glog.Infof("Started PushTarget stream=%s pushTargetId=%s", wildcardPlaybackID, target.ID)
+		}(target)
+	}
 }
