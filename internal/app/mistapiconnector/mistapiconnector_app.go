@@ -737,13 +737,26 @@ func (mc *mac) startPushTargets(stream *livepeer.CreateStreamResp) {
 	wildcardPlaybackID := mc.wildcardPlaybackID(stream)
 	for _, target := range stream.PushTargets {
 		go func(target livepeer.StreamPushTarget) {
-			time.Sleep(3 * time.Second) // hack hack hack
+			time.Sleep(10 * time.Second) // hack hack hack
 			pushTarget, err := mc.lapi.GetPushTarget(target.ID)
 			if err != nil {
 				glog.Errorf("Error downloading PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
 				return
 			}
-			err = mc.mapi.StartPush(wildcardPlaybackID, pushTarget.URL)
+			// Find the actual parameters of the profile we're using
+			var prof *livepeer.Profile
+			for _, p := range stream.Profiles {
+				if p.Name == target.Profile {
+					prof = &p
+					break
+				}
+			}
+			if prof == nil {
+				glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=couldn't find profile %s", target.ID, wildcardPlaybackID, target.Profile)
+			}
+			// Inject ?video=~widthxheight to send the correct rendition
+			selectorURL := fmt.Sprintf("%s?video=~%dx%d&audio=maxbps", pushTarget.URL, prof.Width, prof.Height)
+			err = mc.mapi.StartPush(wildcardPlaybackID, selectorURL)
 			if err != nil {
 				glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
 				return
