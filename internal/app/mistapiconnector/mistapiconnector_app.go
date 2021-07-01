@@ -539,6 +539,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	w.Write([]byte(responseURL))
 	metrics.StartStream()
 	glog.Infof("Responded with '%s'", responseURL)
+	mc.startPushTargets(stream)
 }
 
 // putEtcdKeys puts keys in one transaction
@@ -727,4 +728,48 @@ func serviceNameFromMistURL(murl string) string {
 	murl = strings.ReplaceAll(murl, ".", "-")
 	murl = strings.ReplaceAll(murl, "/", "-")
 	return murl
+}
+
+func (mc *mac) startPushTargets(stream *livepeer.CreateStreamResp) {
+	if stream.PushTargets == nil {
+		return
+	}
+	wildcardPlaybackID := mc.wildcardPlaybackID(stream)
+	for _, target := range stream.PushTargets {
+		go func(target livepeer.StreamPushTarget) {
+			time.Sleep(30 * time.Second) // hack hack hack
+			pushTarget, err := mc.lapi.GetPushTarget(target.ID)
+			if err != nil {
+				glog.Errorf("Error downloading PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
+				return
+			}
+			// Find the actual parameters of the profile we're using
+			var videoSelector string
+			// Not actually the source. But the highest quality.
+			if target.Profile == "source" {
+				videoSelector = "maxbps"
+			} else {
+				var prof *livepeer.Profile
+				for _, p := range stream.Profiles {
+					if p.Name == target.Profile {
+						prof = &p
+						break
+					}
+				}
+				if prof == nil {
+					glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=couldn't find profile %s", target.ID, wildcardPlaybackID, target.Profile)
+					return
+				}
+				videoSelector = fmt.Sprintf("~%dx%d", prof.Width, prof.Height)
+			}
+			// Inject ?video=~widthxheight to send the correct rendition
+			selectorURL := fmt.Sprintf("%s?video=%s&audio=maxbps", pushTarget.URL, videoSelector)
+			err = mc.mapi.StartPush(wildcardPlaybackID, selectorURL)
+			if err != nil {
+				glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
+				return
+			}
+			glog.Infof("Started PushTarget stream=%s pushTargetId=%s", wildcardPlaybackID, target.ID)
+		}(target)
+	}
 }

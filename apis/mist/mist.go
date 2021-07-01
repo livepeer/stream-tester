@@ -170,6 +170,17 @@ type (
 		StopSessions []string `json:"stop_sessions,omitempty"`
 		NukeStream   string   `json:"nuke_stream,omitempty"` // Stops running stream (forces RTMP to disconnect)
 	}
+
+	pushStartAction struct {
+		Params map[string]string `json:"params,omitempty"`
+		Stream string            `json:"stream,omitempty"`
+		Target string            `json:"target,omitempty"`
+	}
+
+	pushStartReq struct {
+		Authorize *authReq         `json:"authorize,omitempty"`
+		PushStart *pushStartAction `json:"push_start,omitempty"`
+	}
 )
 
 // NewMist creates new MistAPI object
@@ -328,6 +339,22 @@ func (mapi *API) NukeStream(name string) error {
 		},
 		Minimal:    1,
 		NukeStream: name,
+	}
+	_, err := mapi.post(reqs, false)
+	return err
+}
+
+func (mapi *API) StartPush(stream string, target string) error {
+	glog.Infof("Starting push for '%s'", stream)
+	reqs := &pushStartReq{
+		Authorize: &authReq{
+			Username: mapi.login,
+			Password: mapi.challengeRepsonse,
+		},
+		PushStart: &pushStartAction{
+			Stream: stream,
+			Target: target,
+		},
 	}
 	_, err := mapi.post(reqs, false)
 	return err

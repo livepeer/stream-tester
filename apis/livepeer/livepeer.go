@@ -91,26 +91,32 @@ type (
 		Profile string `json:"profile,omitempty"` // enum: - H264Baseline - H264Main - H264High - H264ConstrainedHigh
 	}
 
+	StreamPushTarget struct {
+		Profile string `json:"profile,omitempty"`
+		ID      string `json:"id,omitempty"`
+	}
+
 	// CreateStreamResp returned by API
 	CreateStreamResp struct {
-		ID                         string    `json:"id,omitempty"`
-		Name                       string    `json:"name,omitempty"`
-		Presets                    []string  `json:"presets,omitempty"`
-		Kind                       string    `json:"kind,omitempty"`
-		UserID                     string    `json:"userId,omitempty"`
-		StreamKey                  string    `json:"streamKey,omitempty"`
-		PlaybackID                 string    `json:"playbackId,omitempty"`
-		ParentID                   string    `json:"parentId,omitempty"`
-		CreatedAt                  int64     `json:"createdAt,omitempty"`
-		LastSeen                   int64     `json:"lastSeen,omitempty"`
-		SourceSegments             int64     `json:"sourceSegments,omitempty"`
-		TranscodedSegments         int64     `json:"transcodedSegments,omitempty"`
-		SourceSegmentsDuration     float64   `json:"sourceSegmentsDuration,omitempty"`
-		TranscodedSegmentsDuration float64   `json:"transcodedSegmentsDuration,omitempty"`
-		Deleted                    bool      `json:"deleted,omitempty"`
-		Record                     bool      `json:"record"`
-		Profiles                   []Profile `json:"profiles,omitempty"`
-		Errors                     []string  `json:"errors,omitempty"`
+		ID                         string             `json:"id,omitempty"`
+		Name                       string             `json:"name,omitempty"`
+		Presets                    []string           `json:"presets,omitempty"`
+		Kind                       string             `json:"kind,omitempty"`
+		UserID                     string             `json:"userId,omitempty"`
+		StreamKey                  string             `json:"streamKey,omitempty"`
+		PlaybackID                 string             `json:"playbackId,omitempty"`
+		ParentID                   string             `json:"parentId,omitempty"`
+		CreatedAt                  int64              `json:"createdAt,omitempty"`
+		LastSeen                   int64              `json:"lastSeen,omitempty"`
+		SourceSegments             int64              `json:"sourceSegments,omitempty"`
+		TranscodedSegments         int64              `json:"transcodedSegments,omitempty"`
+		SourceSegmentsDuration     float64            `json:"sourceSegmentsDuration,omitempty"`
+		TranscodedSegmentsDuration float64            `json:"transcodedSegmentsDuration,omitempty"`
+		Deleted                    bool               `json:"deleted,omitempty"`
+		Record                     bool               `json:"record"`
+		Profiles                   []Profile          `json:"profiles,omitempty"`
+		Errors                     []string           `json:"errors,omitempty"`
+		PushTargets                []StreamPushTarget `json:"pushTargets,omitempty"`
 	}
 
 	// UserSession user's sessions
@@ -119,6 +125,15 @@ type (
 		RecordingStatus string `json:"recordingStatus,omitempty"` // ready, waiting
 		RecordingURL    string `json:"recordingUrl,omitempty"`
 		Mp4Url          string `json:"mp4Url,omitempty"`
+	}
+
+	PushTarget struct {
+		ID        string `json:"id,omitempty"`
+		URL       string `json:"url,omitempty"`
+		Name      string `json:"name,omitempty"`
+		UserId    string `json:"userId,omitempty"`
+		Disabled  bool   `json:"disabled,omitempty"`
+		CreatedAt int64  `json:"createdAt,omitempty"`
 	}
 
 	// // Profile ...
@@ -649,6 +664,52 @@ func (lapi *API) getStream(u, rType string) (*CreateStreamResp, error) {
 		return nil, ErrNotExists
 	}
 	r := &CreateStreamResp{}
+	err = json.Unmarshal(b, r)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func (lapi *API) GetPushTarget(id string) (*PushTarget, error) {
+	rType := "get_push_target"
+	start := time.Now()
+	u := fmt.Sprintf("%s/api/push-target/%s", lapi.choosenServer, id)
+	req := uhttp.GetRequest(u)
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	resp, err := lapi.httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error getting PushTarget by id from Livepeer API server (%s) error: %v", u, err)
+		metrics.APIRequest(rType, 0, err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		glog.Errorf("Status error getting PushTarget by id Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		if resp.StatusCode == http.StatusNotFound {
+			metrics.APIRequest(rType, 0, ErrNotExists)
+			return nil, ErrNotExists
+		}
+		err := errors.New(http.StatusText(resp.StatusCode))
+		metrics.APIRequest(rType, 0, err)
+		return nil, err
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error getting PushTarget by id Livepeer API server (%s) error: %v", u, err)
+		metrics.APIRequest(rType, 0, err)
+		return nil, err
+	}
+	took := time.Since(start)
+	metrics.APIRequest(rType, took, nil)
+	bs := string(b)
+	glog.V(model.VERBOSE).Info(bs)
+	if bs == "null" {
+		// API return null if stream does not exists
+		return nil, ErrNotExists
+	}
+	r := &PushTarget{}
 	err = json.Unmarshal(b, r)
 	if err != nil {
 		return nil, err
