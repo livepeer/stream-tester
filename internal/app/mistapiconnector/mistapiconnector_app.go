@@ -737,7 +737,7 @@ func (mc *mac) startPushTargets(stream *livepeer.CreateStreamResp) {
 	wildcardPlaybackID := mc.wildcardPlaybackID(stream)
 	for _, target := range stream.PushTargets {
 		go func(target livepeer.StreamPushTarget) {
-			time.Sleep(10 * time.Second) // hack hack hack
+			time.Sleep(30 * time.Second) // hack hack hack
 			pushTarget, err := mc.lapi.GetPushTarget(target.ID)
 			if err != nil {
 				glog.Errorf("Error downloading PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
