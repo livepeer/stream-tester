@@ -352,10 +352,6 @@ func (mapi *API) StartPush(stream string, target string) error {
 			Password: mapi.challengeRepsonse,
 		},
 		PushStart: &pushStartAction{
-			Params: map[string]string{
-				"video": "854x480",
-				"audio": "maxbps",
-			},
 			Stream: stream,
 			Target: target,
 		},

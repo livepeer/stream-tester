@@ -744,18 +744,26 @@ func (mc *mac) startPushTargets(stream *livepeer.CreateStreamResp) {
 				return
 			}
 			// Find the actual parameters of the profile we're using
-			var prof *livepeer.Profile
-			for _, p := range stream.Profiles {
-				if p.Name == target.Profile {
-					prof = &p
-					break
+			var videoSelector string
+			// Not actually the source. But the highest quality.
+			if target.Profile == "source" {
+				videoSelector = "maxbps"
+			} else {
+				var prof *livepeer.Profile
+				for _, p := range stream.Profiles {
+					if p.Name == target.Profile {
+						prof = &p
+						break
+					}
 				}
-			}
-			if prof == nil {
-				glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=couldn't find profile %s", target.ID, wildcardPlaybackID, target.Profile)
+				if prof == nil {
+					glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=couldn't find profile %s", target.ID, wildcardPlaybackID, target.Profile)
+					return
+				}
+				videoSelector = fmt.Sprintf("~%dx%d", prof.Width, prof.Height)
 			}
 			// Inject ?video=~widthxheight to send the correct rendition
-			selectorURL := fmt.Sprintf("%s?video=~%dx%d&audio=maxbps", pushTarget.URL, prof.Width, prof.Height)
+			selectorURL := fmt.Sprintf("%s?video=%s&audio=maxbps", pushTarget.URL, videoSelector)
 			err = mc.mapi.StartPush(wildcardPlaybackID, selectorURL)
 			if err != nil {
 				glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
