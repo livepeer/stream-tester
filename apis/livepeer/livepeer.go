@@ -153,6 +153,14 @@ type (
 		Active   bool   `json:"active,omitempty"`
 		HostName string `json:"hostName,omitempty"`
 	}
+
+	deactivateManyReq struct {
+		IDS []string `json:"ids"`
+	}
+
+	deactivateManyResp struct {
+		RowCount int `json:"rowCount"`
+	}
 )
 
 // NewLivepeer creates new Livepeer API object
@@ -625,6 +633,54 @@ func (lapi *API) SetActive(id string, active bool) (bool, error) {
 	glog.Infof("%s/setactive took=%s response status code %d status %s resp %+v body=%s",
 		took, id, resp.StatusCode, resp.Status, resp, string(b))
 	return resp.StatusCode >= 200 && resp.StatusCode < 300, nil
+}
+
+// DeactivateMany sets many streams isActive field to false
+func (lapi *API) DeactivateMany(ids []string) (int, error) {
+	if len(ids) == 0 {
+		return 0, errors.New("empty ids")
+	}
+	start := time.Now()
+	u := fmt.Sprintf("%s/api/stream/deactivate-many", lapi.choosenServer)
+	dmreq := deactivateManyReq{
+		IDS: ids,
+	}
+	b, _ := json.Marshal(&dmreq)
+	req, err := uhttp.NewRequest("PATCH", u, bytes.NewBuffer(b))
+	if err != nil {
+		metrics.APIRequest("deactivate-many", 0, err)
+		return 0, err
+	}
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := lapi.httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("/deactivate-many err=%v", err)
+		metrics.APIRequest("set_active", 0, err)
+		return 0, err
+	}
+	defer resp.Body.Close()
+	b, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("deactivate-many body err=%v", err)
+		metrics.APIRequest("deactivate-many", 0, err)
+		return 0, err
+	}
+	took := time.Since(start)
+	metrics.APIRequest("deactivate-many", took, nil)
+	glog.Infof("deactivate-many took=%s response status code %d status %s resp %+v body=%s",
+		took, resp.StatusCode, resp.Status, resp, string(b))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return 0, fmt.Errorf("invalid status code: %d", resp.StatusCode)
+	}
+
+	mr := &deactivateManyResp{}
+	err = json.Unmarshal(b, mr)
+	if err != nil {
+		return 0, err
+	}
+
+	return mr.RowCount, nil
 }
 
 func (lapi *API) getStream(u, rType string) (*CreateStreamResp, error) {

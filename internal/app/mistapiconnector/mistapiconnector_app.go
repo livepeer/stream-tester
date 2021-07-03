@@ -8,8 +8,11 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/golang/glog"
@@ -45,6 +48,7 @@ type (
 	IMac interface {
 		SetupTriggers(ownURI string) error
 		StartServer(bindAddr string) error
+		SrvShutCh() chan error
 	}
 
 	// MacOptions configuration object
@@ -64,6 +68,8 @@ type (
 		lapi           *livepeer.API
 		balancerHost   string
 		pub2id         map[string]string // public key to stream id
+		srv            *http.Server
+		srvShutCh      chan error
 		mu             sync.Mutex
 		mistHot        string
 		checkBandwidth bool
@@ -140,6 +146,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		etcdClient:     cli,
 		etcdSession:    sess,
 		etcdPub2rev:    make(map[string]int64), // public key to revision of ETCD keys
+		srvShutCh:      make(chan error),
 	}, nil
 }
 
@@ -424,6 +431,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			return
 		}
 	} else {
+		glog.Errorf("Shouldn't happen streamID=%s", stream.ID)
 		// streamKey = strings.ReplaceAll(streamKey, "-", "")
 	}
 	if mc.baseStreamName == "" {
@@ -655,13 +663,19 @@ func (mc *mac) webServerHandlers() *http.ServeMux {
 
 func (mc *mac) StartServer(bindAddr string) error {
 	mux := mc.webServerHandlers()
-	srv := &http.Server{
+	mc.srv = &http.Server{
 		Addr:    bindAddr,
 		Handler: mux,
 	}
+	mc.startSignalHandler()
 
 	glog.Info("Web server listening on ", bindAddr)
-	err := srv.ListenAndServe()
+	err := mc.srv.ListenAndServe()
+	if err == http.ErrServerClosed {
+		glog.Infof("Normal shutdown")
+	} else {
+		glog.Warningf("Server shut down with err=%v", err)
+	}
 	return err
 }
 
@@ -772,4 +786,50 @@ func (mc *mac) startPushTargets(stream *livepeer.CreateStreamResp) {
 			glog.Infof("Started PushTarget stream=%s pushTargetId=%s", wildcardPlaybackID, target.ID)
 		}(target)
 	}
+}
+
+func (mc *mac) startSignalHandler() {
+	exitc := make(chan os.Signal, 1)
+	// signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	signal.Notify(exitc, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		gotSig := <-exitc
+		switch gotSig {
+		case syscall.SIGINT:
+			glog.Infof("Got Ctrl-C, shutting down")
+		case syscall.SIGTERM:
+			glog.Infof("Got SIGTERM, shutting down")
+		default:
+			glog.Infof("Got signal %d, shutting down", gotSig)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		err := mc.srv.Shutdown(ctx)
+		cancel()
+		glog.Infof("Done shutting down server with err=%v", err)
+		// now call /setactve/false on active connections
+		mc.deactiveAllStreams()
+		mc.srvShutCh <- err
+	}()
+}
+
+// deactiveAllStreams sends /setactive/false for all the active streams
+func (mc *mac) deactiveAllStreams() {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	ids := make([]string, 0, len(mc.pub2id))
+	for _, v := range mc.pub2id {
+		ids = append(ids, v)
+	}
+	if len(ids) > 0 {
+		updated, err := mc.lapi.DeactivateMany(ids)
+		if err != nil {
+			glog.Errorf("Error setting many isActive to false ids=%+v err=%v", ids, err)
+		} else {
+			glog.Infof("Set many isActive to false ids=%+v rowCount=%d", ids, updated)
+		}
+	}
+}
+
+func (mc *mac) SrvShutCh() chan error {
+	return mc.srvShutCh
 }

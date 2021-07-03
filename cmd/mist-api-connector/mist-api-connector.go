@@ -91,5 +91,8 @@ func main() {
 	if err := mc.SetupTriggers(*ownURI); err != nil {
 		glog.Fatal(err)
 	}
-	mc.StartServer(fmt.Sprintf("%s:%d", *host, *port))
+	err = mc.StartServer(fmt.Sprintf("%s:%d", *host, *port))
+	glog.Infof("Start shutting down host=%s err=%v", hostName, err)
+	err = <-mc.SrvShutCh()
+	glog.Infof("Done shutting down host=%s err=%v", hostName, err)
 }
