@@ -129,12 +129,10 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 			err = fmt.Errorf("mist-api-connector: Error connecting ETCD err=%w", err)
 			return nil, err
 		}
-		sess, err = concurrency.NewSession(cli, concurrency.WithTTL(etcdSessionTTL))
+		sess, err = newEtcdSession(cli)
 		if err != nil {
-			err = fmt.Errorf("mist-api-connector: Error creating ETCD session err=%w", err)
 			return nil, err
 		}
-		glog.Info("etcd got lease %d", sess.Lease())
 	}
 	mc := &mac{
 		mistHot:        mistHost,
@@ -660,11 +658,10 @@ func (mc *mac) recoverEtcdSession(ctx context.Context) error {
 }
 
 func (mc *mac) recoverEtcdSessionOnce() (*concurrency.Session, error) {
-	sess, err := concurrency.NewSession(mc.etcdClient, concurrency.WithTTL(etcdSessionTTL))
+	sess, err := newEtcdSession(mc.etcdClient)
 	if err != nil {
-		return nil, fmt.Errorf("mist-api-connector: Error creating ETCD session err=%w", err)
+		return nil, err
 	}
-	glog.Info("etcd got lease %d", sess.Lease())
 
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
@@ -675,6 +672,15 @@ func (mc *mac) recoverEtcdSessionOnce() (*concurrency.Session, error) {
 			return nil, fmt.Errorf("mist-api-connector: Error re-creating ETCD keys err=%w", err)
 		}
 	}
+	return sess, nil
+}
+
+func newEtcdSession(etcdClient *clientv3.Client) (*concurrency.Session, error) {
+	sess, err := concurrency.NewSession(etcdClient, concurrency.WithTTL(etcdSessionTTL))
+	if err != nil {
+		return nil, fmt.Errorf("mist-api-connector: Error creating ETCD session err=%w", err)
+	}
+	glog.Info("etcd got lease %d", sess.Lease())
 	return sess, nil
 }
 
