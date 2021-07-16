@@ -43,6 +43,7 @@ const etcdDialTimeout = 5 * time.Second
 const etcdAutoSyncInterval = 5 * time.Minute
 const etcdSessionTTL = 10 // in seconds
 const etcdSessionRecoverBackoff = 3 * time.Second
+const etcdSessionRecoverTimeout = 2 * time.Minute
 
 type (
 	// IMac creates new Mist API Connector application
@@ -626,7 +627,15 @@ func (mc *mac) recoverSessionLoop() {
 	for {
 		<-mc.etcdSession.Done()
 
-		mc.recoverEtcdSession(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), etcdSessionRecoverTimeout)
+		err := mc.recoverEtcdSession(ctx)
+		cancel()
+
+		if err != nil {
+			glog.Error("Shutting down due to unrecoverable etcd session. err=%q. ", err)
+			mc.shutdown()
+			return
+		}
 	}
 }
 
@@ -857,14 +866,18 @@ func (mc *mac) startSignalHandler() {
 		default:
 			glog.Infof("Got signal %d, shutting down", gotSig)
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		err := mc.srv.Shutdown(ctx)
-		cancel()
-		glog.Infof("Done shutting down server with err=%v", err)
-		// now call /setactve/false on active connections
-		mc.deactiveAllStreams()
-		mc.srvShutCh <- err
+		mc.shutdown()
 	}()
+}
+
+func (mc *mac) shutdown() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	err := mc.srv.Shutdown(ctx)
+	cancel()
+	glog.Infof("Done shutting down server with err=%v", err)
+	// now call /setactve/false on active connections
+	mc.deactiveAllStreams()
+	mc.srvShutCh <- err
 }
 
 // deactiveAllStreams sends /setactive/false for all the active streams
