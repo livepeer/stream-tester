@@ -42,6 +42,7 @@ const audioEnabledStreamSuffix = "rec"
 const etcdDialTimeout = 5 * time.Second
 const etcdAutoSyncInterval = 5 * time.Minute
 const etcdSessionTTL = 10 // in seconds
+const etcdSessionRecoverBackoff = 3 * time.Second
 
 type (
 	// IMac creates new Mist API Connector application
@@ -60,6 +61,11 @@ type (
 		MistCreds string
 		APIToken  string
 		APIServer string
+	}
+
+	etcdRevData struct {
+		revision int64
+		entries  []string
 	}
 
 	mac struct {
@@ -82,7 +88,7 @@ type (
 		useEtcd        bool
 		etcdClient     *clientv3.Client
 		etcdSession    *concurrency.Session
-		etcdPub2rev    map[string]int64 // public key to revision of ETCD keys
+		etcdPub2rev    map[string]etcdRevData // public key to revision of ETCD keys
 	}
 )
 
@@ -129,7 +135,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		}
 		glog.Info("etcd got lease %d", sess.Lease())
 	}
-	return &mac{
+	mc := &mac{
 		mistHot:        mistHost,
 		mapi:           mapi,
 		lapi:           lapi,
@@ -145,9 +151,11 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		useEtcd:        useEtcd,
 		etcdClient:     cli,
 		etcdSession:    sess,
-		etcdPub2rev:    make(map[string]int64), // public key to revision of ETCD keys
+		etcdPub2rev:    make(map[string]etcdRevData), // public key to revision of ETCD keys
 		srvShutCh:      make(chan error),
-	}, nil
+	}
+	go mc.recoverSessionLoop()
+	return mc, nil
 }
 
 // LivepeerProfiles2MistProfiles converts Livepeer's API profiles to Mist's ones
@@ -503,7 +511,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			wildcardPlaybackID := mc.wildcardPlaybackID(stream)
 			playbackID := mc.consulPrefix + stream.PlaybackID
 			serviceName := mc.consulPrefix + serviceNameFromMistURL(mc.mistURL)
-			err = mc.putEtcdKeys(stream.PlaybackID,
+			err = mc.putEtcdKeys(mc.etcdSession, stream.PlaybackID,
 				traefikKeyPathRouters+playbackID+"/rule",
 				fmt.Sprintf(traefikRuleTemplateDouble, mc.playbackDomain, stream.PlaybackID, wildcardPlaybackID),
 				traefikKeyPathRouters+playbackID+"/service",
@@ -526,7 +534,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 				"false",
 			)
 		} else {
-			err = mc.putEtcdKeys(
+			err = mc.putEtcdKeys(mc.etcdSession,
 				stream.PlaybackID,
 				traefikKeyPathRouters+streamKey+"/rule",
 				fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, streamKey),
@@ -551,7 +559,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 }
 
 // putEtcdKeys puts keys in one transaction
-func (mc *mac) putEtcdKeys(playbackID string, kvs ...string) error {
+func (mc *mac) putEtcdKeys(sess *concurrency.Session, playbackID string, kvs ...string) error {
 	if len(kvs) == 0 || len(kvs)%2 != 0 {
 		return errors.New("number of arguments should be even")
 	}
@@ -559,7 +567,7 @@ func (mc *mac) putEtcdKeys(playbackID string, kvs ...string) error {
 	thn := make([]clientv3.Op, 0, len(kvs)/2)
 	get := clientv3.OpGet(kvs[0])
 	for i := 0; i < len(kvs); i += 2 {
-		thn = append(thn, clientv3.OpPut(kvs[i], kvs[i+1], clientv3.WithLease(mc.etcdSession.Lease())))
+		thn = append(thn, clientv3.OpPut(kvs[i], kvs[i+1], clientv3.WithLease(sess.Lease())))
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
 	resp, err := mc.etcdClient.Txn(ctx).If(cmp).Then(thn...).Else(get).Commit()
@@ -572,7 +580,7 @@ func (mc *mac) putEtcdKeys(playbackID string, kvs ...string) error {
 		panic("unexpected")
 	}
 	glog.Infof("for playbackID=%s created %d keys in ETCD revision=%d", playbackID, len(kvs)/2, resp.Header.Revision)
-	mc.etcdPub2rev[playbackID] = resp.Header.Revision
+	mc.etcdPub2rev[playbackID] = etcdRevData{resp.Header.Revision, kvs}
 	return nil
 }
 
@@ -581,7 +589,7 @@ func (mc *mac) deleteEtcdKeys(playbackID string) {
 	if rev, ok := mc.etcdPub2rev[playbackID]; ok {
 		pathKey := traefikKeyPathRouters + etcdPlaybackID
 		ruleKey := pathKey + "/rule"
-		cmp := clientv3.Compare(clientv3.ModRevision(ruleKey), "=", rev)
+		cmp := clientv3.Compare(clientv3.ModRevision(ruleKey), "=", rev.revision)
 		ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
 		thn := []clientv3.Op{
 			clientv3.OpDelete(pathKey, clientv3.WithRange(pathKey+"~")),
@@ -612,6 +620,53 @@ func (mc *mac) deleteEtcdKeys(playbackID string) {
 	} else {
 		glog.Errorf("mist-api-connector: ETCD revision for stream playbackID=%s not found", playbackID)
 	}
+}
+
+func (mc *mac) recoverSessionLoop() {
+	for {
+		<-mc.etcdSession.Done()
+
+		mc.recoverEtcdSession(context.Background())
+	}
+}
+
+func (mc *mac) recoverEtcdSession(ctx context.Context) error {
+	for {
+		sess, err := mc.recoverEtcdSessionOnce()
+		if err == nil {
+			mc.etcdSession.Close()
+			mc.etcdSession = sess
+			glog.Infof("Recovered etcd session. lease=%d", sess.Lease())
+			return nil
+		}
+
+		select {
+		case <-time.After(etcdSessionRecoverBackoff):
+			glog.Errorf("mist-api-connector: Retrying etcd session recover. err=%q", err)
+			continue
+		case <-ctx.Done():
+			return fmt.Errorf("mist-api-connector: Timeout recovering etcd session err=%w", err)
+		}
+	}
+}
+
+func (mc *mac) recoverEtcdSessionOnce() (*concurrency.Session, error) {
+	sess, err := concurrency.NewSession(mc.etcdClient, concurrency.WithTTL(etcdSessionTTL))
+	if err != nil {
+		return nil, fmt.Errorf("mist-api-connector: Error creating ETCD session err=%w", err)
+	}
+	glog.Info("etcd got lease %d", sess.Lease())
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	for playbackId, rev := range mc.etcdPub2rev {
+		err := mc.putEtcdKeys(sess, playbackId, rev.entries...)
+		if err != nil {
+			sess.Close()
+			return nil, fmt.Errorf("mist-api-connector: Error re-creating ETCD keys err=%w", err)
+		}
+	}
+	return sess, nil
 }
 
 func (mc *mac) wildcardPlaybackID(stream *livepeer.CreateStreamResp) string {
