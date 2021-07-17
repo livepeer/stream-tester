@@ -639,11 +639,8 @@ func (mc *mac) recoverSessionLoop() {
 
 func (mc *mac) recoverEtcdSession(ctx context.Context) error {
 	for {
-		sess, err := mc.recoverEtcdSessionOnce()
+		err := mc.recoverEtcdSessionOnce()
 		if err == nil {
-			mc.etcdSession.Close()
-			mc.etcdSession = sess
-			glog.Infof("Recovered etcd session. lease=%d", sess.Lease())
 			return nil
 		}
 
@@ -657,10 +654,10 @@ func (mc *mac) recoverEtcdSession(ctx context.Context) error {
 	}
 }
 
-func (mc *mac) recoverEtcdSessionOnce() (*concurrency.Session, error) {
+func (mc *mac) recoverEtcdSessionOnce() error {
 	sess, err := newEtcdSession(mc.etcdClient)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	mc.mu.Lock()
@@ -669,10 +666,14 @@ func (mc *mac) recoverEtcdSessionOnce() (*concurrency.Session, error) {
 		err := mc.putEtcdKeys(sess, playbackId, rev.entries...)
 		if err != nil {
 			sess.Close()
-			return nil, fmt.Errorf("mist-api-connector: Error re-creating ETCD keys err=%w", err)
+			return fmt.Errorf("mist-api-connector: Error re-creating etcd keys. playbackId=%q, err=%w", playbackId, err)
 		}
 	}
-	return sess, nil
+
+	mc.etcdSession.Close()
+	mc.etcdSession = sess
+	glog.Infof("Recovered etcd session. lease=%d", sess.Lease())
+	return nil
 }
 
 func newEtcdSession(etcdClient *clientv3.Client) (*concurrency.Session, error) {
