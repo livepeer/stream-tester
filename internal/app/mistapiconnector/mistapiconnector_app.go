@@ -89,7 +89,7 @@ type (
 		useEtcd        bool
 		etcdClient     *clientv3.Client
 		etcdSession    *concurrency.Session
-		etcdPub2rev    map[string]etcdRevData // public key to revision of ETCD keys
+		etcdPub2rev    map[string]etcdRevData // public key to revision of etcd keys
 	}
 )
 
@@ -126,7 +126,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 			DialOptions:      []grpc.DialOption{grpc.WithBlock()},
 		})
 		if err != nil {
-			err = fmt.Errorf("mist-api-connector: Error connecting ETCD err=%w", err)
+			err = fmt.Errorf("mist-api-connector: Error connecting etcd err=%w", err)
 			return nil, err
 		}
 		sess, err = newEtcdSession(cli)
@@ -150,7 +150,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		useEtcd:        useEtcd,
 		etcdClient:     cli,
 		etcdSession:    sess,
-		etcdPub2rev:    make(map[string]etcdRevData), // public key to revision of ETCD keys
+		etcdPub2rev:    make(map[string]etcdRevData), // public key to revision of etcd keys
 		srvShutCh:      make(chan error),
 	}
 	go mc.recoverSessionLoop()
@@ -505,7 +505,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if mc.useEtcd {
-		// now create routing rule in the ETCD for HLS playback
+		// now create routing rule in the etcd for HLS playback
 		if mc.baseStreamName != "" {
 			wildcardPlaybackID := mc.wildcardPlaybackID(stream)
 			playbackID := mc.consulPrefix + stream.PlaybackID
@@ -546,7 +546,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			)
 		}
 		if err != nil {
-			glog.Errorf("Error creating ETCD Traefik rule for playbackID=%s streamID=%s err=%v", stream.PlaybackID, stream.ID, err)
+			glog.Errorf("Error creating etcd Traefik rule for playbackID=%s streamID=%s err=%v", stream.PlaybackID, stream.ID, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("false"))
 		}
@@ -578,7 +578,7 @@ func (mc *mac) putEtcdKeys(sess *concurrency.Session, playbackID string, kvs ...
 	if !resp.Succeeded {
 		panic("unexpected")
 	}
-	glog.Infof("for playbackID=%s created %d keys in ETCD revision=%d", playbackID, len(kvs)/2, resp.Header.Revision)
+	glog.Infof("for playbackID=%s created %d keys in etcd revision=%d", playbackID, len(kvs)/2, resp.Header.Revision)
 	mc.etcdPub2rev[playbackID] = etcdRevData{resp.Header.Revision, kvs}
 	return nil
 }
@@ -617,7 +617,7 @@ func (mc *mac) deleteEtcdKeys(playbackID string) {
 				playbackID, rev, curRev, pathKey)
 		}
 	} else {
-		glog.Errorf("mist-api-connector: ETCD revision for stream playbackID=%s not found", playbackID)
+		glog.Errorf("mist-api-connector: etcd revision for stream playbackID=%s not found", playbackID)
 	}
 }
 
@@ -679,7 +679,7 @@ func (mc *mac) recoverEtcdSessionOnce() error {
 func newEtcdSession(etcdClient *clientv3.Client) (*concurrency.Session, error) {
 	sess, err := concurrency.NewSession(etcdClient, concurrency.WithTTL(etcdSessionTTL))
 	if err != nil {
-		return nil, fmt.Errorf("mist-api-connector: Error creating ETCD session err=%w", err)
+		return nil, fmt.Errorf("mist-api-connector: Error creating etcd session err=%w", err)
 	}
 	glog.Info("etcd got lease %d", sess.Lease())
 	return sess, nil
