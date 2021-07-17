@@ -622,14 +622,20 @@ func (mc *mac) deleteEtcdKeys(playbackID string) {
 }
 
 func (mc *mac) recoverSessionLoop() {
-	for {
-		<-mc.etcdSession.Done()
+	clientCtx := mc.etcdClient.Ctx()
+	for clientCtx.Err() == nil {
+		select {
+		case <-clientCtx.Done():
+			// client closed, which means app shutted down
+			return
+		case <-mc.etcdSession.Done():
+		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), etcdSessionRecoverTimeout)
+		ctx, cancel := context.WithTimeout(clientCtx, etcdSessionRecoverTimeout)
 		err := mc.recoverEtcdSession(ctx)
 		cancel()
 
-		if err != nil {
+		if err != nil && clientCtx.Err() == nil {
 			glog.Error("Shutting down due to unrecoverable etcd session. err=%q. ", err)
 			mc.shutdown()
 			return
@@ -882,6 +888,7 @@ func (mc *mac) shutdown() {
 	err := mc.srv.Shutdown(ctx)
 	cancel()
 	glog.Infof("Done shutting down server with err=%v", err)
+	mc.etcdClient.Close()
 	// now call /setactve/false on active connections
 	mc.deactiveAllStreams()
 	mc.srvShutCh <- err
