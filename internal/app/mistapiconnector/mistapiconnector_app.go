@@ -636,7 +636,7 @@ func (mc *mac) recoverSessionLoop() {
 		cancel()
 
 		if err != nil && clientCtx.Err() == nil {
-			glog.Error("Shutting down due to unrecoverable etcd session. err=%q. ", err)
+			glog.Errorf("Shutting down due to unrecoverable etcd session. err=%q.", err)
 			mc.shutdown()
 			return
 		}
