@@ -687,7 +687,7 @@ func newEtcdSession(etcdClient *clientv3.Client) (*concurrency.Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("mist-api-connector: Error creating etcd session err=%w", err)
 	}
-	glog.Info("etcd got lease %d", sess.Lease())
+	glog.Infof("etcd got lease %d", sess.Lease())
 	return sess, nil
 }
 
