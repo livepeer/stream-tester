@@ -630,6 +630,7 @@ func (mc *mac) recoverSessionLoop() {
 			return
 		case <-mc.etcdSession.Done():
 		}
+		glog.Infof("etcd session with lease=%d is lost, trying to recover", mc.etcdSession.Lease())
 
 		ctx, cancel := context.WithTimeout(clientCtx, etcdSessionRecoverTimeout)
 		err := mc.recoverEtcdSession(ctx)
