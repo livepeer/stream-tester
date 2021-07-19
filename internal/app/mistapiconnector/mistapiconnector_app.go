@@ -129,6 +129,13 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 			err = fmt.Errorf("mist-api-connector: Error connecting etcd err=%w", err)
 			return nil, err
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
+		err = cli.Sync(ctx)
+		cancel()
+		if err != nil {
+			err = fmt.Errorf("mist-api-connector: Error syncing etcd endpoints err=%w", err)
+			return nil, err
+		}
 		sess, err = newEtcdSession(cli)
 		if err != nil {
 			return nil, err
