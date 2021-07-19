@@ -509,6 +509,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			glog.Errorf("Error creating Traefik rule err=%v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("false"))
+			return
 		}
 	}
 	if mc.useEtcd {
@@ -556,6 +557,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			glog.Errorf("Error creating etcd Traefik rule for playbackID=%s streamID=%s err=%v", stream.PlaybackID, stream.ID, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("false"))
+			return
 		}
 	}
 	w.Write([]byte(responseURL))
