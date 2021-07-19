@@ -690,8 +690,10 @@ func (mc *mac) recoverEtcdSessionOnce() error {
 }
 
 func newEtcdSession(etcdClient *clientv3.Client) (*concurrency.Session, error) {
+	glog.Infof("Starting new etcd session ttl=%d", etcdSessionTTL)
 	sess, err := concurrency.NewSession(etcdClient, concurrency.WithTTL(etcdSessionTTL))
 	if err != nil {
+		glog.Errorf("Failed to start etcd session err=%q", err)
 		return nil, fmt.Errorf("mist-api-connector: Error creating etcd session err=%w", err)
 	}
 	glog.Infof("etcd got lease %d", sess.Lease())
