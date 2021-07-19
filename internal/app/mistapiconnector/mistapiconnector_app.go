@@ -644,8 +644,7 @@ func (mc *mac) recoverSessionLoop() {
 		cancel()
 
 		if err != nil && clientCtx.Err() == nil {
-			glog.Errorf("Shutting down due to unrecoverable etcd session. err=%q.", err)
-			mc.shutdown()
+			glog.Errorf("mist-api-connector: unrecoverable etcd session. err=%q.", err)
 			return
 		}
 	}
