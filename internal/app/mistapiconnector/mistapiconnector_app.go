@@ -690,11 +690,7 @@ func (mc *mac) recoverEtcdSessionOnce() error {
 }
 
 func newEtcdSession(etcdClient *clientv3.Client) (*concurrency.Session, error) {
-	ctx, cancel := context.WithTimeout(etcdClient.Ctx(), etcdDialTimeout)
-	defer cancel()
-	sess, err := concurrency.NewSession(etcdClient,
-		concurrency.WithTTL(etcdSessionTTL),
-		concurrency.WithContext(ctx))
+	sess, err := concurrency.NewSession(etcdClient, concurrency.WithTTL(etcdSessionTTL))
 	if err != nil {
 		return nil, fmt.Errorf("mist-api-connector: Error creating etcd session err=%w", err)
 	}
