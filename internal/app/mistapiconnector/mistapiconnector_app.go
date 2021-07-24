@@ -616,14 +616,14 @@ func (mc *mac) deleteEtcdKeys(playbackID string) {
 			glog.Errorf("mist-api-connector: error deleting keys for playbackID=%s err=%v", playbackID, err)
 		}
 		if resp.Succeeded {
-			glog.Errorf("mist-api-connector: success deleting keys for playbackID=%s rev=%d", playbackID, rev)
+			glog.Errorf("mist-api-connector: success deleting keys for playbackID=%s rev=%d", playbackID, rev.revision)
 		} else {
 			var curRev int64
 			if len(resp.Responses) > 0 && len(resp.Responses[0].GetResponseRange().Kvs) > 0 {
 				curRev = resp.Responses[0].GetResponseRange().Kvs[0].CreateRevision
 			}
 			glog.Errorf("mist-api-connector: unsuccessful deleting keys for playbackID=%s myRev=%d curRev=%d pathKey=%s",
-				playbackID, rev, curRev, pathKey)
+				playbackID, rev.revision, curRev, pathKey)
 		}
 	} else {
 		glog.Errorf("mist-api-connector: etcd revision for stream playbackID=%s not found", playbackID)
