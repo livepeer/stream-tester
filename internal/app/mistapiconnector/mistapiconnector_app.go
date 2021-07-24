@@ -320,7 +320,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			w.Write([]byte("false"))
 			return
 		}
-		if lines[2] == "RTMP" {
+		if lines[2] == "RTMP" && len(lines[3]) > 0 { // PUSH_END sends CONN_CLOSE too, but it has empty last line
 			doLogRequestEnd = true
 			playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
 			if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
