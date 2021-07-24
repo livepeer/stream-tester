@@ -181,190 +181,150 @@ func LivepeerProfiles2MistProfiles(lps []livepeer.Profile) []mist.Profile {
 	return res
 }
 
-func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		w.Write([]byte("false"))
-		return
-	}
-	b, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("false"))
-		return
-	}
-	bs := string(b)
-	lines := strings.Split(bs, "\n")
-	trigger := r.Header.Get("X-Trigger")
-	if trigger == "" {
-		glog.Errorf("Trigger not defined in request %s", bs)
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("false"))
-		return
-	}
-	mistVersion := r.Header.Get("X-Version")
-	if mistVersion == "" {
-		mistVersion = r.UserAgent()
-	}
-	glog.V(model.VERBOSE).Infof("Got request (%s) mist=%s (%d lines): `%s`", trigger, mistVersion, len(lines), strings.Join(lines, `\n`))
-	// glog.V(model.VERBOSE).Infof("User agent: %s", r.UserAgent())
-	// glog.V(model.VERBOSE).Infof("Mist version: %s", r.Header.Get("X-Version"))
-	started := time.Now()
-	doLogRequestEnd := false
-	defer func(s time.Time, t string) {
-		if doLogRequestEnd {
-			took := time.Since(s)
-			glog.V(model.VERBOSE).Infof("Request %s ended in %s", t, took)
-			metrics.TriggerDuration(t, took)
-		}
-	}(started, trigger)
-	if trigger == "DEFAULT_STREAM" {
-		if mc.balancerHost == "" {
-			glog.V(model.VERBOSE).Infof("Request %s: (%d lines) responded with forbidden", trigger, len(lines))
-			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte("false"))
-			return
-		}
-		if len(lines) == 5 {
-			protocol := lines[3] // HLS
-			uri := lines[4]      // /hls/h5rfoaiqoafbsq44/index.m3u8?stream=h5rfoaiqoafbsq44
-			if protocol == "HLS" {
-				urip := strings.Split(uri, "/")
-				if len(urip) > 2 {
-					glog.Infof("proto: %s uri parts: %+v", protocol, urip)
-					// urip[2] = streamPlaybackPrefix + urip[2]
-					playbackID := urip[2]
-					streamNameInMist := streamPlaybackPrefix + playbackID
-					// check if stream is in our map of currently playing streams
-					mc.mu.Lock()
-					defer mc.mu.Unlock() // hold the lock until exit so that trigger to RTMP_REWRITE can't create
-					// another Mist stream in the same time
-					if _, has := mc.pub2id[playbackID]; has {
-						// that means that RTMP stream is currently gets streamed into our Mist node
-						// and so no changes needed to the Mist configuration
-						glog.Infof("Already in the playing map, returning %s", streamNameInMist)
-						w.WriteHeader(http.StatusOK)
-						w.Write([]byte(streamNameInMist))
-						return
-					}
+func (mc *mac) triggerLiveBandwidth(w http.ResponseWriter, r *http.Request) bool {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("yes"))
+	return false
+}
 
-					// check if such stream already exists in Mist's config
-					streams, activeStreams, err := mc.mapi.Streams()
-					if err != nil {
-						glog.Warningf("Error getting streams list from Mist: %v", err)
-						w.WriteHeader(http.StatusOK)
-						w.Write([]byte(streamNameInMist))
-						return
-					}
-					if utils.StringsSliceContains(activeStreams, streamNameInMist) {
-						glog.Infof("Stream is in active map, returning %s", streamNameInMist)
-						w.WriteHeader(http.StatusOK)
-						w.Write([]byte(streamNameInMist))
-						return
-					}
-					if mstream, has := streams[streamNameInMist]; has {
-						if len(mstream.Processes) == 0 {
-							// Stream exists and has transcoding turned off
-							glog.Infof("Requested stream '%s' already exists in Mist config, just returning it's name", streamNameInMist)
-							w.WriteHeader(http.StatusOK)
-							w.Write([]byte(streamNameInMist))
-							return
-						}
-					}
-					// Looks like there is no RTMP stream on our Mist server, so probably it is on other
-					// (load balanced) server. So we need to create Mist's stream configuration without
-					// transcoding
-					stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
-					if err != nil || stream == nil {
-						glog.Errorf("Error getting stream info from Livepeer API err=%v", err)
-						w.WriteHeader(http.StatusNotFound)
-						w.Write([]byte("false"))
-						return
-					}
-					glog.V(model.DEBUG).Infof("For stream %s got info %+v", playbackID, stream)
-					if stream.Deleted {
-						glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", playbackID)
-						go mc.mapi.DeleteStreams(streamNameInMist)
-						w.WriteHeader(http.StatusNotFound)
-						w.Write([]byte("false"))
-						return
-					}
-					err = mc.createMistStream(streamNameInMist, stream, true)
-					if err != nil {
-						glog.Errorf("Error creating stream on the Mist server: %v", err)
-					}
-					w.WriteHeader(http.StatusOK)
-					w.Write([]byte(streamNameInMist))
-					return
+func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
+	if len(lines) < 3 {
+		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), rawRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
+		return false
+	}
+	if lines[2] == "RTMP" && len(lines[3]) > 0 { // PUSH_END sends CONN_CLOSE too, but it has empty last line
+		playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
+		if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
+			playbackID = strings.Split(playbackID, "+")[1]
+		}
+		mc.mu.Lock()
+		if id, has := mc.pub2id[playbackID]; has {
+			glog.Infof("Setting stream's manifestID=%s playbackID=%s active status to false", id, playbackID)
+			if mc.consulURL != nil {
+				consulPlaybackID := mc.consulPrefix + playbackID
+				go consul.DeleteKey(mc.consulURL, traefikKeyPathRouters+consulPlaybackID, true)
+				// shouldn't exists with new scheme, but keeping here to clean up routes made with old scheme
+				go consul.DeleteKey(mc.consulURL, traefikKeyPathServices+consulPlaybackID, true)
+				if mc.baseStreamName != "" {
+					go consul.DeleteKey(mc.consulURL, traefikKeyPathMiddlewares+consulPlaybackID, true)
 				}
 			}
+			if mc.useEtcd {
+				mc.deleteEtcdKeys(playbackID)
+			}
+			_, err := mc.lapi.SetActive(id, false)
+			if err != nil {
+				glog.Error(err)
+			}
+			delete(mc.pub2id, playbackID)
+			metrics.StopStream(true)
 		}
-		// We should get this in two cases:
-		// 1. When in RTMP_PUSH_REWRITE we got request for unknown stream and thus
-		//    haven't created new stream in Mist
-		// 2. When someone pulls HLS for stream that exists but is not active (no
-		//    RTMP stream coming in).
+		mc.mu.Unlock()
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("yes"))
+	return true
+}
+
+func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, lines []string, trigger string) bool {
+	if mc.balancerHost == "" {
+		glog.V(model.VERBOSE).Infof("Request %s: (%d lines) responded with forbidden", trigger, len(lines))
 		w.WriteHeader(http.StatusForbidden)
 		w.Write([]byte("false"))
-		return
+		return false
 	}
-	if trigger == "LIVE_BANDWIDTH" {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("yes"))
-		return
-	}
-	if trigger == "CONN_CLOSE" {
-		if len(lines) < 3 {
-			glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), bs)
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("false"))
-			return
-		}
-		if lines[2] == "RTMP" && len(lines[3]) > 0 { // PUSH_END sends CONN_CLOSE too, but it has empty last line
-			doLogRequestEnd = true
-			playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
-			if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
-				playbackID = strings.Split(playbackID, "+")[1]
-			}
-			mc.mu.Lock()
-			if id, has := mc.pub2id[playbackID]; has {
-				glog.Infof("Setting stream's manifestID=%s playbackID=%s active status to false", id, playbackID)
-				if mc.consulURL != nil {
-					consulPlaybackID := mc.consulPrefix + playbackID
-					go consul.DeleteKey(mc.consulURL, traefikKeyPathRouters+consulPlaybackID, true)
-					// shouldn't exists with new scheme, but keeping here to clean up routes made with old scheme
-					go consul.DeleteKey(mc.consulURL, traefikKeyPathServices+consulPlaybackID, true)
-					if mc.baseStreamName != "" {
-						go consul.DeleteKey(mc.consulURL, traefikKeyPathMiddlewares+consulPlaybackID, true)
+	if len(lines) == 5 {
+		protocol := lines[3] // HLS
+		uri := lines[4]      // /hls/h5rfoaiqoafbsq44/index.m3u8?stream=h5rfoaiqoafbsq44
+		if protocol == "HLS" {
+			urip := strings.Split(uri, "/")
+			if len(urip) > 2 {
+				glog.Infof("proto: %s uri parts: %+v", protocol, urip)
+				// urip[2] = streamPlaybackPrefix + urip[2]
+				playbackID := urip[2]
+				streamNameInMist := streamPlaybackPrefix + playbackID
+				// check if stream is in our map of currently playing streams
+				mc.mu.Lock()
+				defer mc.mu.Unlock() // hold the lock until exit so that trigger to RTMP_REWRITE can't create
+				// another Mist stream in the same time
+				if _, has := mc.pub2id[playbackID]; has {
+					// that means that RTMP stream is currently gets streamed into our Mist node
+					// and so no changes needed to the Mist configuration
+					glog.Infof("Already in the playing map, returning %s", streamNameInMist)
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(streamNameInMist))
+					return true
+				}
+
+				// check if such stream already exists in Mist's config
+				streams, activeStreams, err := mc.mapi.Streams()
+				if err != nil {
+					glog.Warningf("Error getting streams list from Mist: %v", err)
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(streamNameInMist))
+					return true
+				}
+				if utils.StringsSliceContains(activeStreams, streamNameInMist) {
+					glog.Infof("Stream is in active map, returning %s", streamNameInMist)
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(streamNameInMist))
+					return true
+				}
+				if mstream, has := streams[streamNameInMist]; has {
+					if len(mstream.Processes) == 0 {
+						// Stream exists and has transcoding turned off
+						glog.Infof("Requested stream '%s' already exists in Mist config, just returning it's name", streamNameInMist)
+						w.WriteHeader(http.StatusOK)
+						w.Write([]byte(streamNameInMist))
+						return true
 					}
 				}
-				if mc.useEtcd {
-					mc.deleteEtcdKeys(playbackID)
+				// Looks like there is no RTMP stream on our Mist server, so probably it is on other
+				// (load balanced) server. So we need to create Mist's stream configuration without
+				// transcoding
+				stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
+				if err != nil || stream == nil {
+					glog.Errorf("Error getting stream info from Livepeer API err=%v", err)
+					w.WriteHeader(http.StatusNotFound)
+					w.Write([]byte("false"))
+					return true
 				}
-				_, err := mc.lapi.SetActive(id, false)
+				glog.V(model.DEBUG).Infof("For stream %s got info %+v", playbackID, stream)
+				if stream.Deleted {
+					glog.Infof("Stream %s was deleted, so deleting Mist's stream configuration", playbackID)
+					go mc.mapi.DeleteStreams(streamNameInMist)
+					w.WriteHeader(http.StatusNotFound)
+					w.Write([]byte("false"))
+					return true
+				}
+				err = mc.createMistStream(streamNameInMist, stream, true)
 				if err != nil {
-					glog.Error(err)
+					glog.Errorf("Error creating stream on the Mist server: %v", err)
 				}
-				delete(mc.pub2id, playbackID)
-				metrics.StopStream(true)
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(streamNameInMist))
+				return true
 			}
-			mc.mu.Unlock()
 		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("yes"))
-		return
 	}
-	if trigger != "RTMP_PUSH_REWRITE" {
-		glog.Errorf("Got unsupported trigger: '%s'", trigger)
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("false"))
-		return
-	}
+	// We should get this in two cases:
+	// 1. When in RTMP_PUSH_REWRITE we got request for unknown stream and thus
+	//    haven't created new stream in Mist
+	// 2. When someone pulls HLS for stream that exists but is not active (no
+	//    RTMP stream coming in).
+	w.WriteHeader(http.StatusForbidden)
+	w.Write([]byte("false"))
+	return true
+}
+
+func (mc *mac) triggerRtmpPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
 	if len(lines) < 2 {
-		glog.Errorf("Expected 2 lines, got %d, request \n%s", len(lines), bs)
+		glog.Errorf("Expected 2 lines, got %d, request \n%s", len(lines), rawRequest)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
-		return
+		return false
 	}
 	// glog.V(model.INSANE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
 	pu, err := url.Parse(lines[0])
@@ -373,14 +333,14 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		glog.Errorf("Error parsing url=%s err=%v", lines[0], err)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
-		return
+		return false
 	}
 	pp := strings.Split(pu.Path, "/")
 	if len(pp) != 3 {
 		glog.Errorf("URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
-		return
+		return false
 	}
 	streamKey := pp[2]
 	glog.V(model.VVERBOSE).Infof("Requested stream key is '%s'", streamKey)
@@ -398,7 +358,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		*/
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("false"))
-		return
+		return false
 	}
 	glog.V(model.VERBOSE).Infof("For stream %s got info %+v", streamKey, stream)
 
@@ -414,9 +374,8 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		}
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("false"))
-		return
+		return false
 	}
-	doLogRequestEnd = true
 
 	if stream.PlaybackID != "" {
 		mc.mu.Lock()
@@ -442,7 +401,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			delete(mc.pub2id, stream.PlaybackID)
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte("false"))
-			return
+			return true
 		}
 	} else {
 		glog.Errorf("Shouldn't happen streamID=%s", stream.ID)
@@ -454,7 +413,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			glog.Errorf("Error creating stream on the Mist server: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("false"))
-			return
+			return true
 		}
 	}
 	if mc.consulURL != nil {
@@ -509,7 +468,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			glog.Errorf("Error creating Traefik rule err=%v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("false"))
-			return
+			return true
 		}
 	}
 	if mc.useEtcd {
@@ -557,13 +516,68 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 			glog.Errorf("Error creating etcd Traefik rule for playbackID=%s streamID=%s err=%v", stream.PlaybackID, stream.ID, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("false"))
-			return
+			return true
 		}
 	}
 	w.Write([]byte(responseURL))
 	metrics.StartStream()
 	glog.Infof("Responded with '%s'", responseURL)
 	mc.startPushTargets(stream)
+	return true
+}
+
+func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte("false"))
+		return
+	}
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
+		return
+	}
+	bs := string(b)
+	lines := strings.Split(bs, "\n")
+	trigger := r.Header.Get("X-Trigger")
+	if trigger == "" {
+		glog.Errorf("Trigger not defined in request %s", bs)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
+		return
+	}
+	mistVersion := r.Header.Get("X-Version")
+	if mistVersion == "" {
+		mistVersion = r.UserAgent()
+	}
+	glog.V(model.VERBOSE).Infof("Got request (%s) mist=%s (%d lines): `%s`", trigger, mistVersion, len(lines), strings.Join(lines, `\n`))
+	// glog.V(model.VERBOSE).Infof("User agent: %s", r.UserAgent())
+	// glog.V(model.VERBOSE).Infof("Mist version: %s", r.Header.Get("X-Version"))
+	started := time.Now()
+	doLogRequestEnd := false
+	defer func(s time.Time, t string) {
+		if doLogRequestEnd {
+			took := time.Since(s)
+			glog.V(model.VERBOSE).Infof("Request %s ended in %s", t, took)
+			metrics.TriggerDuration(t, took)
+		}
+	}(started, trigger)
+
+	switch trigger {
+	case "DEFAULT_STREAM":
+		doLogRequestEnd = mc.triggerDefaultStream(w, r, lines, trigger)
+	case "LIVE_BANDWIDTH":
+		doLogRequestEnd = mc.triggerLiveBandwidth(w, r)
+	case "CONN_CLOSE":
+		doLogRequestEnd = mc.triggerConnClose(w, r, lines, bs)
+	case "RTMP_PUSH_REWRITE":
+		doLogRequestEnd = mc.triggerRtmpPushRewrite(w, r, lines, bs)
+	default:
+		glog.Errorf("Got unsupported trigger: '%s'", trigger)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
+	}
 }
 
 // putEtcdKeys puts keys in one transaction
