@@ -773,6 +773,21 @@ func (lapi *API) GetPushTarget(id string) (*PushTarget, error) {
 	return r, nil
 }
 
+// GetPushTargetR gets push target with retries
+func (lapi *API) GetPushTargetR(id string) (*PushTarget, error) {
+	var apiTry int
+	for {
+		target, err := lapi.GetPushTarget(id)
+		if err != nil {
+			if Timedout(err) && apiTry < 3 {
+				apiTry++
+				continue
+			}
+		}
+		return target, err
+	}
+}
+
 func Timedout(e error) bool {
 	t, ok := e.(interface {
 		Timeout() bool

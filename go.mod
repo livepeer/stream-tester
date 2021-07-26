@@ -11,6 +11,7 @@ require (
 	github.com/PagerDuty/go-pagerduty v1.3.0
 	github.com/bwmarrin/discordgo v0.20.2
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
@@ -23,6 +24,7 @@ require (
 	github.com/peterbourgon/ff/v2 v2.0.0
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.15.0
+	github.com/streadway/amqp v1.0.0 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.0-rc.0
 	go.etcd.io/etcd/client/v3 v3.5.0-rc.0
 	go.opencensus.io v0.23.0

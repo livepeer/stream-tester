@@ -45,6 +45,7 @@ func main() {
 	etcdCaCert := fs.String("etcd-cacert", "", "ETCD CA file name")
 	etcdCert := fs.String("etcd-cert", "", "ETCD client certificate file name")
 	etcdKey := fs.String("etcd-key", "", "ETCD client certificate key file name")
+	amqpUrl := fs.String("amqp-url", "", "RabbitMQ url")
 	_ = fs.String("config", "", "config file (optional)")
 
 	ff.Parse(fs, os.Args[1:],
@@ -84,7 +85,8 @@ func main() {
 		}
 	}
 	mc, err := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, consulURL, *consulPrefix,
-		*playbackDomain, *mistURL, *sendAudio, *baseStreamName, etcdEndpoints, *etcdCaCert, *etcdCert, *etcdKey)
+		*playbackDomain, *mistURL, *sendAudio, *baseStreamName, etcdEndpoints, *etcdCaCert, *etcdCert, *etcdKey,
+		*amqpUrl)
 	if err != nil {
 		glog.Fatalf("Error creating mist-api-connector %v", err)
 	}
