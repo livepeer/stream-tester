@@ -67,6 +67,7 @@ func newAMQPProducerInternal(ctx context.Context, uri, exchange, queue, keyNs st
 }
 
 func (p *amqpProducer) Publish(ctx context.Context, key string, body interface{}) error {
+	glog.Infof("Publishing amqp message to queue=%s msg=%+v", body)
 	bodyRaw, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("failed to marshal body to json: %w", err)

@@ -190,6 +190,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 	*/
 	var producer Producer
 	if amqpUrl != "" {
+		glog.Infof("Creating AMQP producer with url=%s", amqpUrl)
 		producer, err = NewAMQPProducer(ctx, amqpUrl, "", QUEUE_NAME, "")
 		if err != nil {
 			cancel()
