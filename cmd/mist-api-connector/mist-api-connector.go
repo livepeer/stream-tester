@@ -59,6 +59,7 @@ func main() {
 	fmt.Println("mist-api-connector version: " + model.Version)
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
+	fmt.Printf("AMQP URL=%s \n", *amqpUrl)
 
 	var mapi *mistapi.API
 	mcreds := strings.Split(*mistCreds, ":")

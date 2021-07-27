@@ -196,6 +196,8 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 			cancel()
 			return nil, err
 		}
+	} else {
+		glog.Infof("AMQP url is empty!")
 	}
 
 	glog.Infof("etcd endpoints: %+v, len %d", etcdEndpoints, len(etcdEndpoints))
