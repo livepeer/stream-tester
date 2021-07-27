@@ -1161,16 +1161,19 @@ func (mc *mac) startPushTargets(wildcardPlaybackID, playbackID string, info *str
 			}
 			// Inject ?video=~widthxheight to send the correct rendition
 			selectorURL := fmt.Sprintf("%s%svideo=%s&audio=maxbps", pushTarget.URL, join, videoSelector)
-			err = mc.mapi.StartPush(wildcardPlaybackID, selectorURL)
-			if err != nil {
-				glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
-				return
-			}
-			glog.Infof("Started PushTarget stream=%s pushTargetId=%s url=%s", wildcardPlaybackID, target.ID, selectorURL)
 			info.mu.Lock()
 			info.pushStatus[selectorURL] = &pushStatus{
 				pushInfo: pushTarget,
 			}
+
+			err = mc.mapi.StartPush(wildcardPlaybackID, selectorURL)
+			if err != nil {
+				glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
+				delete(info.pushStatus, selectorURL)
+				info.mu.Unlock()
+				return
+			}
+			glog.Infof("Started PushTarget stream=%s pushTargetId=%s url=%s", wildcardPlaybackID, target.ID, selectorURL)
 			info.mu.Unlock()
 		}(target)
 	}
