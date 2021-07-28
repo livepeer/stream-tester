@@ -931,6 +931,9 @@ func (mc *mac) deleteEtcdKeys(playbackID string) {
 }
 
 func (mc *mac) recoverSessionLoop() {
+	if mc.etcdClient == nil {
+		return
+	}
 	clientCtx := mc.etcdClient.Ctx()
 	for clientCtx.Err() == nil {
 		select {
@@ -1048,6 +1051,9 @@ func (mc *mac) handleHealthcheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func (mc *mac) isEtcdSessionHealthy() bool {
+	if mc.etcdSession == nil {
+		return true
+	}
 	select {
 	case <-mc.etcdSession.Done():
 		return false
