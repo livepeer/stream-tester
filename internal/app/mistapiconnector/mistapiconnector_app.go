@@ -497,6 +497,13 @@ func (mc *mac) triggerRtmpPushRewrite(w http.ResponseWriter, r *http.Request, li
 	if stream.PlaybackID != "" {
 		mc.mu.Lock()
 		defer mc.mu.Unlock()
+		if info, has := mc.pub2info[stream.PlaybackID]; has {
+			info.mu.Lock()
+			streamStopped := info.stopped
+			info.mu.Unlock()
+			glog.Infof("Stream playbackID=%s stopped=%v already in map, removing its info", stream.PlaybackID, streamStopped)
+			mc.removeInfo(stream.PlaybackID)
+		}
 		mc.pub2info[stream.PlaybackID] = &streamInfo{
 			id:         stream.ID,
 			stream:     stream,
