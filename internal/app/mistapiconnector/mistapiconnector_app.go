@@ -1059,6 +1059,11 @@ func (mc *mac) handleHealthcheck(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
+	if config, err := mc.mapi.GetConfig(); err != nil || config == nil {
+		glog.Errorf("Error getting mist config on healthcheck. err=%q", err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
