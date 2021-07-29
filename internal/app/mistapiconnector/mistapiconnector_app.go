@@ -18,6 +18,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/google/uuid"
+	"github.com/livepeer/livepeer-data/pkg/event"
 	"github.com/livepeer/stream-tester/apis/consul"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/apis/mist"
@@ -140,7 +141,7 @@ type (
 		etcdSession    *concurrency.Session
 		etcdPub2rev    map[string]etcdRevData // public key to revision of etcd keys
 		pub2info       map[string]*streamInfo // public key to info
-		producer       Producer
+		producer       event.Producer
 		// pub2id         map[string]string // public key to stream id
 	}
 )
@@ -189,7 +190,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		}()
 	*/
 
-	var producer Producer
+	var producer event.Producer
 	if amqpUrl != "" {
 		pu, err := url.Parse(amqpUrl)
 		if err != nil {
@@ -198,7 +199,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		}
 
 		glog.Infof("Creating AMQP producer with url=%s", pu.Redacted())
-		producer, err = NewAMQPProducer(ctx, amqpUrl, "", QUEUE_NAME, "")
+		producer, err = event.NewAMQPProducerToQueue(ctx, amqpUrl, QUEUE_NAME)
 		if err != nil {
 			cancel()
 			return nil, err
@@ -745,7 +746,8 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, event st
 		StreamID:  info.stream.ID,
 		Payload:   map[string]interface{}{"pushUrl": pushInfo.pushInfo.URL},
 	}
-	err := mc.producer.Publish(mc.ctx, QUEUE_NAME, &wm)
+	glog.Infof("Publishing amqp message to queue=%s msg=%+v", QUEUE_NAME, wm)
+	err := mc.producer.Publish(mc.ctx, "", &wm, true)
 	if err != nil {
 		glog.Errorf("Error publishing message msg=%+v err=%v", wm, err)
 		return
