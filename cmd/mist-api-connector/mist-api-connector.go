@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
@@ -33,6 +36,7 @@ func main() {
 	mistHost := fs.String("mist-host", "localhost", "Hostname of the Mist server")
 	mistPort := fs.Uint("mist-port", 4242, "Port of the Mist server")
 	mistCreds := fs.String("mist-creds", "", "login:password of the Mist server")
+	mistConnectTimeout := fs.Duration("mist-connect-timeout", 5*time.Minute, "Max time to wait attempting to connect to Mist server")
 	sendAudio := fs.String("send-audio", "record", "when should we send audio?  {always|never|record}")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
@@ -69,7 +73,7 @@ func main() {
 	lapi.Init()
 
 	mapi = mistapi.NewMist(*mistHost, mcreds[0], mcreds[1], *apiToken, *mistPort)
-	mapi.Login()
+	ensureLoggedIn(mapi, *mistConnectTimeout)
 	metrics.InitCensus(hostName, model.Version, "mistconnector")
 	var etcdEndpoints []string
 	if len(*fEtcdEndpoints) > 0 {
@@ -97,4 +101,26 @@ func main() {
 	glog.Infof("Start shutting down host=%s err=%v", hostName, err)
 	err = <-mc.SrvShutCh()
 	glog.Infof("Done shutting down host=%s err=%v", hostName, err)
+}
+
+func ensureLoggedIn(mapi *mistapi.API, timeout time.Duration) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
+		err := mapi.Login()
+		if err == nil {
+			return
+		}
+
+		var netErr net.Error
+		if !errors.As(err, &netErr) {
+			glog.Fatalf("Fatal non-network error logging to mist. err=%q", err)
+		}
+		select {
+		case <-deadline.C:
+			glog.Fatalf("Failed to login to mist after %s. err=%q", timeout, netErr)
+		case <-time.After(1 * time.Second):
+			glog.Errorf("Retrying after network error logging to mist. err=%q", netErr)
+		}
+	}
 }

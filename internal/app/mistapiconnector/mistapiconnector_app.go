@@ -931,6 +931,9 @@ func (mc *mac) deleteEtcdKeys(playbackID string) {
 }
 
 func (mc *mac) recoverSessionLoop() {
+	if mc.etcdClient == nil {
+		return
+	}
 	clientCtx := mc.etcdClient.Ctx()
 	for clientCtx.Err() == nil {
 		select {
@@ -1039,12 +1042,33 @@ func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStream
 	return err
 }
 
+func (mc *mac) handleHealthcheck(w http.ResponseWriter, r *http.Request) {
+	if !mc.isEtcdSessionHealthy() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (mc *mac) isEtcdSessionHealthy() bool {
+	if mc.etcdSession == nil {
+		return true
+	}
+	select {
+	case <-mc.etcdSession.Done():
+		return false
+	default:
+		return true
+	}
+}
+
 func (mc *mac) webServerHandlers() *http.ServeMux {
 	mux := http.NewServeMux()
 	utils.AddPProfHandlers(mux)
 	// mux.Handle("/metrics", utils.InitPrometheusExporter("mistconnector"))
 	mux.Handle("/metrics", metrics.Exporter)
 
+	mux.HandleFunc("/_healthz", mc.handleHealthcheck)
 	mux.HandleFunc("/", mc.handleDefaultStreamTrigger)
 	return mux
 }
