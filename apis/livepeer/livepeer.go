@@ -150,8 +150,9 @@ type (
 	}
 
 	setActiveReq struct {
-		Active   bool   `json:"active"`
-		HostName string `json:"hostName"`
+		Active    bool   `json:"active"`
+		HostName  string `json:"hostName"`
+		StartedAt int64  `json:"startedAt"`
 	}
 
 	deactivateManyReq struct {
@@ -597,7 +598,7 @@ func (lapi *API) GetSessions(id string, forceUrl bool) ([]UserSession, error) {
 }
 
 // SetActive set isActive
-func (lapi *API) SetActive(id string, active bool) (bool, error) {
+func (lapi *API) SetActive(id string, active bool, startedAt time.Time) (bool, error) {
 	if id == "" {
 		return true, errors.New("empty id")
 	}
@@ -606,6 +607,9 @@ func (lapi *API) SetActive(id string, active bool) (bool, error) {
 	ar := setActiveReq{
 		Active:   active,
 		HostName: hostName,
+	}
+	if !startedAt.IsZero() {
+		ar.StartedAt = startedAt.UnixNano() / int64(time.Millisecond)
 	}
 	b, _ := json.Marshal(&ar)
 	req, err := uhttp.NewRequest("PUT", u, bytes.NewBuffer(b))
