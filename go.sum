@@ -366,6 +366,10 @@ github.com/livepeer/leaderboard-serverless v1.0.0 h1:QqUxAEorjtfFxQO7tqTbxOLK+LF
 github.com/livepeer/leaderboard-serverless v1.0.0/go.mod h1:0H4gFyyTO3lXtqfRIwyRaWPuW0pBMXkNUDtIjHHniW0=
 github.com/livepeer/livepeer-data v0.0.1 h1:52Vcm7Wnlu5gvCuHdldwTjabCfYu7qpLrNmaUZPELg0=
 github.com/livepeer/livepeer-data v0.0.1/go.mod h1:UQMSeYqLMDpPOOqwTUxtr/PS4NsjGEC0Gm2lgOx7fKA=
+github.com/livepeer/livepeer-data v0.0.2 h1:4PZKZcTav5UFXT3Gb6qdSa0eL726htL48oqy/w90+Yg=
+github.com/livepeer/livepeer-data v0.0.2/go.mod h1:UQMSeYqLMDpPOOqwTUxtr/PS4NsjGEC0Gm2lgOx7fKA=
+github.com/livepeer/livepeer-data v0.0.3 h1:i8MpP2IsINNeDDTUJBamX/oiY7qya0sfSRwzJjmW0NE=
+github.com/livepeer/livepeer-data v0.0.3/go.mod h1:UQMSeYqLMDpPOOqwTUxtr/PS4NsjGEC0Gm2lgOx7fKA=
 github.com/livepeer/m3u8 v0.11.1 h1:VkUJzfNTyjy9mqsgp5JPvouwna8wGZMvd/gAfT5FinU=
 github.com/livepeer/m3u8 v0.11.1/go.mod h1:IUqAtwWPAG2CblfQa4SVzTQoDcEMPyfNOaBSxqHMS04=
 github.com/lyft/protoc-gen-validate v0.0.13/go.mod h1:XbGvPuh87YZc5TdIa2/I4pLk0QoUACkjt2znoq26NVQ=
