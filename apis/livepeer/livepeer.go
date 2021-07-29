@@ -150,8 +150,8 @@ type (
 	}
 
 	setActiveReq struct {
-		Active   bool   `json:"active,omitempty"`
-		HostName string `json:"hostName,omitempty"`
+		Active   bool   `json:"active"`
+		HostName string `json:"hostName"`
 	}
 
 	deactivateManyReq struct {
