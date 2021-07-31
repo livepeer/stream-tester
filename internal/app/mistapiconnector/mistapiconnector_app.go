@@ -898,6 +898,9 @@ func (mc *mac) putEtcdKeys(sess *concurrency.Session, playbackID string, kvs ...
 		glog.Errorf("mist-api-connector: error putting keys for playbackID=%s err=%v", playbackID, err)
 		return err
 	}
+	if resp == nil {
+		return fmt.Errorf("mist-api-connector: error putting keys for playbackID=%s - nil response", playbackID)
+	}
 	if !resp.Succeeded {
 		panic("unexpected")
 	}
@@ -926,18 +929,19 @@ func (mc *mac) deleteEtcdKeys(playbackID string) {
 		resp, err := mc.etcdClient.Txn(ctx).If(cmp).Then(thn...).Else(get).Commit()
 		cancel()
 		delete(mc.etcdPub2rev, playbackID)
-		if err != nil {
+		if err != nil || resp == nil {
 			glog.Errorf("mist-api-connector: error deleting keys for playbackID=%s err=%v", playbackID, err)
-		}
-		if resp.Succeeded {
-			glog.Errorf("mist-api-connector: success deleting keys for playbackID=%s rev=%d", playbackID, rev.revision)
 		} else {
-			var curRev int64
-			if len(resp.Responses) > 0 && len(resp.Responses[0].GetResponseRange().Kvs) > 0 {
-				curRev = resp.Responses[0].GetResponseRange().Kvs[0].CreateRevision
+			if resp.Succeeded {
+				glog.Errorf("mist-api-connector: success deleting keys for playbackID=%s rev=%d", playbackID, rev.revision)
+			} else {
+				var curRev int64
+				if len(resp.Responses) > 0 && len(resp.Responses[0].GetResponseRange().Kvs) > 0 {
+					curRev = resp.Responses[0].GetResponseRange().Kvs[0].CreateRevision
+				}
+				glog.Errorf("mist-api-connector: unsuccessful deleting keys for playbackID=%s myRev=%d curRev=%d pathKey=%s",
+					playbackID, rev.revision, curRev, pathKey)
 			}
-			glog.Errorf("mist-api-connector: unsuccessful deleting keys for playbackID=%s myRev=%d curRev=%d pathKey=%s",
-				playbackID, rev.revision, curRev, pathKey)
 		}
 	} else {
 		glog.Errorf("mist-api-connector: etcd revision for stream playbackID=%s not found", playbackID)
