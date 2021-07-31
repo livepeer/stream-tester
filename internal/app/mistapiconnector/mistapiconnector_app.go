@@ -94,6 +94,7 @@ type (
 		done            chan struct{}
 		mu              sync.Mutex
 		pushStatus      map[string]*pushStatus
+		startedAt       time.Time
 	}
 
 	trackListDesc struct {
@@ -322,7 +323,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 					go consul.DeleteKey(mc.consulURL, traefikKeyPathMiddlewares+consulPlaybackID, true)
 				}
 			}
-			_, err := mc.lapi.SetActive(info.id, false)
+			_, err := mc.lapi.SetActive(info.id, false, info.startedAt)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -331,6 +332,8 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 			info.mu.Unlock()
 			go mc.removeInfoAfter(playbackID, info)
 			metrics.StopStream(true)
+		} else {
+			glog.Warningf("RTMP conn close stream playbackID=%s not found", playbackID)
 		}
 		mc.mu.Unlock()
 	}
@@ -498,11 +501,19 @@ func (mc *mac) triggerRtmpPushRewrite(w http.ResponseWriter, r *http.Request, li
 	if stream.PlaybackID != "" {
 		mc.mu.Lock()
 		defer mc.mu.Unlock()
+		if info, has := mc.pub2info[stream.PlaybackID]; has {
+			info.mu.Lock()
+			streamStopped := info.stopped
+			info.mu.Unlock()
+			glog.Infof("Stream playbackID=%s stopped=%v already in map, removing its info", stream.PlaybackID, streamStopped)
+			mc.removeInfo(stream.PlaybackID)
+		}
 		mc.pub2info[stream.PlaybackID] = &streamInfo{
 			id:         stream.ID,
 			stream:     stream,
 			done:       make(chan struct{}),
 			pushStatus: make(map[string]*pushStatus),
+			startedAt:  time.Now(),
 		}
 		streamKey = stream.PlaybackID
 		// streamKey = strings.ReplaceAll(streamKey, "-", "")
@@ -516,7 +527,7 @@ func (mc *mac) triggerRtmpPushRewrite(w http.ResponseWriter, r *http.Request, li
 		}
 		pu.Path = strings.Join(pp, "/")
 		responseURL = pu.String()
-		ok, err := mc.lapi.SetActive(stream.ID, true)
+		ok, err := mc.lapi.SetActive(stream.ID, true, mc.pub2info[stream.PlaybackID].startedAt)
 		if err != nil {
 			glog.Error(err)
 		} else if !ok {
@@ -850,6 +861,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 func (mc *mac) removeInfoAfter(playbackID string, info *streamInfo) {
 	select {
 	case <-info.done:
+		return
 	case <-time.After(keepStreamAfterEnd):
 	}
 	mc.mu.Lock()
