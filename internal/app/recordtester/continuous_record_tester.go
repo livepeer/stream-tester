@@ -1,18 +1,27 @@
 package recordtester
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
 	"net/url"
+	"os"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/PagerDuty/go-pagerduty"
+	"github.com/google/uuid"
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/testers"
+	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/messenger"
 )
 
@@ -21,6 +30,8 @@ type (
 	IContinuousRecordTester interface {
 		// Start start test. Blocks until error.
 		Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error
+		// Setup
+		Setup() error
 		Cancel()
 		Done() <-chan struct{}
 	}
@@ -34,6 +45,12 @@ type (
 		pagerDutyComponent      string
 		useHTTP                 bool
 		mp4                     bool
+		testWebhooks            bool
+		webhooksExternalUrl     string
+		webhooksExternalUrlFull string
+		webhookBind             string
+		mu                      sync.Mutex
+		webhookCalls            []string
 	}
 
 	pagerDutyLink struct {
@@ -43,10 +60,21 @@ type (
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDutyIntegrationKey, pagerDutyComponent string, useHTTP, mp4 bool) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDutyIntegrationKey, pagerDutyComponent string,
+	useHTTP, mp4 bool, whtBind, whtExternalUrl string) IContinuousRecordTester {
+
 	ctx, cancel := context.WithCancel(gctx)
 	server := lapi.GetServer()
 	u, _ := url.Parse(server)
+	var webhooksExternalUrlFull string
+	if whtExternalUrl != "" {
+		wu, err := url.Parse(whtExternalUrl)
+		if err != nil {
+			panic(err)
+		}
+		wu.Path = "/webhook"
+		webhooksExternalUrlFull = wu.String()
+	}
 	crt := &continuousRecordTester{
 		lapi:                    lapi,
 		ctx:                     ctx,
@@ -56,8 +84,111 @@ func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDu
 		pagerDutyComponent:      pagerDutyComponent,
 		useHTTP:                 useHTTP,
 		mp4:                     mp4,
+		testWebhooks:            whtExternalUrl != "",
+		webhooksExternalUrl:     whtExternalUrl,
+		webhooksExternalUrlFull: webhooksExternalUrlFull,
+		webhookBind:             whtBind,
 	}
 	return crt
+}
+
+func (crt *continuousRecordTester) Setup() error {
+	if !crt.testWebhooks {
+		return nil
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/webhook", crt.handleHook)
+
+	srv := &http.Server{
+		Addr:    crt.webhookBind,
+		Handler: mux,
+	}
+
+	go func() {
+		<-crt.ctx.Done()
+		c, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		glog.Infof("Shutting down webhook server")
+		srv.Shutdown(c)
+	}()
+
+	go func() {
+		glog.Info("Webhook server listening on ", crt.webhookBind)
+		err := srv.ListenAndServe()
+		if err != http.ErrServerClosed {
+			glog.Errorf("Error in listen err=%v", err)
+			if strings.Contains(err.Error(), "bind:") {
+				os.Exit(21)
+			}
+		}
+	}()
+	time.Sleep(10 * time.Millisecond)
+	// try to access webhook
+	callID := "testCall-" + uuid.NewString()
+	if err := crt.makeTestCall(callID); err != nil {
+		return err
+	}
+
+	for {
+		firstCall := crt.getFirstHookCall()
+		if firstCall == "" {
+			return errors.New("can't access webhook server by external URL")
+		}
+		if firstCall == callID {
+			break
+		}
+	}
+	return nil
+}
+
+const httpTimeout = 4 * time.Second
+
+func (crt *continuousRecordTester) makeTestCall(callID string) error {
+
+	ctx, cancel := context.WithTimeout(context.Background(), httpTimeout)
+	req := uhttp.NewRequestWithContext(ctx, "POST", crt.webhooksExternalUrlFull, bytes.NewBuffer([]byte(callID)))
+	resp, err := http.DefaultClient.Do(req)
+	cancel()
+	if err != nil {
+		glog.Errorf("Error making test call uri=%s err=%v", crt.webhooksExternalUrlFull, err)
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		glog.Errorf("Status error making test call %s status %d body: %s", crt.webhooksExternalUrlFull, resp.StatusCode, string(b))
+		return errors.New(http.StatusText(resp.StatusCode))
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error reading from test call uri=%s err=%v", crt.webhooksExternalUrlFull, err)
+		return err
+	}
+	val := string(b)
+	glog.Infof("Read from test call url=%s: '%s'", crt.webhooksExternalUrlFull, val)
+	return nil
+}
+
+func (crt *continuousRecordTester) getFirstHookCall() string {
+	var res string
+	crt.mu.Lock()
+	if len(crt.webhookCalls) > 0 {
+		res = crt.webhookCalls[0]
+		crt.webhookCalls = crt.webhookCalls[1:]
+	}
+	crt.mu.Unlock()
+	return res
+}
+
+func (crt *continuousRecordTester) handleHook(w http.ResponseWriter, r *http.Request) {
+	glog.Infof("Got %s hook call from %s/%s", r.Method, r.RemoteAddr, r.Header.Get("User-Agent"))
+	body, err := io.ReadAll(r.Body)
+	if err == nil && len(body) > 0 {
+		crt.mu.Lock()
+		crt.webhookCalls = append(crt.webhookCalls, string(body))
+		crt.mu.Unlock()
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error {

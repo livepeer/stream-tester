@@ -58,6 +58,8 @@ func main() {
 	pagerDutyIntegrationKey := fs.String("pagerduty-integration-key", "", "PagerDuty integration key")
 	pagerDutyComponent := fs.String("pagerduty-component", "", "PagerDuty component")
 	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
+	whtBind := fs.String("webhook-tester-bind", "0.0.0.0:8080", "Address to bind webhook server to")
+	whtExternalUrl := fs.String("webhook-tester-external-url", "", "External host at which webhook server is accessible")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -217,10 +219,21 @@ func main() {
 		exit(es, fileName, *fileArg, err)
 		return
 	} else if *continuousTest > 0 {
+		if *whtExternalUrl != "" && *useHttp {
+			glog.Error("Can't test webhooks with HTTP ingest")
+			exit(22, fileName, *fileArg, err)
+		}
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
-		crt := recordtester.NewContinuousRecordTester(gctx, lapi, *pagerDutyIntegrationKey, *pagerDutyComponent, *useHttp, *testMP4)
-		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
+		crt := recordtester.NewContinuousRecordTester(gctx, lapi, *pagerDutyIntegrationKey, *pagerDutyComponent, *useHttp, *testMP4,
+			*whtBind, *whtExternalUrl)
+		err := crt.Setup()
+		if err != nil {
+			glog.Errorf("Error starting record tester err=%v", err)
+			exit(111, fileName, *fileArg, err)
+		}
+
+		err = crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 		if err != nil {
 			glog.Warningf("Continuous test ended with err=%v", err)
 		}
