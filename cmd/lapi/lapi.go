@@ -141,7 +141,7 @@ func main() {
 			if len(args) > 1 && args[1] == "true" {
 				active = true
 			}
-			ok, err := lapi.SetActive(args[0], active)
+			ok, err := lapi.SetActive(args[0], active, time.Now())
 			if err != nil {
 				return err
 			}
