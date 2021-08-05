@@ -22,6 +22,7 @@ import (
 var ErrNotExists = errors.New("Stream does not exists")
 
 const httpTimeout = 4 * time.Second
+const defaultRetriesNum = 4
 
 var defaultHTTPClient = &http.Client{
 	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
@@ -134,6 +135,16 @@ type (
 		UserId    string `json:"userId,omitempty"`
 		Disabled  bool   `json:"disabled,omitempty"`
 		CreatedAt int64  `json:"createdAt,omitempty"`
+	}
+
+	Webhook struct {
+		ID        string   `json:"id,omitempty"`
+		URL       string   `json:"url,omitempty"`
+		Name      string   `json:"name,omitempty"`
+		Events    []string `json:"events,omitempty"`
+		UserId    string   `json:"userId,omitempty"`
+		Disabled  bool     `json:"disabled,omitempty"`
+		CreatedAt int64    `json:"createdAt,omitempty"`
 	}
 
 	// // Profile ...
@@ -477,7 +488,7 @@ func (lapi *API) GetSessionsR(id string, forceUrl bool) ([]UserSession, error) {
 	for {
 		sessions, err := lapi.GetSessions(id, forceUrl)
 		if err != nil {
-			if Timedout(err) && apiTry < 3 {
+			if Timedout(err) && apiTry < defaultRetriesNum {
 				apiTry++
 				continue
 			}
@@ -492,7 +503,7 @@ func (lapi *API) GetSessionsNewR(id string, forceUrl bool) ([]UserSession, error
 	for {
 		sessions, err := lapi.GetSessionsNew(id, forceUrl)
 		if err != nil {
-			if Timedout(err) && apiTry < 3 {
+			if Timedout(err) && apiTry < defaultRetriesNum {
 				apiTry++
 				continue
 			}
@@ -783,7 +794,7 @@ func (lapi *API) GetPushTargetR(id string) (*PushTarget, error) {
 	for {
 		target, err := lapi.GetPushTarget(id)
 		if err != nil {
-			if Timedout(err) && apiTry < 3 {
+			if Timedout(err) && apiTry < defaultRetriesNum {
 				apiTry++
 				continue
 			}
@@ -792,9 +803,158 @@ func (lapi *API) GetPushTargetR(id string) (*PushTarget, error) {
 	}
 }
 
+func (lapi *API) GetWebhooks() ([]Webhook, error) {
+	rType := "get_webhooks"
+	start := time.Now()
+	u := fmt.Sprintf("%s/api/webhook", lapi.choosenServer)
+	req := uhttp.GetRequest(u)
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	resp, err := lapi.httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error getting webhooks from Livepeer API server (%s) error: %v", u, err)
+		metrics.APIRequest(rType, 0, err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		glog.Errorf("Status error getting webhooks from Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		if resp.StatusCode == http.StatusNotFound {
+			metrics.APIRequest(rType, 0, ErrNotExists)
+			return nil, ErrNotExists
+		}
+		err := errors.New(http.StatusText(resp.StatusCode))
+		metrics.APIRequest(rType, 0, err)
+		return nil, err
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error getting webhooks from Livepeer API server (%s) error: %v", u, err)
+		metrics.APIRequest(rType, 0, err)
+		return nil, err
+	}
+	took := time.Since(start)
+	metrics.APIRequest(rType, took, nil)
+	bs := string(b)
+	glog.V(model.VERBOSE).Info(bs)
+	glog.Info(bs)
+	if bs == "null" {
+		// API return null if stream does not exists
+		return nil, ErrNotExists
+	}
+	var res []Webhook
+	err = json.Unmarshal(b, &res)
+	return res, err
+}
+
+func (lapi *API) GetWebhooksR() ([]Webhook, error) {
+	var apiTry int
+	for {
+		hooks, err := lapi.GetWebhooks()
+		if err != nil {
+			if Timedout(err) && apiTry < defaultRetriesNum {
+				apiTry++
+				continue
+			}
+		}
+		return hooks, err
+	}
+}
+
+// DeleteWebhook deletes webhook
+func (lapi *API) DeleteWebhook(id string) error {
+	glog.V(model.DEBUG).Infof("Deleting Livepeer webhook '%s' ", id)
+	u := fmt.Sprintf("%s/api/webhook/%s", lapi.choosenServer, id)
+	req, err := uhttp.NewRequest("DELETE", u, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	resp, err := lapi.httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error deleting Livepeer stream %v", err)
+		return err
+	}
+	defer resp.Body.Close()
+	_, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error deleting Livepeer stream (body) %v", err)
+		return err
+	}
+	if resp.StatusCode != 204 {
+		return fmt.Errorf("error deleting stream %s: status is %s", id, resp.Status)
+	}
+	return nil
+}
+
+func (lapi *API) DeleteWebhookR(id string) error {
+	var apiTry int
+	for {
+		err := lapi.DeleteWebhook(id)
+		if err != nil {
+			if Timedout(err) && apiTry < defaultRetriesNum {
+				apiTry++
+				continue
+			}
+		}
+		return err
+	}
+}
+
+// CreateWebhook creates stream with specified name and profiles
+func (lapi *API) CreateWebhook(name, url string, events []string) (*Webhook, error) {
+	glog.Infof("Creating Livepeer webhook name=%q url=%q events=%+v", name, url, events)
+	reqs := &Webhook{
+		Name:   name,
+		URL:    url,
+		Events: events,
+	}
+	b, err := json.Marshal(reqs)
+	if err != nil {
+		glog.V(model.SHORT).Infof("Error marshalling create webhook request %v", err)
+		return nil, err
+	}
+	glog.Infof("Sending: %s", b)
+	u := fmt.Sprintf("%s/api/webhook", lapi.choosenServer)
+	req, err := uhttp.NewRequest("POST", u, bytes.NewBuffer(b))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := lapi.httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error creating Livepeer webhook %v", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	b, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error creating Livepeer webhook (body) %v", err)
+		return nil, err
+	}
+	glog.Info(string(b))
+	r := &Webhook{}
+	err = json.Unmarshal(b, r)
+	if err != nil {
+		return nil, err
+	}
+	glog.Infof("Webhook name=%s url=%s created with id=%s", name, url, r.ID)
+	return r, nil
+}
+
 func Timedout(e error) bool {
 	t, ok := e.(interface {
 		Timeout() bool
 	})
 	return ok && t.Timeout() || (e != nil && strings.Contains(e.Error(), "Client.Timeout"))
+}
+
+func (wh *Webhook) HasEvent(event string) bool {
+	for _, ev := range wh.Events {
+		if ev == event {
+			return true
+		}
+	}
+	return false
 }

@@ -3,6 +3,7 @@ package recordtester
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/testers"
+	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/messenger"
 )
@@ -49,8 +51,28 @@ type (
 		webhooksExternalUrl     string
 		webhooksExternalUrlFull string
 		webhookBind             string
+		region                  string
 		mu                      sync.Mutex
-		webhookCalls            []string
+		webhookCalls            []*webhookCall
+		webhooksToTest          []string
+		webhookID               string
+		skipUnknownHooks        bool
+	}
+
+	webhookCall struct {
+		Body    string
+		Payload *hookPayload
+		Method  string
+	}
+
+	hookPayload struct {
+		ID        string                     `json:"id,omitempty"`
+		WebhookId string                     `json:"webhookId,omitempty"`
+		CreatedAt int64                      `json:"createdAt,omitempty"`
+		Timestamp int64                      `json:"timestamp,omitempty"`
+		Event     string                     `json:"event,omitempty"`
+		Stream    *livepeer.CreateStreamResp `json:"stream,omitempty"`
+		Payload   map[string]interface{}
 	}
 
 	pagerDutyLink struct {
@@ -61,12 +83,13 @@ type (
 
 // NewContinuousRecordTester returns new object
 func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDutyIntegrationKey, pagerDutyComponent string,
-	useHTTP, mp4 bool, whtBind, whtExternalUrl string) IContinuousRecordTester {
+	useHTTP, mp4 bool, whtBind, whtExternalUrl, region string) IContinuousRecordTester {
 
 	ctx, cancel := context.WithCancel(gctx)
 	server := lapi.GetServer()
 	u, _ := url.Parse(server)
 	var webhooksExternalUrlFull string
+	var webhooksToTest []string
 	if whtExternalUrl != "" {
 		wu, err := url.Parse(whtExternalUrl)
 		if err != nil {
@@ -74,6 +97,7 @@ func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDu
 		}
 		wu.Path = "/webhook"
 		webhooksExternalUrlFull = wu.String()
+		webhooksToTest = []string{"stream.started", "stream.idle"}
 	}
 	crt := &continuousRecordTester{
 		lapi:                    lapi,
@@ -88,6 +112,8 @@ func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDu
 		webhooksExternalUrl:     whtExternalUrl,
 		webhooksExternalUrlFull: webhooksExternalUrlFull,
 		webhookBind:             whtBind,
+		webhooksToTest:          webhooksToTest,
+		region:                  region,
 	}
 	return crt
 }
@@ -131,13 +157,62 @@ func (crt *continuousRecordTester) Setup() error {
 
 	for {
 		firstCall := crt.getFirstHookCall()
-		if firstCall == "" {
+		if firstCall.Body == "" {
 			return errors.New("can't access webhook server by external URL")
 		}
-		if firstCall == callID {
+		if firstCall.Body == callID {
 			break
 		}
 	}
+	if err := crt.ensureHook(); err != nil {
+		return err
+	}
+	crt.skipUnknownHooks = true
+
+	return nil
+}
+
+func (crt *continuousRecordTester) ensureHook() error {
+	hooks, err := crt.lapi.GetWebhooksR()
+	if err != nil {
+		return err
+	}
+	glog.Infof("got %+v", hooks)
+	var hookID string
+	var hooksIDsToDel []string
+	for _, hook := range hooks {
+		if hook.URL == crt.webhooksExternalUrlFull {
+			if hookID == "" && utils.StringsArraysEq(hook.Events, crt.webhooksToTest) {
+				hookID = hook.ID
+			} else {
+				hooksIDsToDel = append(hooksIDsToDel, hook.ID)
+			}
+		}
+	}
+	for _, hid := range hooksIDsToDel {
+		err = crt.lapi.DeleteWebhookR(hid)
+		if err != nil {
+			return err
+		}
+
+	}
+	if hookID == "" {
+		// creating hook
+		name := "record-tester"
+		if crt.region != "" {
+			name = crt.region + "-" + name
+		}
+		hook, err := crt.lapi.CreateWebhook(name, crt.webhooksExternalUrlFull, crt.webhooksToTest)
+		if err != nil {
+			return err
+		}
+		glog.Infof("Using webhook with name=%q id=%s", hook.Name, hookID)
+		crt.webhookID = hook.ID
+	} else {
+		glog.Infof("Using webhook id=%s", hookID)
+		crt.webhookID = hookID
+	}
+
 	return nil
 }
 
@@ -169,8 +244,8 @@ func (crt *continuousRecordTester) makeTestCall(callID string) error {
 	return nil
 }
 
-func (crt *continuousRecordTester) getFirstHookCall() string {
-	var res string
+func (crt *continuousRecordTester) getFirstHookCall() *webhookCall {
+	var res *webhookCall
 	crt.mu.Lock()
 	if len(crt.webhookCalls) > 0 {
 		res = crt.webhookCalls[0]
@@ -180,14 +255,32 @@ func (crt *continuousRecordTester) getFirstHookCall() string {
 	return res
 }
 
+func (crt *continuousRecordTester) clearWebhookCalls() {
+	crt.mu.Lock()
+	crt.webhookCalls = nil
+	crt.mu.Unlock()
+}
+
 func (crt *continuousRecordTester) handleHook(w http.ResponseWriter, r *http.Request) {
-	glog.Infof("Got %s hook call from addr=%s UA=%s", r.Method, r.RemoteAddr, r.Header.Get("User-Agent"))
+	// glog.Infof("Got %s hook call from addr=%s UA=%s", r.Method, r.RemoteAddr, r.Header.Get("User-Agent"))
 	body, err := io.ReadAll(r.Body)
-	if err == nil && len(body) > 0 {
-		crt.mu.Lock()
-		crt.webhookCalls = append(crt.webhookCalls, string(body))
-		crt.mu.Unlock()
+
+	if crt.testWebhooks && err == nil && len(body) > 0 {
+		hp := &hookPayload{}
+		json.Unmarshal(body, hp)
+		if crt.skipUnknownHooks && hp.WebhookId != "" && crt.webhookID != "" && crt.webhookID != hp.WebhookId {
+			glog.Infof("----> skipping unknown webhook id %s", hp.WebhookId)
+		} else {
+			crt.mu.Lock()
+			crt.webhookCalls = append(crt.webhookCalls, &webhookCall{
+				Method:  r.Method,
+				Body:    string(body),
+				Payload: hp,
+			})
+			crt.mu.Unlock()
+		}
 	}
+	glog.Infof("Got %s hook call from addr=%s UA=%s body=%s", r.Method, r.RemoteAddr, r.Header.Get("User-Agent"), body)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -195,7 +288,12 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 	glog.Infof("Starting continuous test of %s", crt.host)
 	try := 0
 	notRtmpTry := 0
+	mult := 1
+	if pauseDuration > 0 {
+		mult = 2
+	}
 	for {
+		crt.clearWebhookCalls()
 		msg := fmt.Sprintf(":arrow_right: Starting %s recordings test stream to %s", 2*testDuration, crt.host)
 		glog.Info(msg)
 		messenger.SendMessage(msg)
@@ -264,9 +362,39 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 				}
 			}
 		} else {
-			msg := fmt.Sprintf(":white_check_mark: Test of %s succeed", crt.host)
-			messenger.SendMessage(msg)
-			glog.Warning(msg)
+			good := true
+			// check webhooks
+			if crt.testWebhooks {
+				sid := rt.StreamID()
+				if sid == "" {
+					panic("something bad happened!")
+				}
+				streamStarted := crt.countWebhookCalls(sid, "stream.started")
+				streamIdle := crt.countWebhookCalls(sid, "stream.idle")
+				var msgs []string
+				if streamStarted != mult {
+					msg := fmt.Sprintf("Expected %d 'stream.started' events, but got %d instead", mult, streamStarted)
+					glog.Error(msg)
+					msgs = append(msgs, msg)
+					good = false
+				}
+				if streamIdle != mult {
+					msg := fmt.Sprintf("Expected %d 'stream.idle' events, but got %d instead", mult, streamIdle)
+					glog.Error(msg)
+					msgs = append(msgs, msg)
+					good = false
+				}
+				if !good {
+					msg := fmt.Sprintf(":rotating_light: Test of %s ended, error in webhooks: %+v", crt.host, msgs)
+					messenger.SendFatalMessage(msg)
+					glog.Warning(msg)
+				}
+			}
+			if good {
+				msg := fmt.Sprintf(":white_check_mark: Test of %s succeed", crt.host)
+				messenger.SendMessage(msg)
+				glog.Warning(msg)
+			}
 		}
 		try = 0
 		notRtmpTry = 0
@@ -279,6 +407,18 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		default:
 		}
 	}
+}
+
+func (crt *continuousRecordTester) countWebhookCalls(streamID, event string) int {
+	var res int
+	crt.mu.Lock()
+	for _, hc := range crt.webhookCalls {
+		if hc.Payload.Stream != nil && hc.Payload.Stream.ID == streamID && hc.Payload.Event == event {
+			res++
+		}
+	}
+	crt.mu.Unlock()
+	return res
 }
 
 func (crt *continuousRecordTester) Cancel() {

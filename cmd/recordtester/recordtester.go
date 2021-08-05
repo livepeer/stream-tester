@@ -60,6 +60,7 @@ func main() {
 	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
 	whtBind := fs.String("webhook-tester-bind", "0.0.0.0:8080", "Address to bind webhook server to")
 	whtExternalUrl := fs.String("webhook-tester-external-url", "", "External host at which webhook server is accessible")
+	region := fs.String("region", "default", "")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -226,7 +227,7 @@ func main() {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
 		crt := recordtester.NewContinuousRecordTester(gctx, lapi, *pagerDutyIntegrationKey, *pagerDutyComponent, *useHttp, *testMP4,
-			*whtBind, *whtExternalUrl)
+			*whtBind, *whtExternalUrl, *region)
 		err := crt.Setup()
 		if err != nil {
 			glog.Errorf("Error starting record tester err=%v", err)
