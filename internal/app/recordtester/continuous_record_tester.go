@@ -141,6 +141,8 @@ func (crt *continuousRecordTester) Setup() error {
 	go func() {
 		glog.Info("Webhook server listening on ", crt.webhookBind)
 		err := srv.ListenAndServe()
+		glog.Info("Webhook server stopped err=%v", err)
+
 		if err != http.ErrServerClosed {
 			glog.Errorf("Error in listen err=%v", err)
 			if strings.Contains(err.Error(), "bind:") {

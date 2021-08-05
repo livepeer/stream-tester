@@ -39,4 +39,5 @@ func (s *MetricsServer) Start(ctx context.Context, bindAddr string) {
 
 	glog.Info("Metrics server listening on ", bindAddr)
 	srv.ListenAndServe()
+	glog.Info("Metrics server stopped ")
 }
