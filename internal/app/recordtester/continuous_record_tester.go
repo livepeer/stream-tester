@@ -181,7 +181,7 @@ func (crt *continuousRecordTester) getFirstHookCall() string {
 }
 
 func (crt *continuousRecordTester) handleHook(w http.ResponseWriter, r *http.Request) {
-	glog.Infof("Got %s hook call from %s/%s", r.Method, r.RemoteAddr, r.Header.Get("User-Agent"))
+	glog.Infof("Got %s hook call from addr=%s UA=%s", r.Method, r.RemoteAddr, r.Header.Get("User-Agent"))
 	body, err := io.ReadAll(r.Body)
 	if err == nil && len(body) > 0 {
 		crt.mu.Lock()
