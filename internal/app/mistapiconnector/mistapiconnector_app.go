@@ -50,9 +50,9 @@ const etcdSessionRecoverTimeout = 2 * time.Minute
 const waitForPushError = 7 * time.Second
 const keepStreamAfterEnd = 15 * time.Second
 const EXCHANGE_NAME = "webhook_default_exchange"
-const eventRTMPPushConnected = "rtmp.push.connected"
-const eventRTMPPushError = "rtmp.push.error"
-const eventRTMPPushDisconnected = "rtmp.push.disconnected"
+const eventMultistreamConnected = "multistream.connected"
+const eventMultistreamError = "multistream.error"
+const eventMultistreamDisconnected = "multistream.disconnected"
 
 // const EXCHANGE_NAME = "webhook_default_exchange"
 
@@ -87,14 +87,14 @@ type (
 	}
 
 	streamInfo struct {
-		id              string
-		stopped         bool
-		rtmpPushStarted bool
-		stream          *livepeer.CreateStreamResp
-		done            chan struct{}
-		mu              sync.Mutex
-		pushStatus      map[string]*pushStatus
-		startedAt       time.Time
+		id                 string
+		stopped            bool
+		multistreamStarted bool
+		stream             *livepeer.CreateStreamResp
+		done               chan struct{}
+		mu                 sync.Mutex
+		pushStatus         map[string]*pushStatus
+		startedAt          time.Time
 	}
 
 	trackListDesc struct {
@@ -680,8 +680,8 @@ func (mc *mac) triggerLiveTrackList(w http.ResponseWriter, r *http.Request, line
 		mc.mu.RLock()
 		defer mc.mu.RUnlock()
 		if info, ok := mc.pub2info[playbackID]; ok {
-			if len(info.stream.Multistream.Targets) > 0 && !info.rtmpPushStarted && videoTracksNum > 1 {
-				info.rtmpPushStarted = true
+			if len(info.stream.Multistream.Targets) > 0 && !info.multistreamStarted && videoTracksNum > 1 {
+				info.multistreamStarted = true
 				mc.startMultistream(lines[0], playbackID, info)
 			}
 		}
@@ -728,9 +728,9 @@ func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
 			return
 		}
 		if !pushInfo.pushStopped {
-			// there was no error starting RTMP push, so no we can send 'rtmp.push.connected' webhook event
+			// there was no error starting RTMP push, so no we can send 'multistream.connected' webhook event
 			pushInfo.pushStartEmitted = true
-			mc.emitWebhookEvent(info, pushInfo, eventRTMPPushConnected)
+			mc.emitWebhookEvent(info, pushInfo, eventMultistreamConnected)
 		}
 	}
 }
@@ -783,11 +783,11 @@ func (mc *mac) triggerPushEnd(w http.ResponseWriter, r *http.Request, lines []st
 			if pushInfo, ok := info.pushStatus[lines[2]]; ok {
 				if pushInfo.pushStartEmitted {
 					// emit normal push.end
-					mc.emitWebhookEvent(info, pushInfo, eventRTMPPushDisconnected)
+					mc.emitWebhookEvent(info, pushInfo, eventMultistreamDisconnected)
 				} else {
 					pushInfo.pushStopped = true
 					//  emit push error
-					mc.emitWebhookEvent(info, pushInfo, eventRTMPPushError)
+					mc.emitWebhookEvent(info, pushInfo, eventMultistreamError)
 				}
 			} else {
 				glog.Errorf("For stream playbackID=%s got unknown RTMP push %s", playbackID, lines[1])
