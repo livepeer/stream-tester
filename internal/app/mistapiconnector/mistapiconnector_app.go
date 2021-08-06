@@ -754,7 +754,12 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, event st
 		CreatedAt: time.Now().UnixNano() / int64(time.Millisecond),
 		UserID:    info.stream.UserID,
 		StreamID:  info.stream.ID,
-		Payload:   map[string]interface{}{"targetUrl": pushInfo.target.URL},
+		Payload: map[string]interface{}{
+			"target": map[string]interface{}{
+				"id":   pushInfo.target.ID,
+				"name": pushInfo.target.Name,
+			},
+		},
 	}
 	glog.Infof("Publishing amqp message to exchange=%s msg=%+v", EXCHANGE_NAME, wm)
 	err := mc.producer.Publish(mc.ctx, "events.multistream", &wm, true)
