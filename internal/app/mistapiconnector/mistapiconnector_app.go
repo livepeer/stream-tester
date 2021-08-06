@@ -83,7 +83,7 @@ type (
 	pushStatus struct {
 		pushStartEmitted bool
 		pushStopped      bool
-		pushInfo         *livepeer.PushTarget
+		target           *livepeer.MultistreamTarget
 	}
 
 	streamInfo struct {
@@ -656,7 +656,6 @@ func (mc *mac) triggerRtmpPushRewrite(w http.ResponseWriter, r *http.Request, li
 	w.Write([]byte(responseURL))
 	metrics.StartStream()
 	glog.Infof("Responded with '%s'", responseURL)
-	// mc.startPushTargets(stream)
 	return true
 }
 
@@ -681,9 +680,9 @@ func (mc *mac) triggerLiveTrackList(w http.ResponseWriter, r *http.Request, line
 		mc.mu.RLock()
 		defer mc.mu.RUnlock()
 		if info, ok := mc.pub2info[playbackID]; ok {
-			if len(info.stream.PushTargets) > 0 && !info.rtmpPushStarted && videoTracksNum > 1 {
+			if len(info.stream.Multistream.Targets) > 0 && !info.rtmpPushStarted && videoTracksNum > 1 {
 				info.rtmpPushStarted = true
-				mc.startPushTargets(lines[0], playbackID, info)
+				mc.startMultistream(lines[0], playbackID, info)
 			}
 		}
 	}()
@@ -755,7 +754,7 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, event st
 		CreatedAt: time.Now().UnixNano() / int64(time.Millisecond),
 		UserID:    info.stream.UserID,
 		StreamID:  info.stream.ID,
-		Payload:   map[string]interface{}{"pushUrl": pushInfo.pushInfo.URL},
+		Payload:   map[string]interface{}{"targetUrl": pushInfo.target.URL},
 	}
 	glog.Infof("Publishing amqp message to exchange=%s msg=%+v", EXCHANGE_NAME, wm)
 	err := mc.producer.Publish(mc.ctx, "events.multistream", &wm, true)
@@ -1182,57 +1181,55 @@ func serviceNameFromMistURL(murl string) string {
 	return murl
 }
 
-func (mc *mac) startPushTargets(wildcardPlaybackID, playbackID string, info *streamInfo) {
-	for _, target := range info.stream.PushTargets {
-		go func(target livepeer.StreamPushTarget) {
-			glog.Infof("==> starting push %s", target.ID)
-			pushTarget, err := mc.lapi.GetPushTargetR(target.ID)
+func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *streamInfo) {
+	for i := range info.stream.Multistream.Targets {
+		go func(targetRef livepeer.MultistreamTargetRef) {
+			glog.Infof("==> starting multistream %s", targetRef.ID)
+			target, err := mc.lapi.GetMultistreamTargetR(targetRef.ID)
 			if err != nil {
-				glog.Errorf("Error downloading PushTarget pushTargetId=%s stream=%s err=%v",
-					target.ID, wildcardPlaybackID, err)
+				glog.Errorf("Error fetching multistream target. targetId=%s stream=%s err=%v",
+					targetRef.ID, wildcardPlaybackID, err)
 				return
 			}
 			// Find the actual parameters of the profile we're using
 			var videoSelector string
 			// Not actually the source. But the highest quality.
-			if target.Profile == "source" {
+			if targetRef.Profile == "source" {
 				videoSelector = "maxbps"
 			} else {
 				var prof *livepeer.Profile
 				for _, p := range info.stream.Profiles {
-					if p.Name == target.Profile {
+					if p.Name == targetRef.Profile {
 						prof = &p
 						break
 					}
 				}
 				if prof == nil {
-					glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=couldn't find profile %s",
-						target.ID, wildcardPlaybackID, target.Profile)
+					glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=couldn't find profile %s",
+						targetRef.ID, wildcardPlaybackID, targetRef.Profile)
 					return
 				}
 				videoSelector = fmt.Sprintf("~%dx%d", prof.Width, prof.Height)
 			}
 			join := "?"
-			if strings.Contains(pushTarget.URL, "?") {
+			if strings.Contains(target.URL, "?") {
 				join = "&"
 			}
 			// Inject ?video=~widthxheight to send the correct rendition
-			selectorURL := fmt.Sprintf("%s%svideo=%s&audio=maxbps", pushTarget.URL, join, videoSelector)
+			selectorURL := fmt.Sprintf("%s%svideo=%s&audio=maxbps", target.URL, join, videoSelector)
 			info.mu.Lock()
-			info.pushStatus[selectorURL] = &pushStatus{
-				pushInfo: pushTarget,
-			}
+			info.pushStatus[selectorURL] = &pushStatus{target: target}
 
 			err = mc.mapi.StartPush(wildcardPlaybackID, selectorURL)
 			if err != nil {
-				glog.Errorf("Error starting PushTarget pushTargetId=%s stream=%s err=%v", target.ID, wildcardPlaybackID, err)
+				glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=%v", targetRef.ID, wildcardPlaybackID, err)
 				delete(info.pushStatus, selectorURL)
 				info.mu.Unlock()
 				return
 			}
-			glog.Infof("Started PushTarget stream=%s pushTargetId=%s url=%s", wildcardPlaybackID, target.ID, selectorURL)
+			glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, selectorURL)
 			info.mu.Unlock()
-		}(target)
+		}(info.stream.Multistream.Targets[i])
 	}
 }
 
