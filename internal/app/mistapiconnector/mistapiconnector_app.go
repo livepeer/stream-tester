@@ -84,6 +84,7 @@ type (
 		pushStartEmitted bool
 		pushStopped      bool
 		target           *livepeer.MultistreamTarget
+		profile          string
 	}
 
 	streamInfo struct {
@@ -756,8 +757,9 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, event st
 		StreamID:  info.stream.ID,
 		Payload: map[string]interface{}{
 			"target": map[string]interface{}{
-				"id":   pushInfo.target.ID,
-				"name": pushInfo.target.Name,
+				"id":      pushInfo.target.ID,
+				"name":    pushInfo.target.Name,
+				"profile": pushInfo.profile,
 			},
 		},
 	}
@@ -1223,7 +1225,7 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 			// Inject ?video=~widthxheight to send the correct rendition
 			selectorURL := fmt.Sprintf("%s%svideo=%s&audio=maxbps", target.URL, join, videoSelector)
 			info.mu.Lock()
-			info.pushStatus[selectorURL] = &pushStatus{target: target}
+			info.pushStatus[selectorURL] = &pushStatus{target: target, profile: targetRef.Profile}
 
 			err = mc.mapi.StartPush(wildcardPlaybackID, selectorURL)
 			if err != nil {
