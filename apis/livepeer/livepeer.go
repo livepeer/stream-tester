@@ -91,32 +91,34 @@ type (
 		Profile string `json:"profile,omitempty"` // enum: - H264Baseline - H264Main - H264High - H264ConstrainedHigh
 	}
 
-	StreamPushTarget struct {
+	MultistreamTargetRef struct {
 		Profile string `json:"profile,omitempty"`
 		ID      string `json:"id,omitempty"`
 	}
 
 	// CreateStreamResp returned by API
 	CreateStreamResp struct {
-		ID                         string             `json:"id,omitempty"`
-		Name                       string             `json:"name,omitempty"`
-		Presets                    []string           `json:"presets,omitempty"`
-		Kind                       string             `json:"kind,omitempty"`
-		UserID                     string             `json:"userId,omitempty"`
-		StreamKey                  string             `json:"streamKey,omitempty"`
-		PlaybackID                 string             `json:"playbackId,omitempty"`
-		ParentID                   string             `json:"parentId,omitempty"`
-		CreatedAt                  int64              `json:"createdAt,omitempty"`
-		LastSeen                   int64              `json:"lastSeen,omitempty"`
-		SourceSegments             int64              `json:"sourceSegments,omitempty"`
-		TranscodedSegments         int64              `json:"transcodedSegments,omitempty"`
-		SourceSegmentsDuration     float64            `json:"sourceSegmentsDuration,omitempty"`
-		TranscodedSegmentsDuration float64            `json:"transcodedSegmentsDuration,omitempty"`
-		Deleted                    bool               `json:"deleted,omitempty"`
-		Record                     bool               `json:"record"`
-		Profiles                   []Profile          `json:"profiles,omitempty"`
-		Errors                     []string           `json:"errors,omitempty"`
-		PushTargets                []StreamPushTarget `json:"pushTargets,omitempty"`
+		ID                         string    `json:"id,omitempty"`
+		Name                       string    `json:"name,omitempty"`
+		Presets                    []string  `json:"presets,omitempty"`
+		Kind                       string    `json:"kind,omitempty"`
+		UserID                     string    `json:"userId,omitempty"`
+		StreamKey                  string    `json:"streamKey,omitempty"`
+		PlaybackID                 string    `json:"playbackId,omitempty"`
+		ParentID                   string    `json:"parentId,omitempty"`
+		CreatedAt                  int64     `json:"createdAt,omitempty"`
+		LastSeen                   int64     `json:"lastSeen,omitempty"`
+		SourceSegments             int64     `json:"sourceSegments,omitempty"`
+		TranscodedSegments         int64     `json:"transcodedSegments,omitempty"`
+		SourceSegmentsDuration     float64   `json:"sourceSegmentsDuration,omitempty"`
+		TranscodedSegmentsDuration float64   `json:"transcodedSegmentsDuration,omitempty"`
+		Deleted                    bool      `json:"deleted,omitempty"`
+		Record                     bool      `json:"record"`
+		Profiles                   []Profile `json:"profiles,omitempty"`
+		Errors                     []string  `json:"errors,omitempty"`
+		Multistream                struct {
+			Targets []MultistreamTargetRef `json:"targets,omitempty"`
+		} `json:"multistream"`
 	}
 
 	// UserSession user's sessions
@@ -127,7 +129,7 @@ type (
 		Mp4Url          string `json:"mp4Url,omitempty"`
 	}
 
-	PushTarget struct {
+	MultistreamTarget struct {
 		ID        string `json:"id,omitempty"`
 		URL       string `json:"url,omitempty"`
 		Name      string `json:"name,omitempty"`
@@ -731,22 +733,22 @@ func (lapi *API) getStream(u, rType string) (*CreateStreamResp, error) {
 	return r, nil
 }
 
-func (lapi *API) GetPushTarget(id string) (*PushTarget, error) {
-	rType := "get_push_target"
+func (lapi *API) GetMultistreamTarget(id string) (*MultistreamTarget, error) {
+	rType := "get_multistream_target"
 	start := time.Now()
-	u := fmt.Sprintf("%s/api/push-target/%s", lapi.choosenServer, id)
+	u := fmt.Sprintf("%s/api/multistream/target/%s", lapi.choosenServer, id)
 	req := uhttp.GetRequest(u)
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
 	resp, err := lapi.httpClient.Do(req)
 	if err != nil {
-		glog.Errorf("Error getting PushTarget by id from Livepeer API server (%s) error: %v", u, err)
+		glog.Errorf("Error getting MultistreamTarget by id from Livepeer API server (%s) error: %v", u, err)
 		metrics.APIRequest(rType, 0, err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
-		glog.Errorf("Status error getting PushTarget by id Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		glog.Errorf("Status error getting MultistreamTarget by id Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
 		if resp.StatusCode == http.StatusNotFound {
 			metrics.APIRequest(rType, 0, ErrNotExists)
 			return nil, ErrNotExists
@@ -757,7 +759,7 @@ func (lapi *API) GetPushTarget(id string) (*PushTarget, error) {
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.Errorf("Error getting PushTarget by id Livepeer API server (%s) error: %v", u, err)
+		glog.Errorf("Error getting MultistreamTarget by id Livepeer API server (%s) error: %v", u, err)
 		metrics.APIRequest(rType, 0, err)
 		return nil, err
 	}
@@ -769,7 +771,7 @@ func (lapi *API) GetPushTarget(id string) (*PushTarget, error) {
 		// API return null if stream does not exists
 		return nil, ErrNotExists
 	}
-	r := &PushTarget{}
+	r := &MultistreamTarget{}
 	err = json.Unmarshal(b, r)
 	if err != nil {
 		return nil, err
@@ -777,11 +779,11 @@ func (lapi *API) GetPushTarget(id string) (*PushTarget, error) {
 	return r, nil
 }
 
-// GetPushTargetR gets push target with retries
-func (lapi *API) GetPushTargetR(id string) (*PushTarget, error) {
+// GetMultistreamTargetR gets multistream target with retries
+func (lapi *API) GetMultistreamTargetR(id string) (*MultistreamTarget, error) {
 	var apiTry int
 	for {
-		target, err := lapi.GetPushTarget(id)
+		target, err := lapi.GetMultistreamTarget(id)
 		if err != nil {
 			if Timedout(err) && apiTry < 3 {
 				apiTry++
