@@ -49,7 +49,7 @@ const etcdSessionRecoverBackoff = 3 * time.Second
 const etcdSessionRecoverTimeout = 2 * time.Minute
 const waitForPushError = 7 * time.Second
 const keepStreamAfterEnd = 15 * time.Second
-const QUEUE_NAME = "webhook_default_queue"
+const EXCHANGE_NAME = "webhook_default_exchange"
 const eventRTMPPushConnected = "rtmp.push.connected"
 const eventRTMPPushError = "rtmp.push.error"
 const eventRTMPPushDisconnected = "rtmp.push.disconnected"
@@ -200,7 +200,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		}
 
 		glog.Infof("Creating AMQP producer with url=%s", pu.Redacted())
-		producer, err = event.NewAMQPQueueProducer(ctx, amqpUrl, QUEUE_NAME)
+		producer, err = event.NewAMQPExchangeProducer(ctx, amqpUrl, EXCHANGE_NAME, "")
 		if err != nil {
 			cancel()
 			return nil, err
@@ -757,8 +757,8 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, event st
 		StreamID:  info.stream.ID,
 		Payload:   map[string]interface{}{"pushUrl": pushInfo.pushInfo.URL},
 	}
-	glog.Infof("Publishing amqp message to queue=%s msg=%+v", QUEUE_NAME, wm)
-	err := mc.producer.Publish(mc.ctx, "", &wm, true)
+	glog.Infof("Publishing amqp message to exchange=%s msg=%+v", EXCHANGE_NAME, wm)
+	err := mc.producer.Publish(mc.ctx, "events.multistream", &wm, true)
 	if err != nil {
 		glog.Errorf("Error publishing message msg=%+v err=%v", wm, err)
 		return
