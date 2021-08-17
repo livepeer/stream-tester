@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/google/uuid"
+	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
 	"github.com/livepeer/stream-tester/apis/consul"
 	"github.com/livepeer/stream-tester/apis/livepeer"
@@ -736,37 +736,29 @@ func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
 	}
 }
 
-type WebhookMessage struct {
-	ID        string                 `json:"id,omitempty"`
-	Event     string                 `json:"event,omitempty"`
-	CreatedAt int64                  `json:"createdAt,omitempty"`
-	UserID    string                 `json:"userId,omitempty"`
-	StreamID  string                 `json:"streamId,omitempty"`
-	Payload   map[string]interface{} `json:"payload,omitempty"`
-}
-
 func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, event string) {
 	if mc.producer == nil {
 		return
 	}
-	wm := WebhookMessage{
-		ID:        uuid.NewString(),
-		Event:     event,
-		CreatedAt: time.Now().UnixNano() / int64(time.Millisecond),
-		UserID:    info.stream.UserID,
-		StreamID:  info.stream.ID,
-		Payload: map[string]interface{}{
-			"target": map[string]interface{}{
-				"id":      pushInfo.target.ID,
-				"name":    pushInfo.target.Name,
-				"profile": pushInfo.profile,
-			},
+
+	payload := map[string]interface{}{
+		"target": map[string]interface{}{
+			"id":      pushInfo.target.ID,
+			"name":    pushInfo.target.Name,
+			"profile": pushInfo.profile,
 		},
 	}
-	glog.Infof("Publishing amqp message to exchange=%s msg=%+v", EXCHANGE_NAME, wm)
-	err := mc.producer.Publish(mc.ctx, "events.multistream", &wm, true)
+	whEvt, err := data.NewWebhookEvent(info.stream.PlaybackID, event,
+		info.stream.UserID, info.stream.ID, "", payload)
 	if err != nil {
-		glog.Errorf("Error publishing message msg=%+v err=%v", wm, err)
+		glog.Errorf("Error creating webhook event err=%v", err)
+		return
+	}
+
+	glog.Infof("Publishing amqp message to exchange=%s msg=%+v", EXCHANGE_NAME, whEvt)
+	err = mc.producer.Publish(mc.ctx, "events."+event, whEvt, true)
+	if err != nil {
+		glog.Errorf("Error publishing message msg=%+v err=%v", whEvt, err)
 		return
 	}
 }
