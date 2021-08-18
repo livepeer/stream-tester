@@ -741,11 +741,11 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, event st
 		return
 	}
 
-	payload := map[string]interface{}{
-		"target": map[string]interface{}{
-			"id":      pushInfo.target.ID,
-			"name":    pushInfo.target.Name,
-			"profile": pushInfo.profile,
+	payload := data.MultistreamWebhookPayload{
+		Target: data.MultistreamTargetInfo{
+			ID:      pushInfo.target.ID,
+			Name:    pushInfo.target.Name,
+			Profile: pushInfo.profile,
 		},
 	}
 	whEvt, err := data.NewWebhookEvent(info.stream.PlaybackID, event,
