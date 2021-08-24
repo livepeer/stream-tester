@@ -748,7 +748,7 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, event st
 			Profile: pushInfo.profile,
 		},
 	}
-	whEvt, err := data.NewWebhookEvent(info.stream.PlaybackID, event,
+	whEvt, err := data.NewWebhookEvent(info.stream.ID, event,
 		info.stream.UserID, info.stream.ID, "", payload)
 	if err != nil {
 		glog.Errorf("Error creating webhook event err=%v", err)
