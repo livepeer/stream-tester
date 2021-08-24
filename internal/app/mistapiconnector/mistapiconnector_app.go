@@ -741,6 +741,11 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, event st
 		return
 	}
 
+	stream := info.stream
+	streamID, sessionID := stream.ParentID, stream.ID
+	if streamID == "" {
+		streamID = sessionID
+	}
 	payload := data.MultistreamWebhookPayload{
 		Target: data.MultistreamTargetInfo{
 			ID:      pushInfo.target.ID,
@@ -748,8 +753,7 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, event st
 			Profile: pushInfo.profile,
 		},
 	}
-	whEvt, err := data.NewWebhookEvent(info.stream.ID, event,
-		info.stream.UserID, "", payload)
+	whEvt, err := data.NewWebhookEvent(streamID, event, stream.UserID, sessionID, payload)
 	if err != nil {
 		glog.Errorf("Error creating webhook event err=%v", err)
 		return
