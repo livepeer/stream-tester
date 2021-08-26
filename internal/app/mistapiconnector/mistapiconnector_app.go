@@ -307,14 +307,15 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 		w.Write([]byte("false"))
 		return false
 	}
-	if lines[2] == "RTMP" && len(lines[3]) > 0 { // PUSH_END sends CONN_CLOSE too, but it has empty last line
+	protocol := lines[2]
+	if (protocol == "RTMP" || protocol == "TSSRT") && len(lines[3]) > 0 { // PUSH_END sends CONN_CLOSE too, but it has empty last line
 		playbackID := strings.TrimPrefix(lines[0], streamPlaybackPrefix)
 		if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
 			playbackID = strings.Split(playbackID, "+")[1]
 		}
 		mc.mu.Lock()
 		if info, has := mc.pub2info[playbackID]; has {
-			glog.Infof("Setting stream's manifestID=%s playbackID=%s active status to false", info.id, playbackID)
+			glog.Infof("Setting stream's protocol=%s manifestID=%s playbackID=%s active status to false", protocol, info.id, playbackID)
 			if mc.consulURL != nil {
 				consulPlaybackID := mc.consulPrefix + playbackID
 				go consul.DeleteKey(mc.consulURL, traefikKeyPathRouters+consulPlaybackID, true)
@@ -334,7 +335,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 			go mc.removeInfoAfter(playbackID, info)
 			metrics.StopStream(true)
 		} else {
-			glog.Warningf("RTMP conn close stream playbackID=%s not found", playbackID)
+			glog.Warningf("%s conn close stream playbackID=%s not found", protocol, playbackID)
 		}
 		mc.mu.Unlock()
 	}
@@ -432,7 +433,7 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 		}
 	}
 	// We should get this in two cases:
-	// 1. When in RTMP_PUSH_REWRITE we got request for unknown stream and thus
+	// 1. When in PUSH_REWRITE we got request for unknown stream and thus
 	//    haven't created new stream in Mist
 	// 2. When someone pulls HLS for stream that exists but is not active (no
 	//    RTMP stream coming in).
@@ -441,30 +442,32 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 	return true
 }
 
-func (mc *mac) triggerRtmpPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
-	if len(lines) < 2 {
-		glog.Errorf("Expected 2 lines, got %d, request \n%s", len(lines), rawRequest)
+func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
+	if len(lines) != 3 {
+		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), rawRequest)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
 		return false
 	}
 	// glog.V(model.INSANE).Infof("Parsed request (%d):\n%+v", len(lines), lines)
 	pu, err := url.Parse(lines[0])
-	responseURL := lines[0]
+	streamKey := lines[2]
+	var responseName string
 	if err != nil {
 		glog.Errorf("Error parsing url=%s err=%v", lines[0], err)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
 		return false
 	}
-	pp := strings.Split(pu.Path, "/")
-	if len(pp) != 3 {
-		glog.Errorf("URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("false"))
-		return false
+	if pu.Scheme == "rtmp" {
+		pp := strings.Split(pu.Path, "/")
+		if len(pp) != 3 {
+			glog.Errorf("Push rewrite URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("false"))
+			return false
+		}
 	}
-	streamKey := pp[2]
 	glog.V(model.VVERBOSE).Infof("Requested stream key is '%s'", streamKey)
 	// ask API
 	stream, err := mc.lapi.GetStreamByKey(streamKey)
@@ -522,12 +525,10 @@ func (mc *mac) triggerRtmpPushRewrite(w http.ResponseWriter, r *http.Request, li
 			streamKey = streamPlaybackPrefix + streamKey
 		}
 		if mc.baseStreamName == "" {
-			pp[2] = streamKey
+			responseName = streamKey
 		} else {
-			pp[2] = mc.wildcardPlaybackID(stream)
+			responseName = mc.wildcardPlaybackID(stream)
 		}
-		pu.Path = strings.Join(pp, "/")
-		responseURL = pu.String()
 		ok, err := mc.lapi.SetActive(stream.ID, true, mc.pub2info[stream.PlaybackID].startedAt)
 		if err != nil {
 			glog.Error(err)
@@ -654,9 +655,9 @@ func (mc *mac) triggerRtmpPushRewrite(w http.ResponseWriter, r *http.Request, li
 			return true
 		}
 	}
-	w.Write([]byte(responseURL))
+	w.Write([]byte(responseName))
 	metrics.StartStream()
-	glog.Infof("Responded with '%s'", responseURL)
+	glog.Infof("Responded with '%s'", responseName)
 	return true
 }
 
@@ -849,8 +850,8 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		doLogRequestEnd = mc.triggerLiveBandwidth(w, r)
 	case "CONN_CLOSE":
 		doLogRequestEnd = mc.triggerConnClose(w, r, lines, bs)
-	case "RTMP_PUSH_REWRITE":
-		doLogRequestEnd = mc.triggerRtmpPushRewrite(w, r, lines, bs)
+	case "PUSH_REWRITE":
+		doLogRequestEnd = mc.triggerPushRewrite(w, r, lines, bs)
 	case "LIVE_TRACK_LIST":
 		doLogRequestEnd = mc.triggerLiveTrackList(w, r, lines, bs)
 	case "PUSH_OUT_START":
@@ -1151,7 +1152,7 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 	if triggers == nil {
 		triggers = make(mistapi.TriggersMap)
 	}
-	added := mc.addTrigger(triggers, "RTMP_PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000", "", true)
+	added := mc.addTrigger(triggers, "PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000", "", true)
 	// DEFAULT_STREAM needed when using Mist's load balancing
 	// added = mc.addTrigger(triggers, "DEFAULT_STREAM", ownURI, "false", "", true) || added
 	if mc.checkBandwidth {
