@@ -462,7 +462,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	if pu.Scheme == "rtmp" {
 		pp := strings.Split(pu.Path, "/")
 		if len(pp) != 3 {
-			glog.Errorf("URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
+			glog.Errorf("Push rewrite URL wrongly formatted - should be in format rtmp://mist.host/live/streamKey")
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte("false"))
 			return false
