@@ -1194,6 +1194,10 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 				glog.Errorf("Error fetching multistream target. targetId=%s stream=%s err=%v",
 					targetRef.ID, wildcardPlaybackID, err)
 				return
+			} else if target.Disabled {
+				glog.Infof("Ignoring disabled multistream target. targetId=%s stream=%s",
+					targetRef.ID, wildcardPlaybackID)
+				return
 			}
 			// Find the actual parameters of the profile we're using
 			var videoSelector string
