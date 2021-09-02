@@ -150,8 +150,8 @@ type (
 	// StreamStats and Push have a custom JSON unmarshaller, parsed from array.
 
 	StreamStats struct {
-		Clients         int
-		LastMediaTimeMs int
+		Clients     int
+		MediaTimeMs int64
 	}
 
 	Push struct {
@@ -595,7 +595,7 @@ func Presets2Profiles(presets []string) []Profile {
 
 func (s *StreamStats) UnmarshalJSON(data []byte) error {
 	var tmp StreamStats
-	if err := unmarshalJSONArray(data, &tmp.Clients, &tmp.LastMediaTimeMs); err != nil {
+	if err := unmarshalJSONArray(data, &tmp.Clients, &tmp.MediaTimeMs); err != nil {
 		return err
 	}
 	*s = tmp

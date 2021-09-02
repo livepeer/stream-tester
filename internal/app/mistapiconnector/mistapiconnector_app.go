@@ -701,11 +701,7 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, eventKey
 		streamID = sessionID
 	}
 	payload := data.MultistreamWebhookPayload{
-		Target: data.MultistreamTargetInfo{
-			ID:      pushInfo.target.ID,
-			Name:    pushInfo.target.Name,
-			Profile: pushInfo.profile,
-		},
+		Target: pushToMultistreamTargetInfo(pushInfo),
 	}
 	whEvt, err := data.NewWebhookEvent(streamID, eventKey, stream.UserID, sessionID, payload)
 	if err != nil {
@@ -1271,4 +1267,12 @@ func mistStreamName2playbackID(msn string) string {
 		return strings.Split(msn, "+")[1]
 	}
 	return msn
+}
+
+func pushToMultistreamTargetInfo(pushInfo *pushStatus) data.MultistreamTargetInfo {
+	return data.MultistreamTargetInfo{
+		ID:      pushInfo.target.ID,
+		Name:    pushInfo.target.Name,
+		Profile: pushInfo.profile,
+	}
 }
