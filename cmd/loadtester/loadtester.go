@@ -42,6 +42,7 @@ func main() {
 	streamDuration := fs.Duration("stream-dur", 0, "How long to stream each stream (0 to stream whole file)")
 	testDuration := fs.Duration("test-dur", 0, "How long to run overall test")
 	waitForTargetDuration := fs.Duration("wait-for-target", 30*time.Second, "How long to wait for a new stream to appear before giving up")
+	mist := fs.Bool("mist", false, "Mist mode (remove session query)")
 
 	// profiles := fs.Uint("profiles", 2, "number of transcoded profiles should be in output")
 	sim := fs.Uint("sim", 1, "Number of simulteneous streams to stream")
@@ -201,7 +202,7 @@ func main() {
 			}
 			glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 			glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
-			sr2 := testers.NewStreamer2(ctx, false, false, false, false, false)
+			sr2 := testers.NewStreamer2(ctx, false, *mist, false, false, false)
 			go sr2.StartStreaming(sourceFileName, rtmpURL, mediaURL, waitForTarget, timeToStream)
 			go func() {
 				<-sr2.Done()
