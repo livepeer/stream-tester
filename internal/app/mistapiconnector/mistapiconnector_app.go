@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -622,6 +623,9 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 				playbackID+"-1",
 				traefikKeyPathRouters+playbackID+"/middlewares/1",
 				playbackID+"-2",
+				// Add a millisecond timestamp as the priority so new streams always win over old, stale streams
+				traefikKeyPathRouters+playbackID+"/priority",
+				strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10),
 
 				traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/0",
 				`/hls/`+stream.PlaybackID,
