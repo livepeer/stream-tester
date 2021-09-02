@@ -83,7 +83,7 @@ type (
 	}
 
 	MistStats struct {
-		StreamsStats map[string]*StreamStats `json:"active_streams"`
+		StreamsStats map[string]*StreamStats `json:"stats_streams"`
 		PushList     []*Push                 `json:"push_list"`
 	}
 
@@ -418,7 +418,7 @@ func (mapi *API) Streams() (map[string]*Stream, []string, error) {
 
 // GetStats returns all available Mist stats
 func (mapi *API) GetStats() (*MistStats, error) {
-	command := fmt.Sprintf(`{"active_streams":["clients","lastms"],"push_list":true,"authorize":{"username":"%s","password":"%s"}}`, mapi.login, mapi.challengeRepsonse)
+	command := fmt.Sprintf(`{"stats_streams":["clients","lastms"],"push_list":true,"authorize":{"username":"%s","password":"%s"}}`, mapi.login, mapi.challengeRepsonse)
 	u := mapi.apiURL + "?command=" + url.QueryEscape(command)
 	resp, err := httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
