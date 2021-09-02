@@ -83,7 +83,7 @@ type (
 	}
 
 	MistStats struct {
-		StreamsStats map[string]*StreamStats `json:"stats_streams"`
+		StreamsStats map[string]*StreamStats `json:"active_streams"`
 		PushList     []*Push                 `json:"push_list"`
 	}
 
@@ -159,8 +159,7 @@ type (
 		Stream       string
 		OriginalURI  string
 		EffectiveURI string
-		Unknown      interface{}
-		Stats        PushStats
+		Stats        *PushStats
 	}
 
 	PushStats struct {
@@ -419,7 +418,7 @@ func (mapi *API) Streams() (map[string]*Stream, []string, error) {
 
 // GetStats returns all available Mist stats
 func (mapi *API) GetStats() (*MistStats, error) {
-	command := fmt.Sprintf(`{"stats_streams": ["clients","lastms"],"push_list":true,"authorize":{"username":"%s","password":"%s"}}`, mapi.login, mapi.challengeRepsonse)
+	command := fmt.Sprintf(`{"active_streams":["clients","lastms"],"push_list":true,"authorize":{"username":"%s","password":"%s"}}`, mapi.login, mapi.challengeRepsonse)
 	u := mapi.apiURL + "?command=" + url.QueryEscape(command)
 	resp, err := httpClient.Do(uhttp.GetRequest(u))
 	if err != nil {
@@ -595,16 +594,26 @@ func Presets2Profiles(presets []string) []Profile {
 }
 
 func (s *StreamStats) UnmarshalJSON(data []byte) error {
-	fields := []interface{}{&s.Clients, &s.LastMediaTimeMs}
-	return unmarshalJSONArray(data, fields)
+	var tmp StreamStats
+	if err := unmarshalJSONArray(data, &tmp.Clients, &tmp.LastMediaTimeMs); err != nil {
+		return err
+	}
+	*s = tmp
+	return nil
 }
 
 func (p *Push) UnmarshalJSON(data []byte) error {
-	fields := []interface{}{&p.ID, &p.Stream, &p.OriginalURI, &p.EffectiveURI, &p.Unknown, &p.Stats}
-	return unmarshalJSONArray(data, fields)
+	// this field is undocumented and shows up as null everytime.
+	var unknown json.RawMessage
+	var tmp Push
+	if err := unmarshalJSONArray(data, &tmp.ID, &tmp.Stream, &tmp.OriginalURI, &tmp.EffectiveURI, &unknown, &tmp.Stats); err != nil {
+		return err
+	}
+	*p = tmp
+	return nil
 }
 
-func unmarshalJSONArray(data []byte, values []interface{}) error {
+func unmarshalJSONArray(data []byte, values ...interface{}) error {
 	var valuesData []json.RawMessage
 	if err := json.Unmarshal(data, &valuesData); err != nil {
 		return err
