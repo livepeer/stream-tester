@@ -15,7 +15,7 @@ type infoProvider interface {
 	getStreamInfo(mistID string) *streamInfo
 }
 
-type statsCollector struct {
+type metricsCollector struct {
 	nodeID       string
 	mapi         *mist.API
 	producer     *event.AMQPProducer
@@ -23,12 +23,12 @@ type statsCollector struct {
 	infoProvider
 }
 
-func startStatsCollector(ctx context.Context, period time.Duration, nodeID string, mapi *mist.API, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
-	sc := &statsCollector{nodeID, mapi, producer, amqpExchange, infop}
-	go sc.mainLoop(ctx, period)
+func startMetricsCollector(ctx context.Context, period time.Duration, nodeID string, mapi *mist.API, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
+	mc := &metricsCollector{nodeID, mapi, producer, amqpExchange, infop}
+	go mc.mainLoop(ctx, period)
 }
 
-func (c *statsCollector) mainLoop(loopCtx context.Context, period time.Duration) {
+func (c *metricsCollector) mainLoop(loopCtx context.Context, period time.Duration) {
 	ticker := time.NewTicker(period)
 	defer ticker.Stop()
 	for {
@@ -37,18 +37,18 @@ func (c *statsCollector) mainLoop(loopCtx context.Context, period time.Duration)
 			return
 		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(loopCtx, period)
-			if err := c.collectStats(ctx); err != nil {
-				glog.Errorf("Error collecting mist stats. err=%v", err)
+			if err := c.collectMetrics(ctx); err != nil {
+				glog.Errorf("Error collecting mist metrics. err=%v", err)
 			}
 			cancel()
 		}
 	}
 }
 
-func (c *statsCollector) collectStats(ctx context.Context) error {
+func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 	defer func() {
 		if rec := recover(); rec != nil {
-			glog.Errorf("Panic in stats collector. value=%v", rec)
+			glog.Errorf("Panic in metrics collector. value=%v", rec)
 		}
 	}()
 
@@ -56,22 +56,22 @@ func (c *statsCollector) collectStats(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	streamsMetrics := compileStreamMetrics(mistStats)
 
-	streamsStats := compileStreamStats(mistStats)
-	for streamID, stats := range streamsStats {
+	for streamID, metrics := range streamsMetrics {
 		info := c.getStreamInfo(streamID)
 		if info == nil {
-			glog.Infof("Mist exported metrics from unknown stream. streamId=%q stats=%+v", streamID, stats)
+			glog.Infof("Mist exported metrics from unknown stream. streamId=%q metrics=%+v", streamID, metrics)
 			continue
 		}
-		mssEvent := createStatsEvent(c.nodeID, info, stats)
+		mseEvent := createMetricsEvent(c.nodeID, info, metrics)
 		err := c.producer.Publish(ctx, event.AMQPMessage{
 			Exchange: c.amqpExchange,
-			Key:      fmt.Sprintf("stream_stats.%s", info.stream.ID),
-			Body:     mssEvent,
+			Key:      fmt.Sprintf("stream_metrics.%s", info.stream.ID),
+			Body:     mseEvent,
 		})
 		if err != nil {
-			glog.Errorf("Error sending mist stats event. err=%q streamId=%q event=%+v", err, info.stream.ID, mssEvent)
+			glog.Errorf("Error sending mist stream metrics event. err=%q streamId=%q event=%+v", err, info.stream.ID, mseEvent)
 			if ctx.Err() != nil {
 				return err
 			}
@@ -80,58 +80,62 @@ func (c *statsCollector) collectStats(ctx context.Context) error {
 	return nil
 }
 
-func createStatsEvent(nodeID string, info *streamInfo, stats *streamFullStats) *data.MistStreamStatsEvent {
+func createMetricsEvent(nodeID string, info *streamInfo, metrics *streamMetrics) *data.MediaServerMetricsEvent {
 	info.mu.Lock()
 	defer info.mu.Unlock()
-	mulstrStats := make([]*data.MultistreamTargetStats, len(stats.pushes))
-	for i, push := range stats.pushes {
-		var targetStats *data.MultistreamStats
+	multistream := make([]*data.MultistreamTargetMetrics, len(metrics.pushes))
+	for i, push := range metrics.pushes {
+		var metrics *data.MultistreamMetrics
 		if push.Stats != nil {
-			targetStats = &data.MultistreamStats{
+			metrics = &data.MultistreamMetrics{
 				ActiveSec:   push.Stats.ActiveSeconds,
 				Bytes:       push.Stats.Bytes,
 				MediaTimeMs: push.Stats.MediaTime,
 			}
 		}
 		pushInfo := info.pushStatus[push.OriginalURI]
-		mulstrStats[i] = &data.MultistreamTargetStats{
-			Target: pushToMultistreamTargetInfo(pushInfo),
-			Stats:  targetStats,
+		multistream[i] = &data.MultistreamTargetMetrics{
+			Target:  pushToMultistreamTargetInfo(pushInfo),
+			Metrics: metrics,
 		}
 	}
-	var strStats *data.StreamStats
-	if ss := stats.stream; ss != nil {
-		strStats = &data.StreamStats{ViewerCount: ss.Clients}
+	var stream *data.StreamMetrics
+	if ss := metrics.stream; ss != nil {
+		stream = &data.StreamMetrics{ViewerCount: ss.Clients}
 		// mediatime comes as -1 when not available
 		if ss.MediaTimeMs >= 0 {
-			strStats.MediaTimeMs = &ss.MediaTimeMs
+			stream.MediaTimeMs = &ss.MediaTimeMs
 		}
 	}
-	return data.NewMistStreamStatsEvent(nodeID, info.stream.ID, strStats, mulstrStats)
+	return data.NewMediaServerMetricsEvent(nodeID, info.stream.ID, stream, multistream)
 }
 
-type streamFullStats struct {
+// streamMetrics aggregates all the data collected from Mist about a specific
+// stream. Mist calls these values stats, but we use them as a single entry and
+// will create analytics across multiple observations. So they are more like
+// metrics for our infrastrucutre and that's what we call them from here on.
+type streamMetrics struct {
 	stream *mist.StreamStats
 	pushes []*mist.Push
 }
 
-func compileStreamStats(mistStats *mist.MistStats) map[string]*streamFullStats {
-	streamsStats := map[string]*streamFullStats{}
-	getStats := func(stream string) *streamFullStats {
-		if stats, ok := streamsStats[stream]; ok {
-			return stats
+func compileStreamMetrics(mistStats *mist.MistStats) map[string]*streamMetrics {
+	streamsMetrics := map[string]*streamMetrics{}
+	getOrCreate := func(stream string) *streamMetrics {
+		if metrics, ok := streamsMetrics[stream]; ok {
+			return metrics
 		}
-		stats := &streamFullStats{}
-		streamsStats[stream] = stats
-		return stats
+		metrics := &streamMetrics{}
+		streamsMetrics[stream] = metrics
+		return metrics
 	}
 
 	for stream, stats := range mistStats.StreamsStats {
-		getStats(stream).stream = stats
+		getOrCreate(stream).stream = stats
 	}
 	for _, push := range mistStats.PushList {
-		info := getStats(push.Stream)
+		info := getOrCreate(push.Stream)
 		info.pushes = append(info.pushes, push)
 	}
-	return streamsStats
+	return streamsMetrics
 }

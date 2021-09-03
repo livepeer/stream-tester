@@ -283,7 +283,7 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 	}
 	go mc.recoverSessionLoop()
 	if producer != nil {
-		startStatsCollector(ctx, statsCollectionPeriod, nodeID, mapi, producer, ownExchangeName, mc)
+		startMetricsCollector(ctx, statsCollectionPeriod, nodeID, mapi, producer, ownExchangeName, mc)
 	}
 	return mc, nil
 }
