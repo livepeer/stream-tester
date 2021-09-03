@@ -46,9 +46,12 @@ func (c *statsCollector) mainLoop(loopCtx context.Context, period time.Duration)
 		}
 
 		streamsStats := compileStreamStats(mistStats)
-		for stream, stats := range streamsStats {
-			// TODO: Handle when `info` may be null here
-			info := c.getStreamInfo(stream)
+		for streamID, stats := range streamsStats {
+			info := c.getStreamInfo(streamID)
+			if info == nil {
+				glog.Infof("Mist exported metrics from unknown stream. streamId=%q stats=%+v", streamID, stats)
+				continue
+			}
 			mssEvent := createStatsEvent(c.nodeID, info, stats)
 			err := c.producer.Publish(ctx, event.AMQPMessage{
 				Exchange: c.amqpExchange,
@@ -69,7 +72,7 @@ func (c *statsCollector) mainLoop(loopCtx context.Context, period time.Duration)
 func createStatsEvent(nodeID string, info *streamInfo, stats *streamFullStats) *data.MistStreamStatsEvent {
 	info.mu.Lock()
 	defer info.mu.Unlock()
-	msStats := make([]*data.MultistreamTargetStats, len(stats.pushes))
+	mulstrStats := make([]*data.MultistreamTargetStats, len(stats.pushes))
 	for i, push := range stats.pushes {
 		var targetStats *data.MultistreamStats
 		if push.Stats != nil {
@@ -80,14 +83,20 @@ func createStatsEvent(nodeID string, info *streamInfo, stats *streamFullStats) *
 			}
 		}
 		pushInfo := info.pushStatus[push.OriginalURI]
-		msStats[i] = &data.MultistreamTargetStats{
+		mulstrStats[i] = &data.MultistreamTargetStats{
 			Target: pushToMultistreamTargetInfo(pushInfo),
 			Stats:  targetStats,
 		}
 	}
-	// TODO: Handle when `stats.stream` has some dummy values like 0 and -1, when
-	// the stream is not active anymore.
-	return data.NewMistStreamStatsEvent(nodeID, info.stream.ID, stats.stream.Clients, stats.stream.MediaTimeMs, msStats)
+	var strStats *data.StreamStats
+	if ss := stats.stream; ss != nil {
+		strStats = &data.StreamStats{ViewerCount: ss.Clients}
+		// mediatime comes as -1 when not available
+		if ss.MediaTimeMs >= 0 {
+			strStats.MediaTimeMs = &ss.MediaTimeMs
+		}
+	}
+	return data.NewMistStreamStatsEvent(nodeID, info.stream.ID, strStats, mulstrStats)
 }
 
 type streamFullStats struct {
