@@ -48,6 +48,7 @@ const etcdSessionRecoverBackoff = 3 * time.Second
 const etcdSessionRecoverTimeout = 2 * time.Minute
 const waitForPushError = 7 * time.Second
 const keepStreamAfterEnd = 15 * time.Second
+const statsCollectionPeriod = 10 * time.Second
 
 const ownExchangeName = "lp_mist_api_connector"
 const webhooksExchangeName = "webhook_default_exchange"
@@ -149,7 +150,7 @@ type (
 )
 
 // NewMac ...
-func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, routePrefix, playbackDomain, mistURL,
+func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, routePrefix, playbackDomain, mistURL,
 	sendAudio, baseStreamName string, etcdEndpoints []string, etcdCaCert, etcdCert, etcdKey, amqpUrl string) (IMac, error) {
 	if balancerHost != "" && !strings.Contains(balancerHost, ":") {
 		balancerHost = balancerHost + ":8042" // must set default port for Mist's Load Balancer
@@ -244,15 +245,17 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 			cancel()
 			return nil, err
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
-		err = cli.Sync(ctx)
-		cancel()
+		syncCtx, syncCancel := context.WithTimeout(ctx, etcdDialTimeout)
+		err = cli.Sync(syncCtx)
+		syncCancel()
 		if err != nil {
 			err = fmt.Errorf("mist-api-connector: Error syncing etcd endpoints err=%w", err)
+			cancel()
 			return nil, err
 		}
 		sess, err = newEtcdSession(cli)
 		if err != nil {
+			cancel()
 			return nil, err
 		}
 	}
@@ -279,6 +282,9 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		producer:       producer,
 	}
 	go mc.recoverSessionLoop()
+	if producer != nil {
+		startStatsCollector(ctx, statsCollectionPeriod, nodeID, mapi, producer, ownExchangeName, mc)
+	}
 	return mc, nil
 }
 
@@ -628,7 +634,7 @@ func (mc *mac) triggerLiveTrackList(w http.ResponseWriter, r *http.Request, line
 			glog.Errorf("Error unmurshalling json track list: %v", err)
 			return
 		}
-		videoTracksNum := tl.CoundVideoTracks()
+		videoTracksNum := tl.CountVideoTracks()
 		playbackID := mistStreamName2playbackID(lines[0])
 		glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
 		glog.Infof("===> pub %+v", mc.pub2info)
@@ -1248,11 +1254,19 @@ func (mc *mac) deactiveAllStreams() {
 	}
 }
 
+func (mc *mac) getStreamInfo(mistID string) *streamInfo {
+	playbackID := mistStreamName2playbackID(mistID)
+	mc.mu.RLock()
+	info := mc.pub2info[playbackID]
+	mc.mu.RUnlock()
+	return info
+}
+
 func (mc *mac) SrvShutCh() chan error {
 	return mc.srvShutCh
 }
 
-func (tl *trackList) CoundVideoTracks() int {
+func (tl *trackList) CountVideoTracks() int {
 	res := 0
 	for _, td := range *tl {
 		if td.Type == "video" {
