@@ -36,37 +36,48 @@ func (c *statsCollector) mainLoop(loopCtx context.Context, period time.Duration)
 		case <-loopCtx.Done():
 			return
 		case <-ticker.C:
-		}
-		ctx, cancel := context.WithTimeout(loopCtx, period)
-		mistStats, err := c.mapi.GetStats()
-		if err != nil {
-			glog.Errorf("Error getting mist stats. err=%v", err)
+			ctx, cancel := context.WithTimeout(loopCtx, period)
+			if err := c.collectStats(ctx); err != nil {
+				glog.Errorf("Error collecting mist stats. err=%v", err)
+			}
 			cancel()
+		}
+	}
+}
+
+func (c *statsCollector) collectStats(ctx context.Context) error {
+	defer func() {
+		if rec := recover(); rec != nil {
+			glog.Errorf("Panic in stats collector. value=%v", rec)
+		}
+	}()
+
+	mistStats, err := c.mapi.GetStats()
+	if err != nil {
+		return err
+	}
+
+	streamsStats := compileStreamStats(mistStats)
+	for streamID, stats := range streamsStats {
+		info := c.getStreamInfo(streamID)
+		if info == nil {
+			glog.Infof("Mist exported metrics from unknown stream. streamId=%q stats=%+v", streamID, stats)
 			continue
 		}
-
-		streamsStats := compileStreamStats(mistStats)
-		for streamID, stats := range streamsStats {
-			info := c.getStreamInfo(streamID)
-			if info == nil {
-				glog.Infof("Mist exported metrics from unknown stream. streamId=%q stats=%+v", streamID, stats)
-				continue
-			}
-			mssEvent := createStatsEvent(c.nodeID, info, stats)
-			err := c.producer.Publish(ctx, event.AMQPMessage{
-				Exchange: c.amqpExchange,
-				Key:      fmt.Sprintf("stream_stats.%s", info.stream.ID),
-				Body:     mssEvent,
-			})
-			if err != nil {
-				glog.Errorf("Error sending mist stats event. err=%q streamId=%q event=%+v", err, info.stream.ID, mssEvent)
-				if ctx.Err() != nil {
-					break
-				}
+		mssEvent := createStatsEvent(c.nodeID, info, stats)
+		err := c.producer.Publish(ctx, event.AMQPMessage{
+			Exchange: c.amqpExchange,
+			Key:      fmt.Sprintf("stream_stats.%s", info.stream.ID),
+			Body:     mssEvent,
+		})
+		if err != nil {
+			glog.Errorf("Error sending mist stats event. err=%q streamId=%q event=%+v", err, info.stream.ID, mssEvent)
+			if ctx.Err() != nil {
+				return err
 			}
 		}
-		cancel()
 	}
+	return nil
 }
 
 func createStatsEvent(nodeID string, info *streamInfo, stats *streamFullStats) *data.MistStreamStatsEvent {
