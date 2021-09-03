@@ -47,6 +47,7 @@ func (c *statsCollector) mainLoop(loopCtx context.Context, period time.Duration)
 
 		streamsStats := compileStreamStats(mistStats)
 		for stream, stats := range streamsStats {
+			// TODO: Handle when `info` may be null here
 			info := c.getStreamInfo(stream)
 			mssEvent := createStatsEvent(c.nodeID, info, stats)
 			err := c.producer.Publish(ctx, event.AMQPMessage{
@@ -84,6 +85,8 @@ func createStatsEvent(nodeID string, info *streamInfo, stats *streamFullStats) *
 			Stats:  targetStats,
 		}
 	}
+	// TODO: Handle when `stats.stream` has some dummy values like 0 and -1, when
+	// the stream is not active anymore.
 	return data.NewMistStreamStatsEvent(nodeID, info.stream.ID, stats.stream.Clients, stats.stream.MediaTimeMs, msStats)
 }
 
