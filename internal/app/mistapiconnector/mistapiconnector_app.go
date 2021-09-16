@@ -33,8 +33,6 @@ import (
 )
 
 const streamPlaybackPrefix = "playback_"
-const traefikRuleTemplate = "HostRegexp(`%s`) && PathPrefix(`/hls/%s/`)"
-const traefikRuleTemplateDouble = "HostRegexp(`%s`) && (PathPrefix(`/hls/%s/`) || PathPrefix(`/hls/%s/`))"
 const traefikKeyPathRouters = `traefik/http/routers/`
 const traefikKeyPathServices = `traefik/http/services/`
 const traefikKeyPathMiddlewares = `traefik/http/middlewares/`
@@ -431,6 +429,54 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 	return true
 }
 
+func (mc *mac) generateRouteKeys(stream *livepeer.CreateStreamResp) []string {
+	serviceName := mc.routePrefix + serviceNameFromMistURL(mc.mistURL)
+	wildcardPlaybackID := mc.wildcardPlaybackID(stream)
+	playbackID := mc.routePrefix + stream.PlaybackID
+
+	keys := []string{
+		traefikKeyPathServices + serviceName + "/loadbalancer/servers/0/url",
+		mc.mistURL,
+		traefikKeyPathServices + serviceName + "/loadbalancer/passhostheader",
+		"false",
+	}
+
+	// Add a millisecond timestamp as the priority so new streams always win over old, stale streams
+	priority := strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10)
+
+	for _, prefix := range []string{"hls", "cmaf"} {
+		playbackIDPrefix := fmt.Sprintf("%s-%s", playbackID, prefix)
+		keys = append(keys,
+			traefikKeyPathRouters+playbackIDPrefix+"/service",
+			serviceName,
+			traefikKeyPathRouters+playbackIDPrefix+"/priority",
+			priority,
+		)
+		if mc.baseStreamName == "" {
+			rule := fmt.Sprintf("HostRegexp(`%s`) && PathPrefix(`/%s/%s/`)", mc.playbackDomain, prefix, stream.PlaybackID)
+			keys = append(keys, traefikKeyPathRouters+playbackIDPrefix+"/rule", rule)
+		} else {
+			rule := fmt.Sprintf("HostRegexp(`%s`) && (PathPrefix(`/%s/%s/`) || PathPrefix(`/%s/%s/`))", mc.playbackDomain, prefix, stream.PlaybackID, prefix, wildcardPlaybackID)
+			keys = append(keys,
+				traefikKeyPathRouters+playbackIDPrefix+"/rule",
+				rule,
+				traefikKeyPathRouters+playbackIDPrefix+"/middlewares/0",
+				playbackIDPrefix+"-1",
+				traefikKeyPathRouters+playbackIDPrefix+"/middlewares/1",
+				playbackIDPrefix+"-2",
+
+				traefikKeyPathMiddlewares+playbackIDPrefix+"-1/stripprefix/prefixes/0",
+				fmt.Sprintf(`/%s/%s`, prefix, stream.PlaybackID),
+				traefikKeyPathMiddlewares+playbackIDPrefix+"-1/stripprefix/prefixes/1",
+				fmt.Sprintf(`/%s/%s`, prefix, wildcardPlaybackID),
+				traefikKeyPathMiddlewares+playbackIDPrefix+"-2/addprefix/prefix",
+				fmt.Sprintf(`/%s/%s`, prefix, wildcardPlaybackID),
+			)
+		}
+	}
+	return keys
+}
+
 func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
 	if len(lines) != 3 {
 		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), rawRequest)
@@ -543,48 +589,9 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	}
 	if mc.useEtcd {
 		// now create routing rule in the etcd for HLS playback
-		if mc.baseStreamName != "" {
-			wildcardPlaybackID := mc.wildcardPlaybackID(stream)
-			playbackID := mc.routePrefix + stream.PlaybackID
-			serviceName := mc.routePrefix + serviceNameFromMistURL(mc.mistURL)
-			err = mc.putEtcdKeys(mc.etcdSession, stream.PlaybackID,
-				traefikKeyPathRouters+playbackID+"/rule",
-				fmt.Sprintf(traefikRuleTemplateDouble, mc.playbackDomain, stream.PlaybackID, wildcardPlaybackID),
-				traefikKeyPathRouters+playbackID+"/service",
-				serviceName,
-				traefikKeyPathRouters+playbackID+"/middlewares/0",
-				playbackID+"-1",
-				traefikKeyPathRouters+playbackID+"/middlewares/1",
-				playbackID+"-2",
-				// Add a millisecond timestamp as the priority so new streams always win over old, stale streams
-				traefikKeyPathRouters+playbackID+"/priority",
-				strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10),
-
-				traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/0",
-				`/hls/`+stream.PlaybackID,
-				traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/1",
-				`/hls/`+wildcardPlaybackID,
-				traefikKeyPathMiddlewares+playbackID+"-2/addprefix/prefix",
-				`/hls/`+wildcardPlaybackID,
-
-				traefikKeyPathServices+serviceName+"/loadbalancer/servers/0/url",
-				mc.mistURL,
-				traefikKeyPathServices+serviceName+"/loadbalancer/passhostheader",
-				"false",
-			)
-		} else {
-			err = mc.putEtcdKeys(mc.etcdSession,
-				stream.PlaybackID,
-				traefikKeyPathRouters+streamKey+"/rule",
-				fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, streamKey),
-				traefikKeyPathRouters+streamKey+"/service",
-				streamKey,
-				traefikKeyPathServices+streamKey+"/loadbalancer/servers/0/url",
-				mc.mistURL,
-				traefikKeyPathServices+streamKey+"/loadbalancer/passhostheader",
-				"false",
-			)
-		}
+		err = mc.putEtcdKeys(mc.etcdSession, stream.PlaybackID,
+			mc.generateRouteKeys(stream)...,
+		)
 		if err != nil {
 			glog.Errorf("Error creating etcd Traefik rule for playbackID=%s streamID=%s err=%v", stream.PlaybackID, stream.ID, err)
 			w.WriteHeader(http.StatusInternalServerError)
