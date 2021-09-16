@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"net/url"
 	"os"
 	"runtime"
 	"strings"
@@ -40,10 +39,9 @@ func main() {
 	sendAudio := fs.String("send-audio", "record", "when should we send audio?  {always|never|record}")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
-	consulURI := fs.String("consul", "", "Base URL to access Consul (for example: http://localhost:8500)")
-	consulPrefix := fs.String("consul-prefix", "", "Prefix to be prepended to all created consul routes e.g. 'nyc-'")
-	playbackDomain := fs.String("playback-domain", "", "regex of domain to create consul routes for (ex: playback.livepeer.live)")
-	mistURL := fs.String("consul-mist-url", "", "external URL of this Mist instance (to be put in Consul) (ex: https://mist-server-0.livepeer.live)")
+	routePrefix := fs.String("route-prefix", "", "Prefix to be prepended to all created routes e.g. 'nyc-'")
+	playbackDomain := fs.String("playback-domain", "", "regex of domain to create routes for (ex: playback.livepeer.live)")
+	mistURL := fs.String("route-mist-url", "", "external URL of this Mist instance (used for routing) (ex: https://mist-server-0.livepeer.live)")
 	baseStreamName := fs.String("base-stream-name", "", "Base stream name to be used in wildcard-based routing scheme")
 	fEtcdEndpoints := fs.String("etcd-endpoints", "", "Comma-separated list of ETCD endpoints")
 	etcdCaCert := fs.String("etcd-cacert", "", "ETCD CA file name")
@@ -51,6 +49,9 @@ func main() {
 	etcdKey := fs.String("etcd-key", "", "ETCD client certificate key file name")
 	amqpUrl := fs.String("amqp-url", "", "RabbitMQ url")
 	_ = fs.String("config", "", "config file (optional)")
+
+	consulPrefix := fs.String("consul-prefix", "", "DEPRECATED - use --route-prefix")
+	consulMistURL := fs.String("consul-mist-url", "", "DEPRECATED - use --route-mist-url")
 
 	ff.Parse(fs, os.Args[1:],
 		ff.WithConfigFileFlag("config"),
@@ -63,6 +64,15 @@ func main() {
 	fmt.Println("mist-api-connector version: " + model.Version)
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
+
+	if *routePrefix == "" && *consulPrefix != "" {
+		glog.Warningln("--consul-prefix is deprecated, use --route-prefix instead")
+		routePrefix = consulPrefix
+	}
+	if *mistURL == "" && *consulMistURL != "" {
+		glog.Warningln("--consul-mist-url is deprecated, use --mist-url instead")
+		mistURL = consulMistURL
+	}
 
 	var mapi *mistapi.API
 	mcreds := strings.Split(*mistCreds, ":")
@@ -80,15 +90,8 @@ func main() {
 		etcdEndpoints = strings.Split(*fEtcdEndpoints, ",")
 	}
 
-	var consulURL *url.URL
 	var err error
-	if *consulURI != "" {
-		consulURL, err = url.Parse(*consulURI)
-		if err != nil {
-			glog.Fatalf("Error parsing Consul URL: %v", err)
-		}
-	}
-	mc, err := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, consulURL, *consulPrefix,
+	mc, err := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, *routePrefix,
 		*playbackDomain, *mistURL, *sendAudio, *baseStreamName, etcdEndpoints, *etcdCaCert, *etcdCert, *etcdKey,
 		*amqpUrl)
 	if err != nil {

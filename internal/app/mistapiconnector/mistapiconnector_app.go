@@ -20,7 +20,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
-	"github.com/livepeer/stream-tester/apis/consul"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/apis/mist"
 	mistapi "github.com/livepeer/stream-tester/apis/mist"
@@ -133,8 +132,7 @@ type (
 		mu             sync.RWMutex
 		mistHot        string
 		checkBandwidth bool
-		consulURL      *url.URL
-		consulPrefix   string
+		routePrefix    string
 		mistURL        string
 		playbackDomain string
 		sendAudio      string
@@ -150,7 +148,7 @@ type (
 )
 
 // NewMac ...
-func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, consul *url.URL, consulPrefix, playbackDomain, mistURL,
+func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, routePrefix, playbackDomain, mistURL,
 	sendAudio, baseStreamName string, etcdEndpoints []string, etcdCaCert, etcdCert, etcdKey, amqpUrl string) (IMac, error) {
 	if balancerHost != "" && !strings.Contains(balancerHost, ":") {
 		balancerHost = balancerHost + ":8042" // must set default port for Mist's Load Balancer
@@ -259,8 +257,7 @@ func NewMac(mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost st
 		balancerHost:   balancerHost,
 		// pub2id:         make(map[string]string), // public key to stream id
 		pub2info:       make(map[string]*streamInfo), // public key to info
-		consulURL:      consul,
-		consulPrefix:   consulPrefix,
+		routePrefix:    routePrefix,
 		mistURL:        mistURL,
 		playbackDomain: playbackDomain,
 		sendAudio:      sendAudio,
@@ -317,15 +314,6 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 		mc.mu.Lock()
 		if info, has := mc.pub2info[playbackID]; has {
 			glog.Infof("Setting stream's protocol=%s manifestID=%s playbackID=%s active status to false", protocol, info.id, playbackID)
-			if mc.consulURL != nil {
-				consulPlaybackID := mc.consulPrefix + playbackID
-				go consul.DeleteKey(mc.consulURL, traefikKeyPathRouters+consulPlaybackID, true)
-				// shouldn't exists with new scheme, but keeping here to clean up routes made with old scheme
-				go consul.DeleteKey(mc.consulURL, traefikKeyPathServices+consulPlaybackID, true)
-				if mc.baseStreamName != "" {
-					go consul.DeleteKey(mc.consulURL, traefikKeyPathMiddlewares+consulPlaybackID, true)
-				}
-			}
 			_, err := mc.lapi.SetActive(info.id, false, info.startedAt)
 			if err != nil {
 				glog.Error(err)
@@ -553,67 +541,12 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			return true
 		}
 	}
-	if mc.consulURL != nil {
-		// now create routing rule in the Consul for HLS playback
-		if mc.baseStreamName != "" {
-			wildcardPlaybackID := mc.wildcardPlaybackID(stream)
-			playbackID := mc.consulPrefix + stream.PlaybackID
-			serviceName := mc.consulPrefix + serviceNameFromMistURL(mc.mistURL)
-			err = consul.PutKeysWithCurrentTimeRetry(
-				4,
-				mc.consulURL,
-				traefikKeyPathRouters+playbackID+"/rule",
-				fmt.Sprintf(traefikRuleTemplateDouble, mc.playbackDomain, stream.PlaybackID, wildcardPlaybackID),
-				traefikKeyPathRouters+playbackID+"/service",
-				serviceName,
-				traefikKeyPathRouters+playbackID+"/middlewares/0",
-				playbackID+"-1",
-				traefikKeyPathRouters+playbackID+"/middlewares/1",
-				playbackID+"-2",
-
-				traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/0",
-				`/hls/`+stream.PlaybackID,
-				traefikKeyPathMiddlewares+playbackID+"-1/stripprefix/prefixes/1",
-				`/hls/`+wildcardPlaybackID,
-				traefikKeyPathMiddlewares+playbackID+"-2/addprefix/prefix",
-				`/hls/`+wildcardPlaybackID,
-
-				// traefikKeyPathMiddlewares+playbackID+"/replacepathregex/regex",
-				// fmt.Sprintf(`^/hls/%s\+(.*)`, mc.baseNameForStream(stream)),
-				// traefikKeyPathMiddlewares+playbackID+"/replacepathregex/replacement",
-				// `/hls/$1`,
-
-				traefikKeyPathServices+serviceName+"/loadbalancer/servers/0/url",
-				mc.mistURL,
-				traefikKeyPathServices+serviceName+"/loadbalancer/passhostheader",
-				"false",
-			)
-		} else {
-			err = consul.PutKeys(
-				mc.consulURL,
-				traefikKeyPathRouters+streamKey+"/rule",
-				fmt.Sprintf(traefikRuleTemplate, mc.playbackDomain, streamKey),
-				traefikKeyPathRouters+streamKey+"/service",
-				streamKey,
-				traefikKeyPathServices+streamKey+"/loadbalancer/servers/0/url",
-				mc.mistURL,
-				traefikKeyPathServices+streamKey+"/loadbalancer/passhostheader",
-				"false",
-			)
-		}
-		if err != nil {
-			glog.Errorf("Error creating Traefik rule err=%v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("false"))
-			return true
-		}
-	}
 	if mc.useEtcd {
 		// now create routing rule in the etcd for HLS playback
 		if mc.baseStreamName != "" {
 			wildcardPlaybackID := mc.wildcardPlaybackID(stream)
-			playbackID := mc.consulPrefix + stream.PlaybackID
-			serviceName := mc.consulPrefix + serviceNameFromMistURL(mc.mistURL)
+			playbackID := mc.routePrefix + stream.PlaybackID
+			serviceName := mc.routePrefix + serviceNameFromMistURL(mc.mistURL)
 			err = mc.putEtcdKeys(mc.etcdSession, stream.PlaybackID,
 				traefikKeyPathRouters+playbackID+"/rule",
 				fmt.Sprintf(traefikRuleTemplateDouble, mc.playbackDomain, stream.PlaybackID, wildcardPlaybackID),
@@ -917,7 +850,7 @@ func (mc *mac) putEtcdKeys(sess *concurrency.Session, playbackID string, kvs ...
 }
 
 func (mc *mac) deleteEtcdKeys(playbackID string) {
-	etcdPlaybackID := mc.consulPrefix + playbackID
+	etcdPlaybackID := mc.routePrefix + playbackID
 	if rev, ok := mc.etcdPub2rev[playbackID]; ok {
 		pathKey := traefikKeyPathRouters + etcdPlaybackID
 		ruleKey := pathKey + "/rule"
