@@ -52,6 +52,8 @@ const eventMultistreamConnected = "multistream.connected"
 const eventMultistreamError = "multistream.error"
 const eventMultistreamDisconnected = "multistream.disconnected"
 
+var playbackPrefixes = []string{"hls", "cmaf"}
+
 // const EXCHANGE_NAME = "webhook_default_exchange"
 
 type (
@@ -444,7 +446,7 @@ func (mc *mac) generateRouteKeys(stream *livepeer.CreateStreamResp) []string {
 	// Add a millisecond timestamp as the priority so new streams always win over old, stale streams
 	priority := strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10)
 
-	for _, prefix := range []string{"hls", "cmaf"} {
+	for _, prefix := range playbackPrefixes {
 		playbackIDPrefix := fmt.Sprintf("%s-%s", playbackID, prefix)
 		keys = append(keys,
 			traefikKeyPathRouters+playbackIDPrefix+"/service",
