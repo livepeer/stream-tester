@@ -17,17 +17,25 @@ jobs:
       env:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD 
+      run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+    - name: Get git tag
+      id: git_tag
+      run: |
+        echo ::set-output name=VERSION::$(git describe --tag --dirty)
+    - name: Get build tag
+      id: build_tag
+      run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+
     - name: Build the Docker image
-      # run: docker build . --file Dockerfile --tag livepeer/streamtester:$(date +%s)
-      run: docker build . --file Dockerfile.load-tester --tag livepeer/streamtester:load-tester --build-arg version=$(git describe --dirty)
-    - name: Get tag name
-      id: get_version
-      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      run: docker build . --file Dockerfile.load-tester --tag livepeer/streamtester:load-tester --build-arg version=${{ steps.git_tag.outputs.VERSION }}
+
     - name: Tag version
       if: startsWith(github.ref, 'refs/tags/v')
       run: |
-        docker tag livepeer/streamtester:load-tester livepeer/streamtester:load-tester${{ steps.get_version.outputs.VERSION }}
-        docker push livepeer/streamtester:load-tester${{ steps.get_version.outputs.VERSION }}
+        docker tag livepeer/streamtester:load-tester livepeer/streamtester:load-tester-${{ steps.build_tag.outputs.VERSION }}
+    - name: Tag git version
+      run: |
+        docker tag livepeer/streamtester:load-tester livepeer/streamtester:load-tester-${{ steps.git_tag.outputs.VERSION }}
     - name: Push Docker Container to Registry
-      run: docker push livepeer/streamtester:load-tester
+      run: |
+        docker push --all-tags livepeer/streamtester

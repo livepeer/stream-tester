@@ -17,20 +17,30 @@ jobs:
       env:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-      run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD 
+      run: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+    - name: Get git tag
+      id: git_tag
+      run: |
+        echo ::set-output name=VERSION::$(git describe --tag --dirty)
+    - name: Get build tag
+      id: build_tag
+      run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
+
     - name: Build the Docker image
-      # run: docker build . --file Dockerfile --tag livepeer/streamtester:$(date +%s)
-      run: docker build . --file Dockerfile --tag livepeer/streamtester:latest --build-arg version=$(git describe --dirty)
-    - name: Get tag name
-      id: get_version
-      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      run: docker build . --file Dockerfile --tag livepeer/streamtester:latest --build-arg version=${{ steps.git_tag.outputs.VERSION }}
+
+    - name: Push Docker Container to Registry
+      run: docker push livepeer/streamtester:latest
     - name: Tag version
       if: startsWith(github.ref, 'refs/tags/v')
       run: |
-        docker tag livepeer/streamtester:latest livepeer/streamtester:${{ steps.get_version.outputs.VERSION }}
-        docker push livepeer/streamtester:${{ steps.get_version.outputs.VERSION }}
+        docker tag livepeer/streamtester:latest livepeer/streamtester:${{ steps.build_tag.outputs.VERSION }}
+    - name: Tag git version
+      run: |
+        docker tag livepeer/streamtester:latest livepeer/streamtester:${{ steps.git_tag.outputs.VERSION }}
     - name: Push Docker Container to Registry
-      run: docker push livepeer/streamtester:latest
+      run: |
+        docker push --all-tags livepeer/streamtester
 
     - name: Notify that new build has been uploaded
       run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
