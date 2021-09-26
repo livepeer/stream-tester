@@ -862,7 +862,8 @@ func (mc *mac) deleteEtcdKeys(playbackID string) {
 	etcdPlaybackID := mc.routePrefix + playbackID
 	if rev, ok := mc.etcdPub2rev[playbackID]; ok {
 		pathKey := traefikKeyPathRouters + etcdPlaybackID
-		ruleKey := pathKey + "/rule"
+		// Just need to check the revision on one rule, use the first playbackPrefix
+		ruleKey := fmt.Sprintf("%s-%s/rule", pathKey, playbackPrefixes[0])
 		cmp := clientv3.Compare(clientv3.ModRevision(ruleKey), "=", rev.revision)
 		ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
 		thn := []clientv3.Op{
