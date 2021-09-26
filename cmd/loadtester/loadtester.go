@@ -51,6 +51,7 @@ func main() {
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
 	httpIngest := fs.Bool("http-ingest", false, "Use Livepeer HTTP HLS ingest")
+	httpIngestTemplate := fs.String("http-ingest-template", "", "Comma-separated template of HTTP ingest URL")
 	rtmpTemplate := fs.String("rtmp-template", "", "Template of RTMP ingest URL")
 	hlsTemplate := fs.String("hls-template", "", "Template of HLS playback URL")
 	// ignoreNoCodecError := fs.Bool("ignore-no-codec-error", true, "Do not stop streaming if segment without codec's info downloaded")
@@ -104,7 +105,7 @@ func main() {
 	if *apiToken != "" && (*hlsTemplate != "") {
 		glog.Infof("notice: overriding playback URL returned by %s with %s", *apiServer, *hlsTemplate)
 	}
-	if *apiToken == "" && *rtmpTemplate == "" {
+	if *apiToken == "" && *rtmpTemplate == "" && *rtmpTemplate == "" {
 		glog.Fatalf("-api-token or -rtmp-template should be specified")
 	}
 	if *rtmpTemplate != "" && *httpIngest {
@@ -152,18 +153,24 @@ func main() {
 			exit(255, fileName, *fileArg, err)
 		}
 		glog.Infof("Got ingests: %+v", ingests)
-		broadcasters, err := lapi.Broadcasters()
-		if err != nil {
-			exit(255, fileName, *fileArg, err)
+		var httpIngestURLTemplates []string
+		if *httpIngestTemplate != "" {
+			httpIngestURLTemplates = strings.Split(*httpIngestTemplate, ",")
+		} else {
+			broadcasters, err := lapi.Broadcasters()
+			if err != nil {
+				exit(255, fileName, *fileArg, err)
+			}
+			glog.Infof("Got broadcasters: %+v", broadcasters)
+			httpIngestURLTemplates = make([]string, 0, len(broadcasters))
+			for _, b := range broadcasters {
+				httpIngestURLTemplates = append(httpIngestURLTemplates, fmt.Sprintf("%s/live/%%s", b))
+			}
+			if *httpIngest && len(broadcasters) == 0 {
+				exit(254, fileName, *fileArg, errors.New("Empty list of broadcasters"))
+			}
 		}
-		glog.Infof("Got broadcasters: %+v", broadcasters)
-		httpIngestURLTemplates := make([]string, 0, len(broadcasters))
-		for _, b := range broadcasters {
-			httpIngestURLTemplates = append(httpIngestURLTemplates, fmt.Sprintf("%s/live/%%s", b))
-		}
-		if *httpIngest && len(broadcasters) == 0 {
-			exit(254, fileName, *fileArg, errors.New("Empty list of broadcasters"))
-		} else if !*httpIngest && len(ingests) == 0 {
+		if !*httpIngest && len(ingests) == 0 {
 			exit(254, fileName, *fileArg, errors.New("Empty list of ingests"))
 		}
 		streamStarter = func(ctx context.Context, sourceFileName string, waitForTarget, timeToStream time.Duration) (model.OneTestStream, error) {
