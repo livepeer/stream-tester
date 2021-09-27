@@ -24,6 +24,7 @@ jobs:
       uses: livepeer/action-gh-release-tags@v0
       with:
         tags-prefix: mist-api-connector
+        force-latest: true
 
     - name: Build the Docker image
       run: |
