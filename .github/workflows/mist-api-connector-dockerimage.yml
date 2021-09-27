@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - mist-api-connector
+      - feat/tagged-builds
 
 jobs:
 
@@ -26,19 +27,22 @@ jobs:
       id: build_tag
       run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/}
 
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile.mist-api-connector --tag livepeer/streamtester:mist-api-connector --build-arg version=${{ steps.git_tag.outputs.VERSION }}
+    - name: Tags
+      id: tags
+      uses: livepeer/action-gh-release-tags@v0
+      with:
+        tags-prefix: mist-api-connector
 
-    - name: Tag version
-      if: startsWith(github.ref, 'refs/tags/v')
+    - name: Build the Docker image
       run: |
-        docker tag livepeer/streamtester:mist-api-connector livepeer/streamtester:mist-api-connector-${{ steps.build_tag.outputs.VERSION }}
-    - name: Tag git version
-      run: |
-        docker tag livepeer/streamtester:mist-api-connector livepeer/streamtester:mist-api-connector-${{ steps.git_tag.outputs.VERSION }}
+        TAGS=(${{ steps.tags.outputs.tags }})
+        docker build . --file Dockerfile.mist-api-connector ${TAGS[@]/#/--tag livepeer/streamtester:} --build-arg version=${{ steps.tags.outputs.version }}
+
     - name: Push Docker Container to Registry
       run: |
-        docker push --all-tags livepeer/streamtester
+        for TAG in ${{ steps.tags.outputs.tags }}; do
+          docker push livepeer/streamtester:$TAG
+        done
 
     - name: Notify that new build has been uploaded
       run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
