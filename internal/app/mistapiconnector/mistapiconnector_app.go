@@ -1170,8 +1170,12 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 			if strings.Contains(target.URL, "?") {
 				join = "&"
 			}
+			audioSelector := "maxbps"
+			if targetRef.Mute {
+				audioSelector = "silent"
+			}
 			// Inject ?video=~widthxheight to send the correct rendition
-			selectorURL := fmt.Sprintf("%s%svideo=%s&audio=maxbps", target.URL, join, videoSelector)
+			selectorURL := fmt.Sprintf("%s%svideo=%s&audio=%s", target.URL, join, videoSelector, audioSelector)
 			info.mu.Lock()
 			info.pushStatus[selectorURL] = &pushStatus{target: target, profile: targetRef.Profile}
 

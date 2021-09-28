@@ -93,6 +93,7 @@ type (
 
 	MultistreamTargetRef struct {
 		Profile string `json:"profile,omitempty"`
+		Mute    bool   `json:"mute,omitempty"`
 		ID      string `json:"id,omitempty"`
 	}
 
