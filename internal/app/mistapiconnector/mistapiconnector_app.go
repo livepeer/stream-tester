@@ -1171,7 +1171,7 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 				join = "&"
 			}
 			audioSelector := "maxbps"
-			if targetRef.Mute {
+			if targetRef.VideoOnly {
 				audioSelector = "silent"
 			}
 			// Inject ?video=~widthxheight to send the correct rendition

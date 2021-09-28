@@ -92,9 +92,9 @@ type (
 	}
 
 	MultistreamTargetRef struct {
-		Profile string `json:"profile,omitempty"`
-		Mute    bool   `json:"mute,omitempty"`
-		ID      string `json:"id,omitempty"`
+		Profile   string `json:"profile,omitempty"`
+		VideoOnly bool   `json:"videoOnly,omitempty"`
+		ID        string `json:"id,omitempty"`
 	}
 
 	// CreateStreamResp returned by API
