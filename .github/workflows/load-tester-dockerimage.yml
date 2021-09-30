@@ -23,16 +23,15 @@ jobs:
       id: tags
       uses: livepeer/action-gh-release-tags@v0
       with:
-        tags-prefix: load-tester
         force-latest: true
 
     - name: Build the Docker image
       run: |
-        TAGS=(${{ steps.tags.outputs.tags }})
-        docker build . --file Dockerfile.load-tester ${TAGS[@]/#/--tag livepeer/streamtester:} --build-arg "version=${{ steps.tags.outputs.version }}"
+        TAGS='${{ steps.tags.outputs.tags }}'
+        docker build . --file Dockerfile.load-tester $(printf ' -t livepeer/loadtester:%s' $TAGS) --build-arg "version=${{ steps.tags.outputs.version }}"
 
     - name: Push Docker Container to Registry
       run: |
         for TAG in ${{ steps.tags.outputs.tags }}; do
-          docker push livepeer/streamtester:$TAG
+          docker push livepeer/loadtester:$TAG
         done

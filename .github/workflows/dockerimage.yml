@@ -27,8 +27,8 @@ jobs:
 
     - name: Build the Docker image
       run: |
-        TAGS=(${{ steps.tags.outputs.tags }})
-        docker build . --file Dockerfile ${TAGS[@]/#/--tag livepeer/streamtester:} --build-arg "version=${{ steps.tags.outputs.version }}"
+        TAGS='${{ steps.tags.outputs.tags }}'
+        docker build . --file Dockerfile $(printf ' -t livepeer/streamtester:%s' $TAGS) --build-arg "version=${{ steps.tags.outputs.version }}"
 
     - name: Push Docker Container to Registry
       run: |
