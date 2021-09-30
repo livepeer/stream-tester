@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - mist-api-connector
+      - feat/tagged-builds
 
 jobs:
 
