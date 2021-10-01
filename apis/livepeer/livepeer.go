@@ -3,6 +3,7 @@ package livepeer
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 var ErrNotExists = errors.New("Stream does not exists")
 
 const httpTimeout = 4 * time.Second
+const setActiveTimeout = 1500 * time.Millisecond
 
 var defaultHTTPClient = &http.Client{
 	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
@@ -602,7 +604,7 @@ func (lapi *API) GetSessions(id string, forceUrl bool) ([]UserSession, error) {
 
 // SetActiveR sets stream active with retries
 func (lapi *API) SetActiveR(id string, active bool, startedAt time.Time) (bool, error) {
-	var apiTry int
+	apiTry := 1
 	for {
 		ok, err := lapi.SetActive(id, active, startedAt)
 		if err != nil {
@@ -636,6 +638,10 @@ func (lapi *API) SetActive(id string, active bool, startedAt time.Time) (bool, e
 		metrics.APIRequest("set_active", 0, err)
 		return true, err
 	}
+	ctx, cancel := context.WithTimeout(req.Context(), setActiveTimeout)
+	defer cancel()
+	req = req.WithContext(ctx)
+
 	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := lapi.httpClient.Do(req)
