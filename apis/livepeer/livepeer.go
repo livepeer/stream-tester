@@ -654,7 +654,7 @@ func (lapi *API) SetActive(id string, active bool, startedAt time.Time) (bool, e
 	took := time.Since(start)
 	metrics.APIRequest("set_active", took, nil)
 	glog.Infof("%s/setactive took=%s response status code %d status %s resp %+v body=%s",
-		took, id, resp.StatusCode, resp.Status, resp, string(b))
+		id, took, resp.StatusCode, resp.Status, resp, string(b))
 	return resp.StatusCode >= 200 && resp.StatusCode < 300, nil
 }
 
