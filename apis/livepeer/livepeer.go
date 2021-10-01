@@ -600,6 +600,22 @@ func (lapi *API) GetSessions(id string, forceUrl bool) ([]UserSession, error) {
 	return r, nil
 }
 
+// SetActiveR sets stream active with retries
+func (lapi *API) SetActiveR(id string, active bool, startedAt time.Time) (bool, error) {
+	var apiTry int
+	for {
+		ok, err := lapi.SetActive(id, active, startedAt)
+		if err != nil {
+			if Timedout(err) && apiTry < 3 {
+				apiTry++
+				continue
+			}
+			glog.Errorf("Fatal error calling API /setactive id=%s active=%s err=%v", id, active, err)
+		}
+		return ok, err
+	}
+}
+
 // SetActive set isActive
 func (lapi *API) SetActive(id string, active bool, startedAt time.Time) (bool, error) {
 	if id == "" {
