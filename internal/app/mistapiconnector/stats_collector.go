@@ -101,7 +101,7 @@ func createMetricsEvent(nodeID string, info *streamInfo, metrics *streamMetrics)
 	}
 	var stream *data.StreamMetrics
 	if ss := metrics.stream; ss != nil {
-		stream = &data.StreamMetrics{ViewerCount: ss.Clients}
+		stream = &data.StreamMetrics{}
 		// mediatime comes as -1 when not available
 		if ss.MediaTimeMs >= 0 {
 			stream.MediaTimeMs = &ss.MediaTimeMs
