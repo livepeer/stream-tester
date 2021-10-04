@@ -67,7 +67,7 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 		mseEvent := createMetricsEvent(c.nodeID, info, metrics)
 		err := c.producer.Publish(ctx, event.AMQPMessage{
 			Exchange: c.amqpExchange,
-			Key:      fmt.Sprintf("stream_metrics.%s", info.stream.ID),
+			Key:      fmt.Sprintf("stream.metrics.%s", info.stream.ID),
 			Body:     mseEvent,
 		})
 		if err != nil {
