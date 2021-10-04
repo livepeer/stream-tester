@@ -2,9 +2,6 @@ module github.com/livepeer/stream-tester
 
 go 1.13
 
-// TODO: Revert before merging. Won't build in the CI anyway
-replace github.com/livepeer/livepeer-data => ../livepeer-data
-
 require (
 	cloud.google.com/go/storage v1.15.0
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
@@ -18,7 +15,7 @@ require (
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/livepeer/joy4 v0.1.2-0.20210601043311-c1b885884cc7
 	github.com/livepeer/leaderboard-serverless v1.0.0
-	github.com/livepeer/livepeer-data v0.2.0
+	github.com/livepeer/livepeer-data v0.3.0-beta.2
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/mattn/go-isatty v0.0.8 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
