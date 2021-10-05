@@ -314,7 +314,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 		mc.mu.Lock()
 		if info, has := mc.pub2info[playbackID]; has {
 			glog.Infof("Setting stream's protocol=%s manifestID=%s playbackID=%s active status to false", protocol, info.id, playbackID)
-			_, err := mc.lapi.SetActive(info.id, false, info.startedAt)
+			_, err := mc.lapi.SetActiveR(info.id, false, info.startedAt)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -566,7 +566,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		} else {
 			responseName = mc.wildcardPlaybackID(stream)
 		}
-		ok, err := mc.lapi.SetActive(stream.ID, true, mc.pub2info[stream.PlaybackID].startedAt)
+		ok, err := mc.lapi.SetActiveR(stream.ID, true, mc.pub2info[stream.PlaybackID].startedAt)
 		if err != nil {
 			glog.Error(err)
 		} else if !ok {
