@@ -2,6 +2,9 @@ module github.com/livepeer/stream-tester
 
 go 1.13
 
+// TODO: Revert before merging. Won't build in the CI anyway
+replace github.com/livepeer/livepeer-data => ../livepeer-data
+
 require (
 	cloud.google.com/go/storage v1.15.0
 	contrib.go.opencensus.io/exporter/prometheus v0.1.0
