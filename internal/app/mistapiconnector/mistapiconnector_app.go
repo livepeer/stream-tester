@@ -331,6 +331,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 			if err != nil {
 				glog.Error(err)
 			}
+			mc.emitStreamStateEvent(info.stream, data.StreamState{Active: false})
 			info.mu.Lock()
 			info.stopped = true
 			info.mu.Unlock()
@@ -614,6 +615,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			return true
 		}
 	}
+	go mc.emitStreamStateEvent(stream, data.StreamState{Active: true})
 	w.Write([]byte(responseName))
 	metrics.StartStream()
 	glog.Infof("Responded with '%s'", responseName)
@@ -691,17 +693,21 @@ func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
 		if !pushInfo.pushStopped {
 			// there was no error starting RTMP push, so no we can send 'multistream.connected' webhook event
 			pushInfo.pushStartEmitted = true
-			mc.emitWebhookEvent(info, pushInfo, eventMultistreamConnected)
+			mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamConnected)
 		}
 	}
 }
 
-func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, eventKey string) {
-	if mc.producer == nil {
-		return
+func (mc *mac) emitStreamStateEvent(stream *livepeer.CreateStreamResp, state data.StreamState) {
+	streamID, sessionID := stream.ParentID, stream.ID
+	if streamID == "" {
+		streamID = sessionID
 	}
+	stateEvt := data.NewStreamStateEvent(streamID, stream.UserID, sessionID, state)
+	mc.emitAmqpEvent(ownExchangeName, "stream.state."+streamID, stateEvt)
+}
 
-	stream := info.stream
+func (mc *mac) emitWebhookEvent(stream *livepeer.CreateStreamResp, pushInfo *pushStatus, eventKey string) {
 	streamID, sessionID := stream.ParentID, stream.ID
 	if streamID == "" {
 		streamID = sessionID
@@ -709,22 +715,30 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, eventKey
 	payload := data.MultistreamWebhookPayload{
 		Target: pushToMultistreamTargetInfo(pushInfo),
 	}
-	whEvt, err := data.NewWebhookEvent(streamID, eventKey, stream.UserID, sessionID, payload)
+	hookEvt, err := data.NewWebhookEvent(streamID, eventKey, stream.UserID, sessionID, payload)
 	if err != nil {
 		glog.Errorf("Error creating webhook event err=%v", err)
 		return
 	}
+	mc.emitAmqpEvent(webhooksExchangeName, "events."+eventKey, hookEvt)
+}
 
-	glog.Infof("Publishing amqp message to exchange=%s msg=%+v", webhooksExchangeName, whEvt)
-	err = mc.producer.Publish(mc.ctx, event.AMQPMessage{
-		Exchange:   webhooksExchangeName,
-		Key:        "events." + eventKey,
-		Body:       whEvt,
+func (mc *mac) emitAmqpEvent(exchange, key string, evt data.Event) {
+	if mc.producer == nil {
+		return
+	}
+	glog.Infof("Publishing amqp message to exchange=%s key=%s msg=%+v", exchange, key, evt)
+
+	ctx, cancel := context.WithTimeout(mc.ctx, 3*time.Second)
+	defer cancel()
+	err := mc.producer.Publish(ctx, event.AMQPMessage{
+		Exchange:   exchange,
+		Key:        key,
+		Body:       evt,
 		Persistent: true,
 	})
 	if err != nil {
-		glog.Errorf("Error publishing message msg=%+v err=%v", whEvt, err)
-		return
+		glog.Errorf("Error publishing amqp message to exchange=%s key=%s, err=%v", exchange, key, err)
 	}
 }
 
@@ -747,11 +761,11 @@ func (mc *mac) triggerPushEnd(w http.ResponseWriter, r *http.Request, lines []st
 			if pushInfo, ok := info.pushStatus[lines[2]]; ok {
 				if pushInfo.pushStartEmitted {
 					// emit normal push.end
-					mc.emitWebhookEvent(info, pushInfo, eventMultistreamDisconnected)
+					mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamDisconnected)
 				} else {
 					pushInfo.pushStopped = true
 					//  emit push error
-					mc.emitWebhookEvent(info, pushInfo, eventMultistreamError)
+					mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamError)
 				}
 			} else {
 				glog.Errorf("For stream playbackID=%s got unknown RTMP push %s", playbackID, lines[1])
@@ -1236,10 +1250,22 @@ func (mc *mac) shutdown() {
 	mc.srvShutCh <- err
 }
 
-// deactiveAllStreams sends /setactive/false for all the active streams
+// deactiveAllStreams sends /setactive/false for all the active streams as well
+// as AMQP events with the inactive state.
 func (mc *mac) deactiveAllStreams() {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
+	ewg := sync.WaitGroup{}
+	for _, info := range mc.pub2info {
+		ewg.Add(1)
+		go func(stream *livepeer.CreateStreamResp) {
+			defer ewg.Done()
+			// TODO: Implement a way to gracefully shutdown event producer, making
+			// sure event buffer is flushed before exiting.
+			mc.emitStreamStateEvent(stream, data.StreamState{Active: false})
+		}(info.stream)
+	}
+
 	ids := make([]string, 0, len(mc.pub2info))
 	for _, info := range mc.pub2info {
 		ids = append(ids, info.id)
@@ -1252,6 +1278,7 @@ func (mc *mac) deactiveAllStreams() {
 			glog.Infof("Set many isActive to false ids=%+v rowCount=%d", ids, updated)
 		}
 	}
+	ewg.Wait()
 }
 
 func (mc *mac) getStreamInfo(mistID string) *streamInfo {
