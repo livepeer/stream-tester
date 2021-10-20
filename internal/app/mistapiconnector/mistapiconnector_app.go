@@ -1241,13 +1241,15 @@ func (mc *mac) startSignalHandler() {
 func (mc *mac) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+
+	// start calling /setactve/false and sending events on active connections eagerly
+	deactivateGroup := &sync.WaitGroup{}
+	mc.deactiveAllStreams(ctx, deactivateGroup)
+
 	err := mc.srv.Shutdown(ctx)
 	glog.Infof("Done shutting down server with err=%v", err)
 	mc.etcdClient.Close()
-
-	// now call /setactve/false on active connections
-	mc.deactiveAllStreams()
-	mc.producer.Shutdown(ctx)
+	deactivateGroup.Wait()
 
 	mc.cancel()
 	mc.srvShutCh <- err
@@ -1255,31 +1257,41 @@ func (mc *mac) shutdown() {
 
 // deactiveAllStreams sends /setactive/false for all the active streams as well
 // as AMQP events with the inactive state.
-func (mc *mac) deactiveAllStreams() {
+func (mc *mac) deactiveAllStreams(ctx context.Context, wg *sync.WaitGroup) {
 	mc.mu.Lock()
-	defer mc.mu.Unlock()
-	ewg := sync.WaitGroup{}
-	for _, info := range mc.pub2info {
-		ewg.Add(1)
-		go func(stream *livepeer.CreateStreamResp) {
-			defer ewg.Done()
-			mc.emitStreamStateEvent(stream, data.StreamState{Active: false})
-		}(info.stream)
-	}
-
 	ids := make([]string, 0, len(mc.pub2info))
+	streams := make([]*livepeer.CreateStreamResp, 0, len(mc.pub2info))
 	for _, info := range mc.pub2info {
 		ids = append(ids, info.id)
+		streams = append(streams, info.stream)
 	}
-	if len(ids) > 0 {
+	mc.mu.Unlock()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, stream := range streams {
+			mc.emitStreamStateEvent(stream, data.StreamState{Active: false})
+		}
+		err := mc.producer.Shutdown(ctx)
+		if err != nil {
+			glog.Errorf("Error shutting down AMQP producer err=%v", err)
+		}
+	}()
+
+	if len(ids) == 0 {
+		return
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		updated, err := mc.lapi.DeactivateMany(ids)
 		if err != nil {
 			glog.Errorf("Error setting many isActive to false ids=%+v err=%v", ids, err)
 		} else {
 			glog.Infof("Set many isActive to false ids=%+v rowCount=%d", ids, updated)
 		}
-	}
-	ewg.Wait()
+	}()
 }
 
 func (mc *mac) getStreamInfo(mistID string) *streamInfo {
