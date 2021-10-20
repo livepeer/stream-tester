@@ -208,7 +208,7 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 			}
 			return c.ExchangeDeclare(ownExchangeName, "topic", true, false, false, false, nil)
 		}
-		producer, err = event.NewAMQPProducer(ctx, amqpUrl, event.NewAMQPConnectFunc(setup))
+		producer, err = event.NewAMQPProducer(amqpUrl, event.NewAMQPConnectFunc(setup))
 		if err != nil {
 			cancel()
 			return nil, err
@@ -1240,12 +1240,15 @@ func (mc *mac) startSignalHandler() {
 
 func (mc *mac) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	err := mc.srv.Shutdown(ctx)
-	cancel()
 	glog.Infof("Done shutting down server with err=%v", err)
 	mc.etcdClient.Close()
+
 	// now call /setactve/false on active connections
 	mc.deactiveAllStreams()
+	mc.producer.Shutdown(ctx)
+
 	mc.cancel()
 	mc.srvShutCh <- err
 }
@@ -1260,8 +1263,6 @@ func (mc *mac) deactiveAllStreams() {
 		ewg.Add(1)
 		go func(stream *livepeer.CreateStreamResp) {
 			defer ewg.Done()
-			// TODO: Implement a way to gracefully shutdown event producer, making
-			// sure event buffer is flushed before exiting.
 			mc.emitStreamStateEvent(stream, data.StreamState{Active: false})
 		}(info.stream)
 	}
