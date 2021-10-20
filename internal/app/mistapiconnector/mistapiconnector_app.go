@@ -1242,11 +1242,11 @@ func (mc *mac) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	err := mc.srv.Shutdown(ctx)
 	cancel()
-	mc.cancel()
 	glog.Infof("Done shutting down server with err=%v", err)
 	mc.etcdClient.Close()
 	// now call /setactve/false on active connections
 	mc.deactiveAllStreams()
+	mc.cancel()
 	mc.srvShutCh <- err
 }
 
