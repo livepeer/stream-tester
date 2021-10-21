@@ -48,6 +48,7 @@ func main() {
 	etcdCert := fs.String("etcd-cert", "", "ETCD client certificate file name")
 	etcdKey := fs.String("etcd-key", "", "ETCD client certificate key file name")
 	amqpUrl := fs.String("amqp-url", "", "RabbitMQ url")
+	ownRegion := fs.String("own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 	_ = fs.String("config", "", "config file (optional)")
 
 	consulPrefix := fs.String("consul-prefix", "", "DEPRECATED - use --route-prefix")
@@ -96,7 +97,7 @@ func main() {
 		BalancerHost: *balancerHost, RoutePrefix: *routePrefix, PlaybackDomain: *playbackDomain, MistURL: *mistURL,
 		BaseStreamName: *baseStreamName, CheckBandwidth: false, SendAudio: *sendAudio,
 		EtcdEndpoints: etcdEndpoints, EtcdCaCert: *etcdCaCert, EtcdCert: *etcdCert, EtcdKey: *etcdKey,
-		AMQPUrl: *amqpUrl}
+		AMQPUrl: *amqpUrl, OwnRegion: *ownRegion}
 	mc, err := mistapiconnector.NewMac(opts)
 	if err != nil {
 		glog.Fatalf("Error creating mist-api-connector %v", err)

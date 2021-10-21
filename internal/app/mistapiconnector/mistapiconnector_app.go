@@ -120,7 +120,7 @@ type (
 		SendAudio, BaseStreamName string
 		EtcdEndpoints                 []string
 		EtcdCaCert, EtcdCert, EtcdKey string
-		AMQPUrl                       string
+		AMQPUrl, OwnRegion            string
 	}
 
 	trackList map[string]*trackListDesc
@@ -147,6 +147,7 @@ type (
 		etcdPub2rev    map[string]etcdRevData // public key to revision of etcd keys
 		pub2info       map[string]*streamInfo // public key to info
 		producer       *event.AMQPProducer
+		ownRegion      string
 		// pub2id         map[string]string // public key to stream id
 	}
 )
@@ -281,6 +282,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 		ctx:            ctx,
 		cancel:         cancel,
 		producer:       producer,
+		ownRegion:      opts.OwnRegion,
 	}
 	go mc.recoverSessionLoop()
 	if producer != nil {
@@ -700,11 +702,11 @@ func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
 }
 
 func (mc *mac) emitStreamStateEvent(stream *livepeer.CreateStreamResp, state data.StreamState) {
-	streamID, sessionID := stream.ParentID, stream.ID
+	streamID := stream.ParentID
 	if streamID == "" {
-		streamID = sessionID
+		streamID = stream.ID
 	}
-	stateEvt := data.NewStreamStateEvent(streamID, stream.UserID, sessionID, state)
+	stateEvt := data.NewStreamStateEvent(streamID, stream.UserID, mc.ownRegion, state)
 	mc.emitAmqpEvent(ownExchangeName, "stream.state."+streamID, stateEvt)
 }
 
