@@ -15,7 +15,7 @@ require (
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/livepeer/joy4 v0.1.2-0.20210601043311-c1b885884cc7
 	github.com/livepeer/leaderboard-serverless v1.0.0
-	github.com/livepeer/livepeer-data v0.3.0-beta.2
+	github.com/livepeer/livepeer-data v0.3.1-beta.2
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/mattn/go-isatty v0.0.8 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
