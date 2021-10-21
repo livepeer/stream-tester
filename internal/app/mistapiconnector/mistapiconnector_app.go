@@ -254,7 +254,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 	}
 	go mc.recoverSessionLoop()
 	if producer != nil {
-		startMetricsCollector(ctx, statsCollectionPeriod, opts.NodeID, opts.MistAPI, producer, ownExchangeName, mc)
+		startMetricsCollector(ctx, statsCollectionPeriod, opts.NodeID, opts.OwnRegion, opts.MistAPI, producer, ownExchangeName, mc)
 	}
 	return mc, nil
 }
