@@ -163,38 +163,6 @@ func NewMac(opts MacOptions) (IMac, error) {
 	var err error
 	ctx, cancel := context.WithCancel(context.Background())
 
-	/*
-		conn, err := amqp.Dial("amqp://localhost:5672/livepeer")
-		if err != nil {
-			err = fmt.Errorf("mist-api-connector: Failed to connect to RabbitMQ err=%w", err)
-			return nil, err
-		}
-		ch, err := conn.Channel()
-		if err != nil {
-			conn.Close()
-			err = fmt.Errorf("mist-api-connector: Failed to open channel err=%w", err)
-			return nil, err
-		}
-		if err := ch.Confirm(false); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("request confirms: %w", err)
-		}
-		confirms := make(chan amqp.Confirmation, 16)
-		closed := make(chan *amqp.Error, 16)
-		ch.NotifyPublish(confirms)
-		ch.NotifyClose(closed)
-		go func() {
-			for confirm := range confirms {
-				glog.Infof("==> got confirm ack=%v tag=%v", confirm.Ack, confirm.DeliveryTag)
-			}
-		}()
-		go func() {
-			for close := range closed {
-				glog.Infof("==> got amqp closed %+v", close)
-			}
-		}()
-	*/
-
 	var producer *event.AMQPProducer
 	if opts.AMQPUrl != "" {
 		pu, err := url.Parse(opts.AMQPUrl)
