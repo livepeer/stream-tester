@@ -90,10 +90,14 @@ func main() {
 		etcdEndpoints = strings.Split(*fEtcdEndpoints, ",")
 	}
 
-	var err error
-	mc, err := mistapiconnector.NewMac(hostName, *mistHost, mapi, lapi, *balancerHost, false, *routePrefix,
-		*playbackDomain, *mistURL, *sendAudio, *baseStreamName, etcdEndpoints, *etcdCaCert, *etcdCert, *etcdKey,
-		*amqpUrl)
+	opts := mistapiconnector.MacOptions{
+		NodeID: hostName, MistHost: *mistHost,
+		MistAPI: mapi, LivepeerAPI: lapi,
+		BalancerHost: *balancerHost, RoutePrefix: *routePrefix, PlaybackDomain: *playbackDomain, MistURL: *mistURL,
+		BaseStreamName: *baseStreamName, CheckBandwidth: false, SendAudio: *sendAudio,
+		EtcdEndpoints: etcdEndpoints, EtcdCaCert: *etcdCaCert, EtcdCert: *etcdCert, EtcdKey: *etcdKey,
+		AMQPUrl: *amqpUrl}
+	mc, err := mistapiconnector.NewMac(opts)
 	if err != nil {
 		glog.Fatalf("Error creating mist-api-connector %v", err)
 	}

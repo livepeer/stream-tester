@@ -66,17 +66,6 @@ type (
 		SrvShutCh() chan error
 	}
 
-	// MacOptions configuration object
-	MacOptions struct {
-		Host      string
-		Port      uint32
-		OwnURI    string
-		MistHost  string
-		MistCreds string
-		APIToken  string
-		APIServer string
-	}
-
 	etcdRevData struct {
 		revision int64
 		entries  []string
@@ -120,12 +109,25 @@ type (
 		Height   int    `json:"height,omitempty"`
 	}
 
+	// MacOptions configuration object
+	MacOptions struct {
+		NodeID, MistHost string
+		MistAPI          *mist.API
+		LivepeerAPI      *livepeer.API
+		BalancerHost     string
+		CheckBandwidth   bool
+		RoutePrefix, PlaybackDomain, MistURL,
+		SendAudio, BaseStreamName string
+		EtcdEndpoints                 []string
+		EtcdCaCert, EtcdCert, EtcdKey string
+		AMQPUrl                       string
+	}
+
 	trackList map[string]*trackListDesc
 
 	mac struct {
 		ctx            context.Context
 		cancel         context.CancelFunc
-		opts           *MacOptions
 		mapi           *mist.API
 		lapi           *livepeer.API
 		balancerHost   string
@@ -150,10 +152,9 @@ type (
 )
 
 // NewMac ...
-func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, routePrefix, playbackDomain, mistURL,
-	sendAudio, baseStreamName string, etcdEndpoints []string, etcdCaCert, etcdCert, etcdKey, amqpUrl string) (IMac, error) {
-	if balancerHost != "" && !strings.Contains(balancerHost, ":") {
-		balancerHost = balancerHost + ":8042" // must set default port for Mist's Load Balancer
+func NewMac(opts MacOptions) (IMac, error) {
+	if opts.BalancerHost != "" && !strings.Contains(opts.BalancerHost, ":") {
+		opts.BalancerHost = opts.BalancerHost + ":8042" // must set default port for Mist's Load Balancer
 	}
 	useEtcd := false
 	var cli *clientv3.Client
@@ -194,8 +195,8 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 	*/
 
 	var producer *event.AMQPProducer
-	if amqpUrl != "" {
-		pu, err := url.Parse(amqpUrl)
+	if opts.AMQPUrl != "" {
+		pu, err := url.Parse(opts.AMQPUrl)
 		if err != nil {
 			cancel()
 			return nil, fmt.Errorf("error parsing AMQP url err=%w", err)
@@ -208,7 +209,7 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 			}
 			return c.ExchangeDeclare(ownExchangeName, "topic", true, false, false, false, nil)
 		}
-		producer, err = event.NewAMQPProducer(amqpUrl, event.NewAMQPConnectFunc(setup))
+		producer, err = event.NewAMQPProducer(opts.AMQPUrl, event.NewAMQPConnectFunc(setup))
 		if err != nil {
 			cancel()
 			return nil, err
@@ -217,14 +218,14 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 		glog.Infof("AMQP url is empty!")
 	}
 
-	glog.Infof("etcd endpoints: %+v, len %d", etcdEndpoints, len(etcdEndpoints))
-	if len(etcdEndpoints) > 0 {
+	glog.Infof("etcd endpoints: %+v, len %d", opts.EtcdEndpoints, len(opts.EtcdEndpoints))
+	if len(opts.EtcdEndpoints) > 0 {
 		var tcfg *tls.Config
-		if etcdCaCert != "" || etcdCert != "" || etcdKey != "" {
+		if opts.EtcdCaCert != "" || opts.EtcdCert != "" || opts.EtcdKey != "" {
 			tlsifo := transport.TLSInfo{
-				CertFile:      etcdCert,
-				KeyFile:       etcdKey,
-				TrustedCAFile: etcdCaCert,
+				CertFile:      opts.EtcdCert,
+				KeyFile:       opts.EtcdKey,
+				TrustedCAFile: opts.EtcdCaCert,
 			}
 			tcfg, err = tlsifo.ClientConfig()
 			if err != nil {
@@ -234,7 +235,7 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 		}
 		useEtcd = true
 		cli, err = clientv3.New(clientv3.Config{
-			Endpoints:        etcdEndpoints,
+			Endpoints:        opts.EtcdEndpoints,
 			DialTimeout:      etcdDialTimeout,
 			AutoSyncInterval: etcdAutoSyncInterval,
 			TLS:              tcfg,
@@ -260,18 +261,18 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 		}
 	}
 	mc := &mac{
-		mistHot:        mistHost,
-		mapi:           mapi,
-		lapi:           lapi,
-		checkBandwidth: checkBandwidth,
-		balancerHost:   balancerHost,
+		mistHot:        opts.MistHost,
+		mapi:           opts.MistAPI,
+		lapi:           opts.LivepeerAPI,
+		checkBandwidth: opts.CheckBandwidth,
+		balancerHost:   opts.BalancerHost,
 		// pub2id:         make(map[string]string), // public key to stream id
 		pub2info:       make(map[string]*streamInfo), // public key to info
-		routePrefix:    routePrefix,
-		mistURL:        mistURL,
-		playbackDomain: playbackDomain,
-		sendAudio:      sendAudio,
-		baseStreamName: baseStreamName,
+		routePrefix:    opts.RoutePrefix,
+		mistURL:        opts.MistURL,
+		playbackDomain: opts.PlaybackDomain,
+		sendAudio:      opts.SendAudio,
+		baseStreamName: opts.BaseStreamName,
 		useEtcd:        useEtcd,
 		etcdClient:     cli,
 		etcdSession:    sess,
@@ -283,7 +284,7 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 	}
 	go mc.recoverSessionLoop()
 	if producer != nil {
-		startMetricsCollector(ctx, statsCollectionPeriod, nodeID, mapi, producer, ownExchangeName, mc)
+		startMetricsCollector(ctx, statsCollectionPeriod, opts.NodeID, opts.MistAPI, producer, ownExchangeName, mc)
 	}
 	return mc, nil
 }
