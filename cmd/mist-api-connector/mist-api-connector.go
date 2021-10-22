@@ -71,7 +71,7 @@ func main() {
 		routePrefix = consulPrefix
 	}
 	if *mistURL == "" && *consulMistURL != "" {
-		glog.Warningln("--consul-mist-url is deprecated, use --mist-url instead")
+		glog.Warningln("--consul-mist-url is deprecated, use --route-mist-url instead")
 		mistURL = consulMistURL
 	}
 
