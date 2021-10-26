@@ -92,12 +92,24 @@ func main() {
 	}
 
 	opts := mistapiconnector.MacOptions{
-		NodeID: hostName, MistHost: *mistHost,
-		MistAPI: mapi, LivepeerAPI: lapi,
-		BalancerHost: *balancerHost, RoutePrefix: *routePrefix, PlaybackDomain: *playbackDomain, MistURL: *mistURL,
-		BaseStreamName: *baseStreamName, CheckBandwidth: false, SendAudio: *sendAudio,
-		EtcdEndpoints: etcdEndpoints, EtcdCaCert: *etcdCaCert, EtcdCert: *etcdCert, EtcdKey: *etcdKey,
-		AMQPUrl: *amqpUrl, OwnRegion: *ownRegion}
+		NodeID:         hostName,
+		MistHost:       *mistHost,
+		MistAPI:        mapi,
+		LivepeerAPI:    lapi,
+		BalancerHost:   *balancerHost,
+		RoutePrefix:    *routePrefix,
+		PlaybackDomain: *playbackDomain,
+		MistURL:        *mistURL,
+		BaseStreamName: *baseStreamName,
+		CheckBandwidth: false,
+		SendAudio:      *sendAudio,
+		EtcdEndpoints:  etcdEndpoints,
+		EtcdCaCert:     *etcdCaCert,
+		EtcdCert:       *etcdCert,
+		EtcdKey:        *etcdKey,
+		AMQPUrl:        *amqpUrl,
+		OwnRegion:      *ownRegion,
+	}
 	mc, err := mistapiconnector.NewMac(opts)
 	if err != nil {
 		glog.Fatalf("Error creating mist-api-connector %v", err)
