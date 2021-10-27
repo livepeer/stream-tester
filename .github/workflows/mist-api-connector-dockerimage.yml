@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - mist-api-connector
-      - vg/feat/stream-active-event
 
 jobs:
 
@@ -24,7 +23,7 @@ jobs:
       id: tags
       uses: livepeer/action-gh-release-tags@v0
       with:
-        force-latest: false
+        force-latest: true
 
     - name: Build the Docker image
       run: |
