@@ -147,6 +147,7 @@ type (
 		etcdPub2rev    map[string]etcdRevData // public key to revision of etcd keys
 		pub2info       map[string]*streamInfo // public key to info
 		producer       *event.AMQPProducer
+		nodeID         string
 		ownRegion      string
 		// pub2id         map[string]string // public key to stream id
 	}
@@ -230,6 +231,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 		}
 	}
 	mc := &mac{
+		nodeID:         opts.NodeID,
 		mistHot:        opts.MistHost,
 		mapi:           opts.MistAPI,
 		lapi:           opts.LivepeerAPI,
@@ -674,7 +676,7 @@ func (mc *mac) emitStreamStateEvent(stream *livepeer.CreateStreamResp, state dat
 	if streamID == "" {
 		streamID = stream.ID
 	}
-	stateEvt := data.NewStreamStateEvent(streamID, stream.UserID, mc.ownRegion, state)
+	stateEvt := data.NewStreamStateEvent(mc.nodeID, mc.ownRegion, stream.UserID, streamID, state)
 	mc.emitAmqpEvent(ownExchangeName, "stream.state."+streamID, stateEvt)
 }
 
