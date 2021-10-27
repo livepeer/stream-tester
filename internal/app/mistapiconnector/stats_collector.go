@@ -16,15 +16,15 @@ type infoProvider interface {
 }
 
 type metricsCollector struct {
-	nodeID       string
-	mapi         *mist.API
-	producer     *event.AMQPProducer
-	amqpExchange string
+	nodeID, ownRegion string
+	mapi              *mist.API
+	producer          *event.AMQPProducer
+	amqpExchange      string
 	infoProvider
 }
 
-func startMetricsCollector(ctx context.Context, period time.Duration, nodeID string, mapi *mist.API, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
-	mc := &metricsCollector{nodeID, mapi, producer, amqpExchange, infop}
+func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
+	mc := &metricsCollector{nodeID, ownRegion, mapi, producer, amqpExchange, infop}
 	go mc.mainLoop(ctx, period)
 }
 
@@ -64,7 +64,7 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 			glog.Infof("Mist exported metrics from unknown stream. streamId=%q metrics=%+v", streamID, metrics)
 			continue
 		}
-		mseEvent := createMetricsEvent(c.nodeID, info, metrics)
+		mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)
 		err := c.producer.Publish(ctx, event.AMQPMessage{
 			Exchange: c.amqpExchange,
 			Key:      fmt.Sprintf("stream.metrics.%s", info.stream.ID),
@@ -80,7 +80,7 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 	return nil
 }
 
-func createMetricsEvent(nodeID string, info *streamInfo, metrics *streamMetrics) *data.MediaServerMetricsEvent {
+func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *streamMetrics) *data.MediaServerMetricsEvent {
 	info.mu.Lock()
 	defer info.mu.Unlock()
 	multistream := make([]*data.MultistreamTargetMetrics, len(metrics.pushes))
@@ -107,7 +107,7 @@ func createMetricsEvent(nodeID string, info *streamInfo, metrics *streamMetrics)
 			stream.MediaTimeMs = &ss.MediaTimeMs
 		}
 	}
-	return data.NewMediaServerMetricsEvent(nodeID, info.stream.ID, stream, multistream)
+	return data.NewMediaServerMetricsEvent(nodeID, region, info.stream.ID, stream, multistream)
 }
 
 // streamMetrics aggregates all the data collected from Mist about a specific

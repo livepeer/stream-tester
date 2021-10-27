@@ -48,6 +48,7 @@ func main() {
 	etcdCert := fs.String("etcd-cert", "", "ETCD client certificate file name")
 	etcdKey := fs.String("etcd-key", "", "ETCD client certificate key file name")
 	amqpUrl := fs.String("amqp-url", "", "RabbitMQ url")
+	ownRegion := fs.String("own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 	_ = fs.String("config", "", "config file (optional)")
 
 	consulPrefix := fs.String("consul-prefix", "", "DEPRECATED - use --route-prefix")
@@ -70,7 +71,7 @@ func main() {
 		routePrefix = consulPrefix
 	}
 	if *mistURL == "" && *consulMistURL != "" {
-		glog.Warningln("--consul-mist-url is deprecated, use --mist-url instead")
+		glog.Warningln("--consul-mist-url is deprecated, use --route-mist-url instead")
 		mistURL = consulMistURL
 	}
 
@@ -90,10 +91,26 @@ func main() {
 		etcdEndpoints = strings.Split(*fEtcdEndpoints, ",")
 	}
 
-	var err error
-	mc, err := mistapiconnector.NewMac(hostName, *mistHost, mapi, lapi, *balancerHost, false, *routePrefix,
-		*playbackDomain, *mistURL, *sendAudio, *baseStreamName, etcdEndpoints, *etcdCaCert, *etcdCert, *etcdKey,
-		*amqpUrl)
+	opts := mistapiconnector.MacOptions{
+		NodeID:         hostName,
+		MistHost:       *mistHost,
+		MistAPI:        mapi,
+		LivepeerAPI:    lapi,
+		BalancerHost:   *balancerHost,
+		RoutePrefix:    *routePrefix,
+		PlaybackDomain: *playbackDomain,
+		MistURL:        *mistURL,
+		BaseStreamName: *baseStreamName,
+		CheckBandwidth: false,
+		SendAudio:      *sendAudio,
+		EtcdEndpoints:  etcdEndpoints,
+		EtcdCaCert:     *etcdCaCert,
+		EtcdCert:       *etcdCert,
+		EtcdKey:        *etcdKey,
+		AMQPUrl:        *amqpUrl,
+		OwnRegion:      *ownRegion,
+	}
+	mc, err := mistapiconnector.NewMac(opts)
 	if err != nil {
 		glog.Fatalf("Error creating mist-api-connector %v", err)
 	}

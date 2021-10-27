@@ -66,17 +66,6 @@ type (
 		SrvShutCh() chan error
 	}
 
-	// MacOptions configuration object
-	MacOptions struct {
-		Host      string
-		Port      uint32
-		OwnURI    string
-		MistHost  string
-		MistCreds string
-		APIToken  string
-		APIServer string
-	}
-
 	etcdRevData struct {
 		revision int64
 		entries  []string
@@ -120,12 +109,25 @@ type (
 		Height   int    `json:"height,omitempty"`
 	}
 
+	// MacOptions configuration object
+	MacOptions struct {
+		NodeID, MistHost string
+		MistAPI          *mist.API
+		LivepeerAPI      *livepeer.API
+		BalancerHost     string
+		CheckBandwidth   bool
+		RoutePrefix, PlaybackDomain, MistURL,
+		SendAudio, BaseStreamName string
+		EtcdEndpoints                 []string
+		EtcdCaCert, EtcdCert, EtcdKey string
+		AMQPUrl, OwnRegion            string
+	}
+
 	trackList map[string]*trackListDesc
 
 	mac struct {
 		ctx            context.Context
 		cancel         context.CancelFunc
-		opts           *MacOptions
 		mapi           *mist.API
 		lapi           *livepeer.API
 		balancerHost   string
@@ -145,15 +147,16 @@ type (
 		etcdPub2rev    map[string]etcdRevData // public key to revision of etcd keys
 		pub2info       map[string]*streamInfo // public key to info
 		producer       *event.AMQPProducer
+		nodeID         string
+		ownRegion      string
 		// pub2id         map[string]string // public key to stream id
 	}
 )
 
 // NewMac ...
-func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balancerHost string, checkBandwidth bool, routePrefix, playbackDomain, mistURL,
-	sendAudio, baseStreamName string, etcdEndpoints []string, etcdCaCert, etcdCert, etcdKey, amqpUrl string) (IMac, error) {
-	if balancerHost != "" && !strings.Contains(balancerHost, ":") {
-		balancerHost = balancerHost + ":8042" // must set default port for Mist's Load Balancer
+func NewMac(opts MacOptions) (IMac, error) {
+	if opts.BalancerHost != "" && !strings.Contains(opts.BalancerHost, ":") {
+		opts.BalancerHost = opts.BalancerHost + ":8042" // must set default port for Mist's Load Balancer
 	}
 	useEtcd := false
 	var cli *clientv3.Client
@@ -161,41 +164,9 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 	var err error
 	ctx, cancel := context.WithCancel(context.Background())
 
-	/*
-		conn, err := amqp.Dial("amqp://localhost:5672/livepeer")
-		if err != nil {
-			err = fmt.Errorf("mist-api-connector: Failed to connect to RabbitMQ err=%w", err)
-			return nil, err
-		}
-		ch, err := conn.Channel()
-		if err != nil {
-			conn.Close()
-			err = fmt.Errorf("mist-api-connector: Failed to open channel err=%w", err)
-			return nil, err
-		}
-		if err := ch.Confirm(false); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("request confirms: %w", err)
-		}
-		confirms := make(chan amqp.Confirmation, 16)
-		closed := make(chan *amqp.Error, 16)
-		ch.NotifyPublish(confirms)
-		ch.NotifyClose(closed)
-		go func() {
-			for confirm := range confirms {
-				glog.Infof("==> got confirm ack=%v tag=%v", confirm.Ack, confirm.DeliveryTag)
-			}
-		}()
-		go func() {
-			for close := range closed {
-				glog.Infof("==> got amqp closed %+v", close)
-			}
-		}()
-	*/
-
 	var producer *event.AMQPProducer
-	if amqpUrl != "" {
-		pu, err := url.Parse(amqpUrl)
+	if opts.AMQPUrl != "" {
+		pu, err := url.Parse(opts.AMQPUrl)
 		if err != nil {
 			cancel()
 			return nil, fmt.Errorf("error parsing AMQP url err=%w", err)
@@ -208,7 +179,7 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 			}
 			return c.ExchangeDeclare(ownExchangeName, "topic", true, false, false, false, nil)
 		}
-		producer, err = event.NewAMQPProducer(ctx, amqpUrl, event.NewAMQPConnectFunc(setup))
+		producer, err = event.NewAMQPProducer(opts.AMQPUrl, event.NewAMQPConnectFunc(setup))
 		if err != nil {
 			cancel()
 			return nil, err
@@ -217,14 +188,14 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 		glog.Infof("AMQP url is empty!")
 	}
 
-	glog.Infof("etcd endpoints: %+v, len %d", etcdEndpoints, len(etcdEndpoints))
-	if len(etcdEndpoints) > 0 {
+	glog.Infof("etcd endpoints: %+v, len %d", opts.EtcdEndpoints, len(opts.EtcdEndpoints))
+	if len(opts.EtcdEndpoints) > 0 {
 		var tcfg *tls.Config
-		if etcdCaCert != "" || etcdCert != "" || etcdKey != "" {
+		if opts.EtcdCaCert != "" || opts.EtcdCert != "" || opts.EtcdKey != "" {
 			tlsifo := transport.TLSInfo{
-				CertFile:      etcdCert,
-				KeyFile:       etcdKey,
-				TrustedCAFile: etcdCaCert,
+				CertFile:      opts.EtcdCert,
+				KeyFile:       opts.EtcdKey,
+				TrustedCAFile: opts.EtcdCaCert,
 			}
 			tcfg, err = tlsifo.ClientConfig()
 			if err != nil {
@@ -234,7 +205,7 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 		}
 		useEtcd = true
 		cli, err = clientv3.New(clientv3.Config{
-			Endpoints:        etcdEndpoints,
+			Endpoints:        opts.EtcdEndpoints,
 			DialTimeout:      etcdDialTimeout,
 			AutoSyncInterval: etcdAutoSyncInterval,
 			TLS:              tcfg,
@@ -260,18 +231,19 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 		}
 	}
 	mc := &mac{
-		mistHot:        mistHost,
-		mapi:           mapi,
-		lapi:           lapi,
-		checkBandwidth: checkBandwidth,
-		balancerHost:   balancerHost,
+		nodeID:         opts.NodeID,
+		mistHot:        opts.MistHost,
+		mapi:           opts.MistAPI,
+		lapi:           opts.LivepeerAPI,
+		checkBandwidth: opts.CheckBandwidth,
+		balancerHost:   opts.BalancerHost,
 		// pub2id:         make(map[string]string), // public key to stream id
 		pub2info:       make(map[string]*streamInfo), // public key to info
-		routePrefix:    routePrefix,
-		mistURL:        mistURL,
-		playbackDomain: playbackDomain,
-		sendAudio:      sendAudio,
-		baseStreamName: baseStreamName,
+		routePrefix:    opts.RoutePrefix,
+		mistURL:        opts.MistURL,
+		playbackDomain: opts.PlaybackDomain,
+		sendAudio:      opts.SendAudio,
+		baseStreamName: opts.BaseStreamName,
 		useEtcd:        useEtcd,
 		etcdClient:     cli,
 		etcdSession:    sess,
@@ -280,10 +252,11 @@ func NewMac(nodeID, mistHost string, mapi *mist.API, lapi *livepeer.API, balance
 		ctx:            ctx,
 		cancel:         cancel,
 		producer:       producer,
+		ownRegion:      opts.OwnRegion,
 	}
 	go mc.recoverSessionLoop()
 	if producer != nil {
-		startMetricsCollector(ctx, statsCollectionPeriod, nodeID, mapi, producer, ownExchangeName, mc)
+		startMetricsCollector(ctx, statsCollectionPeriod, opts.NodeID, opts.OwnRegion, opts.MistAPI, producer, ownExchangeName, mc)
 	}
 	return mc, nil
 }
@@ -331,6 +304,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 			if err != nil {
 				glog.Error(err)
 			}
+			mc.emitStreamStateEvent(info.stream, data.StreamState{Active: false})
 			info.mu.Lock()
 			info.stopped = true
 			info.mu.Unlock()
@@ -614,6 +588,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			return true
 		}
 	}
+	go mc.emitStreamStateEvent(stream, data.StreamState{Active: true})
 	w.Write([]byte(responseName))
 	metrics.StartStream()
 	glog.Infof("Responded with '%s'", responseName)
@@ -691,17 +666,21 @@ func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
 		if !pushInfo.pushStopped {
 			// there was no error starting RTMP push, so no we can send 'multistream.connected' webhook event
 			pushInfo.pushStartEmitted = true
-			mc.emitWebhookEvent(info, pushInfo, eventMultistreamConnected)
+			mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamConnected)
 		}
 	}
 }
 
-func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, eventKey string) {
-	if mc.producer == nil {
-		return
+func (mc *mac) emitStreamStateEvent(stream *livepeer.CreateStreamResp, state data.StreamState) {
+	streamID := stream.ParentID
+	if streamID == "" {
+		streamID = stream.ID
 	}
+	stateEvt := data.NewStreamStateEvent(mc.nodeID, mc.ownRegion, stream.UserID, streamID, state)
+	mc.emitAmqpEvent(ownExchangeName, "stream.state."+streamID, stateEvt)
+}
 
-	stream := info.stream
+func (mc *mac) emitWebhookEvent(stream *livepeer.CreateStreamResp, pushInfo *pushStatus, eventKey string) {
 	streamID, sessionID := stream.ParentID, stream.ID
 	if streamID == "" {
 		streamID = sessionID
@@ -709,22 +688,30 @@ func (mc *mac) emitWebhookEvent(info *streamInfo, pushInfo *pushStatus, eventKey
 	payload := data.MultistreamWebhookPayload{
 		Target: pushToMultistreamTargetInfo(pushInfo),
 	}
-	whEvt, err := data.NewWebhookEvent(streamID, eventKey, stream.UserID, sessionID, payload)
+	hookEvt, err := data.NewWebhookEvent(streamID, eventKey, stream.UserID, sessionID, payload)
 	if err != nil {
 		glog.Errorf("Error creating webhook event err=%v", err)
 		return
 	}
+	mc.emitAmqpEvent(webhooksExchangeName, "events."+eventKey, hookEvt)
+}
 
-	glog.Infof("Publishing amqp message to exchange=%s msg=%+v", webhooksExchangeName, whEvt)
-	err = mc.producer.Publish(mc.ctx, event.AMQPMessage{
-		Exchange:   webhooksExchangeName,
-		Key:        "events." + eventKey,
-		Body:       whEvt,
+func (mc *mac) emitAmqpEvent(exchange, key string, evt data.Event) {
+	if mc.producer == nil {
+		return
+	}
+	glog.Infof("Publishing amqp message to exchange=%s key=%s msg=%+v", exchange, key, evt)
+
+	ctx, cancel := context.WithTimeout(mc.ctx, 3*time.Second)
+	defer cancel()
+	err := mc.producer.Publish(ctx, event.AMQPMessage{
+		Exchange:   exchange,
+		Key:        key,
+		Body:       evt,
 		Persistent: true,
 	})
 	if err != nil {
-		glog.Errorf("Error publishing message msg=%+v err=%v", whEvt, err)
-		return
+		glog.Errorf("Error publishing amqp message to exchange=%s key=%s, err=%v", exchange, key, err)
 	}
 }
 
@@ -747,11 +734,11 @@ func (mc *mac) triggerPushEnd(w http.ResponseWriter, r *http.Request, lines []st
 			if pushInfo, ok := info.pushStatus[lines[2]]; ok {
 				if pushInfo.pushStartEmitted {
 					// emit normal push.end
-					mc.emitWebhookEvent(info, pushInfo, eventMultistreamDisconnected)
+					mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamDisconnected)
 				} else {
 					pushInfo.pushStopped = true
 					//  emit push error
-					mc.emitWebhookEvent(info, pushInfo, eventMultistreamError)
+					mc.emitWebhookEvent(info.stream, pushInfo, eventMultistreamError)
 				}
 			} else {
 				glog.Errorf("For stream playbackID=%s got unknown RTMP push %s", playbackID, lines[1])
@@ -1226,32 +1213,58 @@ func (mc *mac) startSignalHandler() {
 
 func (mc *mac) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// start calling /setactve/false and sending events on active connections eagerly
+	deactivateGroup := &sync.WaitGroup{}
+	mc.deactiveAllStreams(ctx, deactivateGroup)
+
 	err := mc.srv.Shutdown(ctx)
-	cancel()
-	mc.cancel()
 	glog.Infof("Done shutting down server with err=%v", err)
 	mc.etcdClient.Close()
-	// now call /setactve/false on active connections
-	mc.deactiveAllStreams()
+	deactivateGroup.Wait()
+
+	mc.cancel()
 	mc.srvShutCh <- err
 }
 
-// deactiveAllStreams sends /setactive/false for all the active streams
-func (mc *mac) deactiveAllStreams() {
+// deactiveAllStreams sends /setactive/false for all the active streams as well
+// as AMQP events with the inactive state.
+func (mc *mac) deactiveAllStreams(ctx context.Context, wg *sync.WaitGroup) {
 	mc.mu.Lock()
-	defer mc.mu.Unlock()
 	ids := make([]string, 0, len(mc.pub2info))
+	streams := make([]*livepeer.CreateStreamResp, 0, len(mc.pub2info))
 	for _, info := range mc.pub2info {
 		ids = append(ids, info.id)
+		streams = append(streams, info.stream)
 	}
-	if len(ids) > 0 {
+	mc.mu.Unlock()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, stream := range streams {
+			mc.emitStreamStateEvent(stream, data.StreamState{Active: false})
+		}
+		err := mc.producer.Shutdown(ctx)
+		if err != nil {
+			glog.Errorf("Error shutting down AMQP producer err=%v", err)
+		}
+	}()
+
+	if len(ids) == 0 {
+		return
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		updated, err := mc.lapi.DeactivateMany(ids)
 		if err != nil {
 			glog.Errorf("Error setting many isActive to false ids=%+v err=%v", ids, err)
 		} else {
 			glog.Infof("Set many isActive to false ids=%+v rowCount=%d", ids, updated)
 		}
-	}
+	}()
 }
 
 func (mc *mac) getStreamInfo(mistID string) *streamInfo {
