@@ -91,7 +91,7 @@ func main() {
 	}
 
 	var err error
-	mc, err := mistapiconnector.NewMac(*mistHost, mapi, lapi, *balancerHost, false, *routePrefix,
+	mc, err := mistapiconnector.NewMac(hostName, *mistHost, mapi, lapi, *balancerHost, false, *routePrefix,
 		*playbackDomain, *mistURL, *sendAudio, *baseStreamName, etcdEndpoints, *etcdCaCert, *etcdCert, *etcdKey,
 		*amqpUrl)
 	if err != nil {

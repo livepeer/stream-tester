@@ -82,6 +82,11 @@ type (
 		Config        *Config            `json:"config,omitempty"`
 	}
 
+	MistStats struct {
+		StreamsStats map[string]*StreamStats `json:"stats_streams"`
+		PushList     []*Push                 `json:"push_list"`
+	}
+
 	Config struct {
 		Accesslog  string `json:"accesslog,omitempty"`
 		Controller struct {
@@ -140,6 +145,28 @@ type (
 		StopSessions bool       `json:"stop_sessions,omitempty"`
 		Realtime     bool       `json:"realtime,omitempty"`
 		Processes    []*Process `json:"processes,omitempty"`
+	}
+
+	// StreamStats and Push have a custom JSON unmarshaller, parsed from array.
+
+	StreamStats struct {
+		Clients     int
+		MediaTimeMs int64
+	}
+
+	Push struct {
+		ID           int64
+		Stream       string
+		OriginalURI  string
+		EffectiveURI string
+		Stats        *PushStats
+	}
+
+	PushStats struct {
+		ActiveSeconds int64 `json:"active_seconds"`
+		Bytes         int64 `json:"bytes"`
+		MediaTime     int64 `json:"mediatime"`
+		Tracks        []int `json:"tracks"`
 	}
 
 	authorize struct {
@@ -389,6 +416,33 @@ func (mapi *API) Streams() (map[string]*Stream, []string, error) {
 	return mr.Streams, mr.ActiveStreams, nil
 }
 
+// GetStats returns all available Mist stats
+func (mapi *API) GetStats() (*MistStats, error) {
+	command := fmt.Sprintf(`{"stats_streams":["clients","lastms"],"push_list":true,"authorize":{"username":"%s","password":"%s"}}`, mapi.login, mapi.challengeRepsonse)
+	u := mapi.apiURL + "?command=" + url.QueryEscape(command)
+	resp, err := httpClient.Do(uhttp.GetRequest(u))
+	if err != nil {
+		glog.Errorf("Error requesting stats from Mist server url=%s error=%v", u, err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		glog.Errorf("===== status error contacting Mist server (%s) status %d body: %s", u, resp.StatusCode, string(body))
+		return nil, fmt.Errorf("Status error %s", resp.Status)
+	}
+	if err != nil {
+		glog.Errorf("Error reading response body from Mist server url=%s error=%v", u, err)
+		return nil, err
+	}
+	glog.V(model.VVERBOSE).Infof("Mist response to url=%s body=%q", u, string(body))
+	var stats MistStats
+	if err = json.Unmarshal(body, &stats); err != nil {
+		return nil, err
+	}
+	return &stats, nil
+}
+
 // GetTriggers returns map of triggers
 func (mapi *API) GetTriggers() (TriggersMap, error) {
 	config, err := mapi.GetConfig()
@@ -535,4 +589,40 @@ func Presets2Profiles(presets []string) []Profile {
 		}
 	}
 	return res
+}
+
+func (s *StreamStats) UnmarshalJSON(data []byte) error {
+	var tmp StreamStats
+	if err := unmarshalJSONArray(data, &tmp.Clients, &tmp.MediaTimeMs); err != nil {
+		return err
+	}
+	*s = tmp
+	return nil
+}
+
+func (p *Push) UnmarshalJSON(data []byte) error {
+	// this field is undocumented and shows up as null everytime.
+	var unknown json.RawMessage
+	var tmp Push
+	if err := unmarshalJSONArray(data, &tmp.ID, &tmp.Stream, &tmp.OriginalURI, &tmp.EffectiveURI, &unknown, &tmp.Stats); err != nil {
+		return err
+	}
+	*p = tmp
+	return nil
+}
+
+func unmarshalJSONArray(data []byte, values ...interface{}) error {
+	var valuesData []json.RawMessage
+	if err := json.Unmarshal(data, &valuesData); err != nil {
+		return err
+	}
+	if len(valuesData) > len(values) {
+		valuesData = valuesData[:len(values)]
+	}
+	for i, vd := range valuesData {
+		if err := json.Unmarshal(vd, values[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
