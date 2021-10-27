@@ -435,9 +435,7 @@ func (mapi *API) GetStats() (*MistStats, error) {
 		glog.Errorf("Error reading response body from Mist server url=%s error=%v", u, err)
 		return nil, err
 	}
-	if glog.V(model.VVERBOSE) {
-		glog.Info("Mist response to url=%s body=%q", string(body))
-	}
+	glog.V(model.VVERBOSE).Infof("Mist response to url=%s body=%q", u, string(body))
 	var stats MistStats
 	if err = json.Unmarshal(body, &stats); err != nil {
 		return nil, err
