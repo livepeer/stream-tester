@@ -1,14 +1,8 @@
 name: Docker Image CI
-
-on:
-  push:
-    branches:
-      - master
+on: push
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -23,7 +17,7 @@ jobs:
       id: tags
       uses: livepeer/action-gh-release-tags@v0
       with:
-        force-latest: true
+        always-latest-on-branch: master
 
     - name: Build the Docker image
       run: |
