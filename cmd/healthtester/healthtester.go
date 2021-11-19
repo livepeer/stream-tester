@@ -1,4 +1,4 @@
-// Record tester is a tool to test Livepeer API's recording functionality
+// Health tester is a tool to test Livepeer API's Stream Health functionality
 package main
 
 import (
@@ -38,12 +38,12 @@ func main() {
 	flag.Set("logtostderr", "true")
 	vFlag := flag.Lookup("v")
 
-	fs := flag.NewFlagSet("recordtester", flag.ExitOnError)
+	fs := flag.NewFlagSet("healthtester", flag.ExitOnError)
 
 	verbosity := fs.String("v", "", "Log verbosity.  {4|5|6}")
 	version := fs.Bool("version", false, "Print out the version")
 
-	sim := fs.Int("sim", 0, "Load test using <sim> streams")
+	sim := fs.Int("sim", 1, "Load test using <sim> streams")
 	testDuration := fs.Duration("test-dur", 0, "How long to run overall test")
 	pauseDuration := fs.Duration("pause-dur", 0, "How long to wait between two consecutive RTMP streams that will comprise one user session")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
@@ -51,7 +51,6 @@ func main() {
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
 	continuousTest := fs.Duration("continuous-test", 0, "Do continuous testing")
 	useHttp := fs.Bool("http", false, "Do HTTP tests instead of RTMP")
-	testMP4 := fs.Bool("mp4", false, "Download MP4 of recording")
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
 	discordUsersToNotify := fs.String("discord-users", "", "Id's of users to notify in case of failure")
@@ -70,7 +69,7 @@ func main() {
 	vFlag.Value.Set(*verbosity)
 
 	hostName, _ := os.Hostname()
-	fmt.Println("Recordtester version: " + model.Version)
+	fmt.Println("Health Tester version: " + model.Version)
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
 	fmt.Printf("Production: %v\n", model.Production)
@@ -78,42 +77,37 @@ func main() {
 	if *version {
 		return
 	}
-	metrics.InitCensus(hostName, model.Version, "recordtester")
+	if *fileArg == "" {
+		fmt.Println("Must provide -file argument")
+		os.Exit(1)
+	}
+	if *pauseDuration > 5*time.Minute {
+		fmt.Println("Pause must be less than 5 min")
+		os.Exit(1)
+	}
+	if *testDuration == 0 {
+		glog.Fatalf("-test-dur must be specified")
+	}
+	if *apiToken == "" {
+		glog.Fatalf("-api-token must be specified")
+	}
+	if *sim <= 0 {
+		glog.Fatalf("-sim must be greater than 0")
+	}
+
+	metrics.InitCensus(hostName, model.Version, "healthtester")
 	testers.IgnoreNoCodecError = true
 	testers.IgnoreGaps = true
 	testers.IgnoreTimeDrift = true
 	testers.StartDelayBetweenGroups = 0
 	model.ProfilesNum = 0
 
-	if *fileArg == "" {
-		fmt.Println("Should provide -file argument")
-		os.Exit(1)
-	}
-	if *pauseDuration > 5*time.Minute {
-		fmt.Println("Pause should be less than 5 min")
-		os.Exit(1)
-	}
-	var err error
-	var fileName string
-
-	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
+	var (
+		err           error
+		fileName      string
+		gctx, gcancel = context.WithCancel(context.Background()) // to be used as global parent context, in the future
+	)
 	defer gcancel()
-	// es := checkDown(gctx, "https://fra-cdn.livepeer.monster/recordings/474a6bc4-94fd-469d-a8c4-ec94bceb0323/index.m3u8", *testDuration)
-	// os.Exit(es)
-	// return
-
-	// if *profiles == 0 {
-	// 	fmt.Println("Number of profiles couldn't be set to zero")
-	// 	os.Exit(1)
-	// }
-	// model.ProfilesNum = int(*profiles)
-
-	if *testDuration == 0 {
-		glog.Fatalf("-test-dur should be specified")
-	}
-	if *apiToken == "" {
-		glog.Fatalf("-api-token should be specified")
-	}
 
 	if fileName, err = utils.GetFile(*fileArg, strings.ReplaceAll(hostName, ".", "_")); err != nil {
 		if err == utils.ErrNotFound {
@@ -130,6 +124,7 @@ func main() {
 		if fn != fa {
 			os.Remove(fn)
 		}
+		// TODO: Uncomment this actual cleanup?
 		if lapi != nil && len(createdAPIStreams) > 0 {
 			// for _, sid := range createdAPIStreams {
 			// lapi.DeleteStream(sid)
@@ -155,71 +150,22 @@ func main() {
 	lapi.Init()
 	glog.Infof("Choosen server: %s", lapi.GetServer())
 
-	/*
-		sessionsx, err := lapi.GetSessions("1f770f0a-9177-49bd-a848-023abee7c09b")
-		if err != nil {
-			glog.Errorf("Error getting sessions for stream id=%s err=%v", ".ID", err)
-			exit(252, fileName, *fileArg, err)
-		}
-		glog.Infof("Sessions: %+v", sessionsx)
-	*/
-
-	exitc := make(chan os.Signal, 1)
-	signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+	sigctx := contextUntilSignal(gctx, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	go func(fn, fa string) {
-		<-exitc
-		fmt.Println("Got Ctrl-C, cancelling")
-		gcancel()
+		<-sigctx.Done()
+		if gctx.Err() == nil {
+			fmt.Println("Got Ctrl-C, cancelling")
+			gcancel()
+		}
 		cleanup(fn, fa)
 		time.Sleep(2 * time.Second)
-		// exit(0, fn, fa, nil)
 	}(fileName, *fileArg)
 	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
 
-	if *sim > 1 {
-		var testers []recordtester.IRecordTester
-		var eses []int
-		var wg sync.WaitGroup
-		var es int
-		var err error
-		start := time.Now()
-
-		for i := 0; i < *sim; i++ {
-			rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, *testMP4)
-			eses = append(eses, 0)
-			testers = append(testers, rt)
-			wg.Add(1)
-			go func(ii int) {
-				les, lerr := rt.Start(fileName, *testDuration, *pauseDuration)
-				glog.Infof("===> ii=%d les=%d lerr=%v", ii, les, lerr)
-				eses[ii] = les
-				if les != 0 {
-					es = les
-				}
-				if lerr != nil {
-					err = lerr
-				}
-				wg.Done()
-			}(i)
-			wait := time.Duration((3 + rand.Intn(5))) * time.Second
-			time.Sleep(wait)
-		}
-		wg.Wait()
-		var succ int
-		for _, r := range eses {
-			if r == 0 {
-				succ++
-			}
-		}
-		took := time.Since(start)
-		glog.Infof("%d streams test ended in %s success %f%%", *sim, took, float64(succ)/float64(len(eses))*100.0)
-		time.Sleep(1 * time.Hour)
-		exit(es, fileName, *fileArg, err)
-		return
-	} else if *continuousTest > 0 {
+	if *continuousTest > 0 {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
-		crt := recordtester.NewContinuousRecordTester(gctx, lapi, *pagerDutyIntegrationKey, *pagerDutyComponent, *useHttp, *testMP4)
+		crt := recordtester.NewContinuousRecordTester(gctx, lapi, *pagerDutyIntegrationKey, *pagerDutyComponent, *useHttp, false)
 		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 		if err != nil {
 			glog.Warningf("Continuous test ended with err=%v", err)
@@ -227,8 +173,77 @@ func main() {
 		exit(0, fileName, *fileArg, err)
 		return
 	}
-	// just one stream
-	rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, *testMP4)
-	es, err := rt.Start(fileName, *testDuration, *pauseDuration)
-	exit(es, fileName, *fileArg, err)
+
+	if *sim == 1 {
+		// just one stream
+		rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, false)
+		es, err := rt.Start(fileName, *testDuration, *pauseDuration)
+		exit(es, fileName, *fileArg, err)
+		return
+	}
+	type testResult struct {
+		exitCode int
+		err      error
+	}
+	var (
+		results = make(chan testResult)
+		wg      = sync.WaitGroup{}
+		start   = time.Now()
+	)
+	for i := 0; i < *sim; i++ {
+		if i > 0 {
+			waitSec := 3 + rand.Intn(5)
+			time.Sleep(time.Duration(waitSec) * time.Second)
+		}
+		wg.Add(1)
+		go func(ii int) {
+			defer wg.Done()
+			rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, false)
+			les, lerr := rt.Start(fileName, *testDuration, *pauseDuration)
+			glog.Infof("===> ii=%d les=%d lerr=%v", ii, les, lerr)
+			results <- testResult{les, lerr}
+		}(i)
+	}
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+	exitCode, successes := 0, 0
+	for r := range results {
+		if r.exitCode > exitCode {
+			exitCode = r.exitCode
+		}
+		if r.exitCode == 0 && r.err == nil {
+			successes++
+		}
+	}
+	took := time.Since(start)
+	glog.Infof("%d streams test ended in %s. success rate: %f%%", *sim, took, float64(successes)/float64(*sim)*100.0)
+	time.Sleep(1 * time.Hour)
+	exit(exitCode, fileName, *fileArg, err)
+}
+
+func contextUntilSignal(parent context.Context, sigs ...os.Signal) context.Context {
+	ctx, cancel := context.WithCancel(parent)
+	go func() {
+		defer cancel()
+		waitSignal(sigs...)
+	}()
+	return ctx
+}
+
+func waitSignal(sigs ...os.Signal) {
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, sigs...)
+	defer signal.Stop(sigc)
+
+	signal := <-sigc
+	switch signal {
+	case syscall.SIGINT:
+		glog.Infof("Got Ctrl-C, shutting down")
+	case syscall.SIGTERM:
+		glog.Infof("Got SIGTERM, shutting down")
+	default:
+		glog.Infof("Got signal %d, shutting down", signal)
+	}
 }
