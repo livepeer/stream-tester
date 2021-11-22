@@ -181,46 +181,52 @@ func main() {
 		exit(es, fileName, *fileArg, err)
 		return
 	}
-	type testResult struct {
-		exitCode int
-		err      error
-	}
-	var (
-		results = make(chan testResult)
-		wg      = sync.WaitGroup{}
-		start   = time.Now()
-	)
-	for i := 0; i < *sim; i++ {
-		if i > 0 {
-			waitSec := 3 + rand.Intn(5)
-			time.Sleep(time.Duration(waitSec) * time.Second)
+	start := time.Now()
+	results := runMultiple(*sim, func(ii int) (int, error) {
+		waitSec := ii * (3 + rand.Intn(5))
+		time.Sleep(time.Duration(waitSec) * time.Second)
+
+		rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, false)
+		les, lerr := rt.Start(fileName, *testDuration, *pauseDuration)
+		glog.Infof("===> ii=%d les=%d lerr=%v", ii, les, lerr)
+		return les, lerr
+	})
+	exitCode, successes := 0, 0
+	for r := range results {
+		if r.exitCode > exitCode {
+			exitCode = r.exitCode
+		} else if r.exitCode == 0 && r.err == nil {
+			successes++
 		}
+	}
+	took := time.Since(start)
+	glog.Infof("%d streams test ended in %s. success rate: %f%%", *sim, took, float64(successes)/float64(*sim)*100.0)
+	time.Sleep(1 * time.Hour) // TODO: still needed? remove this
+	exit(exitCode, fileName, *fileArg, err)
+}
+
+type result struct {
+	index    int
+	exitCode int
+	err      error
+}
+
+func runMultiple(count int, f func(idx int) (int, error)) <-chan result {
+	results := make(chan result)
+	wg := sync.WaitGroup{}
+	for i := 0; i < count; i++ {
 		wg.Add(1)
 		go func(ii int) {
 			defer wg.Done()
-			rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, false)
-			les, lerr := rt.Start(fileName, *testDuration, *pauseDuration)
-			glog.Infof("===> ii=%d les=%d lerr=%v", ii, les, lerr)
-			results <- testResult{les, lerr}
+			code, err := f(ii)
+			results <- result{ii, code, err}
 		}(i)
 	}
 	go func() {
 		wg.Wait()
 		close(results)
 	}()
-	exitCode, successes := 0, 0
-	for r := range results {
-		if r.exitCode > exitCode {
-			exitCode = r.exitCode
-		}
-		if r.exitCode == 0 && r.err == nil {
-			successes++
-		}
-	}
-	took := time.Since(start)
-	glog.Infof("%d streams test ended in %s. success rate: %f%%", *sim, took, float64(successes)/float64(*sim)*100.0)
-	time.Sleep(1 * time.Hour)
-	exit(exitCode, fileName, *fileArg, err)
+	return results
 }
 
 func contextUntilSignal(parent context.Context, sigs ...os.Signal) context.Context {
