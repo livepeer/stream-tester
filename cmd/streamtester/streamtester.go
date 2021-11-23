@@ -265,7 +265,7 @@ func main() {
 		}
 		msg := fmt.Sprintf(`Starting %s stream to %s, pulling from %s`, durs, *rtmpURL, *mediaURL)
 		messenger.SendMessage(msg)
-		sr2 := testers.NewStreamer2(gctx, *wowza, *mist, *save, true, true)
+		sr2 := testers.NewStreamer2(gctx, testers.Streamer2Options{*wowza, *mist, *save, true, true})
 		sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, *streamDuration)
 		if *wowza {
 			// let Wowza remove session
@@ -365,7 +365,7 @@ func main() {
 			msg := fmt.Sprintf(`Starting %s stream to %s`, dur, *rtmpURL)
 			glog.Info(msg)
 
-			sr2 := testers.NewStreamer2(gctx, *wowza, *mist, *save, true, true)
+			sr2 := testers.NewStreamer2(gctx, testers.Streamer2Options{*wowza, *mist, *save, true, true})
 			sr2.StartStreaming(fn, *rtmpURL, *mediaURL, *waitForTarget, *streamDuration)
 		}
 		err = lapi.DeleteStream(stream.ID)

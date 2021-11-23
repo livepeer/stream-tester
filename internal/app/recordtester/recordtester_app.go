@@ -191,7 +191,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		}
 	} else {
 
-		sr2 := testers.NewStreamer2(rt.ctx, false, false, false, false, false)
+		sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{})
 		sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
 		// <-sr2.Done()
 		srerr := sr2.Err()
@@ -216,7 +216,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		if pauseDuration > 0 {
 			glog.Infof("Pause specified, waiting %s before streaming second time", pauseDuration)
 			time.Sleep(pauseDuration)
-			sr2 := testers.NewStreamer2(rt.ctx, false, false, false, false, false)
+			sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{})
 			go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
 			<-sr2.Done()
 			srerr := sr2.Err()

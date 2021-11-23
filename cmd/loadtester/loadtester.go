@@ -202,7 +202,7 @@ func main() {
 			}
 			glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 			glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
-			sr2 := testers.NewStreamer2(ctx, false, *mist, false, false, false)
+			sr2 := testers.NewStreamer2(ctx, testers.Streamer2Options{MistMode: *mist})
 			go sr2.StartStreaming(sourceFileName, rtmpURL, mediaURL, waitForTarget, timeToStream)
 			go func() {
 				<-sr2.Done()
@@ -225,7 +225,7 @@ func main() {
 				// glog.Error(err)
 				return nil, err
 			}
-			sr2 := testers.NewStreamer2(ctx, false, false, false, false, false)
+			sr2 := testers.NewStreamer2(ctx, testers.Streamer2Options{})
 			go sr2.StartStreaming(sourceFileName, rtmpURL, mediaURL, waitForTarget, timeToStream)
 			return sr2, nil
 		}

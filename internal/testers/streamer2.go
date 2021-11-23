@@ -18,33 +18,33 @@ var IgnoreNoCodecError bool
 var StartDelayBetweenGroups = 2 * time.Second
 
 type (
+	Streamer2Options struct {
+		WowzaMode              bool
+		MistMode               bool
+		Save                   bool
+		FailIfTranscodingStops bool
+		PrintStats             bool
+	}
+
 	// streamer2 is used for running continious tests against Wowza servers
 	streamer2 struct {
 		finite
-		uploader               *rtmpStreamer
-		downloader             *m3utester2
-		wowzaMode              bool
-		mistMode               bool
-		save                   bool
-		failIfTranscodingStops bool
-		printStats             bool
-		err                    error
+		Streamer2Options
+		uploader   *rtmpStreamer
+		downloader *m3utester2
+		err        error
 	}
 )
 
 // NewStreamer2 returns new streamer2
-func NewStreamer2(pctx context.Context, wowzaMode, mistMode, save, failIfTranscodingStops, printStats bool) model.Streamer2 {
+func NewStreamer2(pctx context.Context, opts Streamer2Options) model.Streamer2 {
 	ctx, cancel := context.WithCancel(pctx)
 	return &streamer2{
 		finite: finite{
 			ctx:    ctx,
 			cancel: cancel,
 		},
-		wowzaMode:              wowzaMode,
-		mistMode:               mistMode,
-		save:                   save,
-		failIfTranscodingStops: failIfTranscodingStops,
-		printStats:             printStats,
+		Streamer2Options: opts,
 	}
 }
 
@@ -85,8 +85,8 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	go func() {
 		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, timeToStream, waitForTarget)
 	}()
-	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.wowzaMode, sr.mistMode,
-		sr.failIfTranscodingStops, sr.save, sr.printStats, waitForTarget, sm, false) // starts to download at creation
+	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.WowzaMode, sr.MistMode,
+		sr.FailIfTranscodingStops, sr.Save, sr.PrintStats, waitForTarget, sm, false) // starts to download at creation
 	go func() {
 		select {
 		case <-sr.ctx.Done():
