@@ -141,11 +141,10 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		notRtmpTry = 0
 		rt.Clean()
 		glog.Infof("Waiting %s before next test", pauseBetweenTests)
-		time.Sleep(pauseBetweenTests)
 		select {
 		case <-crt.ctx.Done():
 			return context.Canceled
-		default:
+		case <-time.After(pauseBetweenTests):
 		}
 	}
 }
