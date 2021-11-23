@@ -1,14 +1,8 @@
 name: Mist API Connector Docker Image CI
-
-on:
-  push:
-    branches:
-      - mist-api-connector
+on: push
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -22,8 +16,6 @@ jobs:
     - name: Tags
       id: tags
       uses: livepeer/action-gh-release-tags@v0
-      with:
-        force-latest: true
 
     - name: Build the Docker image
       run: |
