@@ -105,23 +105,23 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 						Source:    crt.host,
 						Component: crt.pagerDutyComponent,
 						Severity:  "error",
-						Summary:   crt.host + ": " + err.Error(),
+						Summary:   fmt.Sprintf("Record tester :movie_camera: for %s error: %v", crt.host, err),
 					},
 				}
 				sid := rt.StreamID()
 				if sid != "" {
 					link := pagerDutyLink{
-						Href: "https://livepeer.com/app/stream/" + sid,
+						Href: "https://livepeer.com/dashboard/streams/" + sid,
 						Text: "Stream",
 					}
 					event.Links = append(event.Links, link)
 					stream := rt.Stream()
 					if stream != nil {
-						plink := pagerDutyLink{
+						link = pagerDutyLink{
 							Href: "https://my.papertrailapp.com/events?q=" + stream.ID + "+OR+" + stream.StreamKey + "+OR+" + stream.PlaybackID,
 							Text: "Papertrail",
 						}
-						event.Links = append(event.Links, plink)
+						event.Links = append(event.Links, link)
 					}
 				}
 				resp, err := pagerduty.ManageEvent(event)
