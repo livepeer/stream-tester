@@ -3,6 +3,7 @@ package testers
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/golang/glog"
@@ -26,18 +27,21 @@ type (
 		PrintStats             bool
 	}
 
+	StartTestFunc func(ctx context.Context, mediaURL string, waitForTarget time.Duration, opts Streamer2Options) Finite
+
 	// streamer2 is used for running continious tests against Wowza servers
 	streamer2 struct {
 		finite
 		Streamer2Options
-		uploader   *rtmpStreamer
-		downloader *m3utester2
-		err        error
+		uploader        *rtmpStreamer
+		downloader      *m3utester2
+		additionalTests []StartTestFunc
+		err             error
 	}
 )
 
 // NewStreamer2 returns new streamer2
-func NewStreamer2(pctx context.Context, opts Streamer2Options) model.Streamer2 {
+func NewStreamer2(pctx context.Context, opts Streamer2Options, additionalTests ...StartTestFunc) model.Streamer2 {
 	ctx, cancel := context.WithCancel(pctx)
 	return &streamer2{
 		finite: finite{
@@ -45,6 +49,7 @@ func NewStreamer2(pctx context.Context, opts Streamer2Options) model.Streamer2 {
 			cancel: cancel,
 		},
 		Streamer2Options: opts,
+		additionalTests:  additionalTests,
 	}
 }
 
@@ -85,15 +90,27 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	go func() {
 		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, timeToStream, waitForTarget)
 	}()
+	// TODO: Consider making downloader itself just another "additional tester"
 	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.WowzaMode, sr.MistMode,
 		sr.FailIfTranscodingStops, sr.Save, sr.PrintStats, waitForTarget, sm, false) // starts to download at creation
+	tests := make([]Finite, len(sr.additionalTests), len(sr.additionalTests)+1)
+	for i, startFunc := range sr.additionalTests {
+		tests[i] = startFunc(sr.ctx, mediaURL, waitForTarget, sr.Streamer2Options)
+	}
+	tests = append(tests, sr.downloader)
 	go func() {
-		select {
-		case <-sr.ctx.Done():
-		case <-sr.downloader.Done():
-			sr.globalError = sr.downloader.globalError
-			// media downloader exited (probably with error), stop streaming
-			sr.cancel()
+		testsDone := onAnyDone(sr.ctx, tests)
+		for {
+			select {
+			case <-sr.ctx.Done():
+				return
+			case test := <-testsDone:
+				if err := test.GlobalErr(); err != nil {
+					sr.globalError = err
+					sr.cancel()
+					return
+				}
+			}
 		}
 	}()
 	started := time.Now()
@@ -106,6 +123,27 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 		messenger.SendMessage(msg)
 	}
 	sr.cancel()
+}
+
+func onAnyDone(ctx context.Context, finites []Finite) <-chan Finite {
+	finished := make(chan Finite, 1)
+	wg := sync.WaitGroup{}
+	wg.Add(len(finites))
+	for _, f := range finites {
+		go func(f Finite) {
+			defer wg.Done()
+			select {
+			case <-f.Done():
+				finished <- f
+			case <-ctx.Done():
+			}
+		}(f)
+	}
+	go func() {
+		wg.Wait()
+		close(finished)
+	}()
+	return finished
 }
 
 // StartPulling pull arbitrary HLS stream and report found errors

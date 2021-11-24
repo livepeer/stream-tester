@@ -50,6 +50,13 @@ const (
 type (
 	resolution string
 
+	Finite interface {
+		Done() <-chan struct{}
+		Cancel()
+		Finished() bool
+		GlobalErr() error
+	}
+
 	finite struct {
 		ctx         context.Context
 		cancel      context.CancelFunc
@@ -488,6 +495,10 @@ func (f *finite) fatalEnd(err error) {
 
 func (f *finite) Done() <-chan struct{} {
 	return f.ctx.Done()
+}
+
+func (f *finite) GlobalErr() error {
+	return f.globalError
 }
 
 func (f *finite) Cancel() {
