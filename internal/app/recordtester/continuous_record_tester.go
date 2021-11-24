@@ -68,7 +68,8 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		msg := fmt.Sprintf(":arrow_right: Starting %s recordings test stream to %s", 2*testDuration, crt.host)
 		glog.Info(msg)
 		messenger.SendMessage(msg)
-		rt := NewRecordTester(crt.ctx, crt.lapi, true, crt.useHTTP, crt.mp4)
+		// TODO: Receive configurable checkStreamHealth argument as well
+		rt := NewRecordTester(crt.ctx, crt.lapi, true, crt.useHTTP, crt.mp4, true)
 		es, err := rt.Start(fileName, testDuration, pauseDuration)
 		if err == context.Canceled {
 			msg := fmt.Sprintf("Test of %s cancelled", crt.host)

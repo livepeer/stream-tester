@@ -33,15 +33,16 @@ type (
 	}
 
 	recordTester struct {
-		lapi        *livepeer.API
-		useForceURL bool
-		ctx         context.Context
-		cancel      context.CancelFunc
-		vodeStats   model.VODStats
-		streamID    string
-		stream      *livepeer.CreateStreamResp
-		useHTTP     bool
-		mp4         bool
+		lapi              *livepeer.API
+		useForceURL       bool
+		ctx               context.Context
+		cancel            context.CancelFunc
+		vodeStats         model.VODStats
+		streamID          string
+		stream            *livepeer.CreateStreamResp
+		useHTTP           bool
+		mp4               bool
+		checkStreamHealth bool
 	}
 )
 
@@ -81,7 +82,7 @@ var standardProfiles = []livepeer.Profile{
 }
 
 // NewRecordTester ...
-func NewRecordTester(gctx context.Context, lapi *livepeer.API, useForceURL, useHTTP, mp4 bool) IRecordTester {
+func NewRecordTester(gctx context.Context, lapi *livepeer.API, useForceURL, useHTTP, mp4, checkStreamHealth bool) IRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	rt := &recordTester{
 		lapi:        lapi,
@@ -90,6 +91,8 @@ func NewRecordTester(gctx context.Context, lapi *livepeer.API, useForceURL, useH
 		cancel:      cancel,
 		useHTTP:     useHTTP,
 		mp4:         mp4,
+		// WIP/TODO: Will need some actual params for stream health test, like URL/clients/regions/etc
+		checkStreamHealth: checkStreamHealth,
 	}
 	return rt
 }
@@ -170,6 +173,13 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	rtmpURL := fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.StreamKey)
 	// rtmpURL = fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.ID)
 
+	testerFuncs := []testers.StartTestFunc{}
+	if rt.checkStreamHealth {
+		testerFuncs = append(testerFuncs, func(ctx context.Context, mediaURL string, waitForTarget time.Duration, opts testers.Streamer2Options) testers.Finite {
+			return testers.NewStreamHealth(ctx)
+		})
+	}
+
 	mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingests[0].Playback, stream.PlaybackID)
 	glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 	glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
@@ -191,7 +201,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		}
 	} else {
 
-		sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{})
+		sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{}, testerFuncs...)
 		sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
 		// <-sr2.Done()
 		srerr := sr2.Err()
@@ -216,7 +226,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		if pauseDuration > 0 {
 			glog.Infof("Pause specified, waiting %s before streaming second time", pauseDuration)
 			time.Sleep(pauseDuration)
-			sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{})
+			sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{}, testerFuncs...)
 			go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
 			<-sr2.Done()
 			srerr := sr2.Err()

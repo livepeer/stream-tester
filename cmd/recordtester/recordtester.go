@@ -185,7 +185,8 @@ func main() {
 		start := time.Now()
 
 		for i := 0; i < *sim; i++ {
-			rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, *testMP4)
+			// TODO: Allow configuring checkStreamHealth from flags
+			rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, *testMP4, true)
 			eses = append(eses, 0)
 			testers = append(testers, rt)
 			wg.Add(1)
@@ -228,7 +229,8 @@ func main() {
 		return
 	}
 	// just one stream
-	rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, *testMP4)
+	// TODO: Allow configuring checkStreamHealth from flags
+	rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, *testMP4, true)
 	es, err := rt.Start(fileName, *testDuration, *pauseDuration)
 	exit(es, fileName, *fileArg, err)
 }
