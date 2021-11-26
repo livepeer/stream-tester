@@ -3,7 +3,6 @@ package testers
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/golang/glog"
@@ -90,14 +89,12 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	go func() {
 		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, timeToStream, waitForTarget)
 	}()
-	// TODO: Consider making downloader itself just another "additional tester"
 	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.WowzaMode, sr.MistMode,
 		sr.FailIfTranscodingStops, sr.Save, sr.PrintStats, waitForTarget, sm, false) // starts to download at creation
-	tests := make([]Finite, len(sr.additionalTests), len(sr.additionalTests)+1)
-	for i, startFunc := range sr.additionalTests {
-		tests[i] = startFunc(sr.ctx, mediaURL, waitForTarget, sr.Streamer2Options)
+	tests := []Finite{sr.downloader}
+	for _, startFunc := range sr.additionalTests {
+		tests = append(tests, startFunc(sr.ctx, mediaURL, waitForTarget, sr.Streamer2Options))
 	}
-	tests = append(tests, sr.downloader)
 	go func() {
 		testsDone := onAnyDone(sr.ctx, tests)
 		for {
@@ -126,12 +123,9 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 }
 
 func onAnyDone(ctx context.Context, finites []Finite) <-chan Finite {
-	finished := make(chan Finite, 1)
-	wg := sync.WaitGroup{}
-	wg.Add(len(finites))
+	finished := make(chan Finite, len(finites))
 	for _, f := range finites {
 		go func(f Finite) {
-			defer wg.Done()
 			select {
 			case <-f.Done():
 				finished <- f
@@ -139,10 +133,6 @@ func onAnyDone(ctx context.Context, finites []Finite) <-chan Finite {
 			}
 		}(f)
 	}
-	go func() {
-		wg.Wait()
-		close(finished)
-	}()
 	return finished
 }
 
