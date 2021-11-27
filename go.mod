@@ -16,7 +16,7 @@ require (
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/livepeer/joy4 v0.1.2-0.20210601043311-c1b885884cc7
 	github.com/livepeer/leaderboard-serverless v1.0.0
-	github.com/livepeer/livepeer-data v0.4.0
+	github.com/livepeer/livepeer-data v0.4.5-beta
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/mattn/go-isatty v0.0.8 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
@@ -25,6 +25,7 @@ require (
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.15.0
 	github.com/rabbitmq/amqp091-go v1.1.0
+	github.com/rabbitmq/rabbitmq-stream-go-client v0.1.0-beta.0.20211027081212-fd5e6d497413 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.0
 	go.etcd.io/etcd/client/v3 v3.5.0-rc.0
 	go.opencensus.io v0.23.0
