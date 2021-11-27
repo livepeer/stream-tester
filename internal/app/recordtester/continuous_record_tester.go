@@ -27,6 +27,7 @@ type (
 
 	continuousRecordTester struct {
 		lapi                    *livepeer.API
+		lanalyzers              testers.AnalyzerByRegion
 		ctx                     context.Context
 		cancel                  context.CancelFunc
 		host                    string // API host being tested
@@ -34,6 +35,7 @@ type (
 		pagerDutyComponent      string
 		useHTTP                 bool
 		mp4                     bool
+		streamHealth            bool
 	}
 
 	pagerDutyLink struct {
@@ -43,12 +45,13 @@ type (
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDutyIntegrationKey, pagerDutyComponent string, useHTTP, mp4 bool) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, pagerDutyIntegrationKey, pagerDutyComponent string, useHTTP, mp4, streamHealth bool) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	server := lapi.GetServer()
 	u, _ := url.Parse(server)
 	crt := &continuousRecordTester{
 		lapi:                    lapi,
+		lanalyzers:              lanalyzers,
 		ctx:                     ctx,
 		cancel:                  cancel,
 		host:                    u.Host,
@@ -56,6 +59,7 @@ func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDu
 		pagerDutyComponent:      pagerDutyComponent,
 		useHTTP:                 useHTTP,
 		mp4:                     mp4,
+		streamHealth:            streamHealth,
 	}
 	return crt
 }
@@ -68,8 +72,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		msg := fmt.Sprintf(":arrow_right: Starting %s recordings test stream to %s", 2*testDuration, crt.host)
 		glog.Info(msg)
 		messenger.SendMessage(msg)
-		// TODO: Receive configurable checkStreamHealth argument as well
-		rt := NewRecordTester(crt.ctx, crt.lapi, true, crt.useHTTP, crt.mp4, true)
+		rt := NewRecordTester(crt.ctx, crt.lapi, crt.lanalyzers, true, crt.useHTTP, crt.mp4, crt.streamHealth)
 		es, err := rt.Start(fileName, testDuration, pauseDuration)
 		if err == context.Canceled {
 			msg := fmt.Sprintf("Test of %s cancelled", crt.host)

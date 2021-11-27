@@ -33,16 +33,17 @@ type (
 	}
 
 	recordTester struct {
-		lapi              *livepeer.API
-		useForceURL       bool
-		ctx               context.Context
-		cancel            context.CancelFunc
-		vodeStats         model.VODStats
-		streamID          string
-		stream            *livepeer.CreateStreamResp
-		useHTTP           bool
-		mp4               bool
-		checkStreamHealth bool
+		lapi         *livepeer.API
+		lanalyzers   testers.AnalyzerByRegion
+		useForceURL  bool
+		ctx          context.Context
+		cancel       context.CancelFunc
+		vodeStats    model.VODStats
+		streamID     string
+		stream       *livepeer.CreateStreamResp
+		useHTTP      bool
+		mp4          bool
+		streamHealth bool
 	}
 )
 
@@ -82,17 +83,17 @@ var standardProfiles = []livepeer.Profile{
 }
 
 // NewRecordTester ...
-func NewRecordTester(gctx context.Context, lapi *livepeer.API, useForceURL, useHTTP, mp4, checkStreamHealth bool) IRecordTester {
+func NewRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, useForceURL, useHTTP, mp4, streamHealth bool) IRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	rt := &recordTester{
-		lapi:        lapi,
-		useForceURL: useForceURL,
-		ctx:         ctx,
-		cancel:      cancel,
-		useHTTP:     useHTTP,
-		mp4:         mp4,
-		// WIP/TODO: Will need some actual params for stream health test, like URL/clients/regions/etc
-		checkStreamHealth: checkStreamHealth,
+		lapi:         lapi,
+		lanalyzers:   lanalyzers,
+		useForceURL:  useForceURL,
+		ctx:          ctx,
+		cancel:       cancel,
+		useHTTP:      useHTTP,
+		mp4:          mp4,
+		streamHealth: streamHealth,
 	}
 	return rt
 }
@@ -174,9 +175,9 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	// rtmpURL = fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.ID)
 
 	testerFuncs := []testers.StartTestFunc{}
-	if rt.checkStreamHealth {
+	if rt.streamHealth {
 		testerFuncs = append(testerFuncs, func(ctx context.Context, mediaURL string, waitForTarget time.Duration, opts testers.Streamer2Options) testers.Finite {
-			return testers.NewStreamHealth(ctx)
+			return testers.NewStreamHealth(ctx, stream.ID, rt.lanalyzers, waitForTarget)
 		})
 	}
 
