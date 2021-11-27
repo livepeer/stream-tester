@@ -125,7 +125,7 @@ type (
 	}
 )
 
-// NewM3utester2 pubic method
+// NewM3utester2 public method
 func NewM3utester2(pctx context.Context, u string, wowzaMode, mistMode, failIfTranscodingStops, save bool,
 	waitForTarget time.Duration, sm *segmentsMatcher, statsOnly bool) model.IVODTester {
 
