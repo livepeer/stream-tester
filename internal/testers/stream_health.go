@@ -40,7 +40,7 @@ func NewStreamHealth(parent context.Context, streamID string, clients AnalyzerBy
 
 func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 	defer h.cancel()
-	unhealthyTimeout := time.NewTimer(waitForTarget)
+	unhealthyTimeout := time.After(waitForTarget)
 	checkTicker := time.NewTicker(5 * time.Second)
 	defer checkTicker.Stop()
 	var unhealthyRegions []checkResult
@@ -48,7 +48,7 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 		select {
 		case <-h.ctx.Done():
 			return
-		case <-unhealthyTimeout.C:
+		case <-unhealthyTimeout:
 			var regionErrs []string
 			for _, check := range unhealthyRegions {
 				regionErrs = append(regionErrs, fmt.Sprintf("%s: %s", check.region, check.err))
@@ -66,9 +66,9 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 				}
 			}
 			if len(unhealthyRegions) == 0 {
-				unhealthyTimeout.Stop()
+				unhealthyTimeout = nil
 			} else if unhealthyTimeout == nil {
-				unhealthyTimeout.Reset(waitForTarget)
+				unhealthyTimeout = time.After(waitForTarget)
 			}
 		}
 	}
