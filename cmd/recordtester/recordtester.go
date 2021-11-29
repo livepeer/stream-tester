@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
@@ -50,13 +49,12 @@ func main() {
 	pauseDuration := fs.Duration("pause-dur", 0, "How long to wait between two consecutive RTMP streams that will comprise one user session")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
-	analyzerBaseUrlFlag := fs.String("analyzer-base-url", "", "Base URL of the Stream Health Analyzer to be used. Regions are prepended as subdomains (defaults to --api-server)")
+	analyzerServers := fs.String("analyzer-servers", "", "Comma-separated list of base URLs to connect for the Stream Health Analyzer API (defaults to --api-server)")
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
 	continuousTest := fs.Duration("continuous-test", 0, "Do continuous testing")
 	useHttp := fs.Bool("http", false, "Do HTTP tests instead of RTMP")
 	testMP4 := fs.Bool("mp4", false, "Download MP4 of recording")
 	testStreamHealth := fs.Bool("stream-health", false, "Check stream health during test")
-	streamHealthRegions := fs.String("stream-health-regions", "", `Comma-separated list of regions to test Stream Health availability. Prepended as subdomains to --analyzer-base-url (e.g. "nyc,lon")`)
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
 	discordUsersToNotify := fs.String("discord-users", "", "Id's of users to notify in case of failure")
@@ -98,15 +96,11 @@ func main() {
 		fmt.Println("Pause should be less than 5 min")
 		os.Exit(1)
 	}
-	if *analyzerBaseUrlFlag == "" {
-		*analyzerBaseUrlFlag = *apiServer
-	}
-	analyzerBaseUrl, err := url.Parse(*analyzerBaseUrlFlag)
-	if err != nil {
-		fmt.Println("Bad analyzer base url: %v", err)
-		os.Exit(1)
+	if *analyzerServers == "" {
+		*analyzerServers = *apiServer
 	}
 	var fileName string
+	var err error
 
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
 	defer gcancel()
@@ -169,11 +163,8 @@ func main() {
 
 	userAgent := model.AppName + "/" + model.Version
 	lanalyzers := testers.AnalyzerByRegion{}
-	lanalyzers["__global"] = client.NewAnalyzer(analyzerBaseUrl.String(), *apiToken, userAgent, 0)
-	for _, region := range strings.Split(*streamHealthRegions, ",") {
-		regionalUrl := *analyzerBaseUrl
-		regionalUrl.Host = region + "." + regionalUrl.Host
-		lanalyzers[region] = client.NewAnalyzer(regionalUrl.String(), *apiToken, userAgent, 0)
+	for _, url := range strings.Split(*analyzerServers, ",") {
+		lanalyzers[url] = client.NewAnalyzer(url, *apiToken, userAgent, 0)
 	}
 
 	/*

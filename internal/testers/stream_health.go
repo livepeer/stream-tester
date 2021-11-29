@@ -12,6 +12,8 @@ import (
 )
 
 type (
+	// AnalyzerByRegion is a map of regions (generally just the base URL) to an
+	// analyzer client configured to connect there.
 	AnalyzerByRegion map[string]client.Analyzer
 
 	streamHealth struct {
