@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/livepeer-data/pkg/client"
+	"github.com/livepeer/stream-tester/model"
 )
 
 type (
@@ -52,8 +53,8 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 			for _, check := range unhealthyRegions {
 				regionErrs = append(regionErrs, fmt.Sprintf("%s: %s", check.region, check.err))
 			}
-			err := fmt.Errorf("stream failed to become healthy: %s", strings.Join(regionErrs, "; "))
-			glog.Errorf("Stream failed to become healthy after timeout=%v: %v", waitForTarget, err)
+			err := fmt.Errorf("stream failed to become healthy after timeout=%s: %s",
+				waitForTarget, strings.Join(regionErrs, "; "))
 			h.fatalEnd(err)
 			return
 		case <-checkTicker.C:
@@ -87,13 +88,13 @@ func (h *streamHealth) checkAllRegions() <-chan checkResult {
 			defer wg.Done()
 			health, err := h.clients[region].GetStreamHealth(h.ctx, h.streamID)
 			if err != nil {
-				glog.Warningf("Stream health error on region=%q, err=%q", region, err)
+				glog.V(model.VVERBOSE).Infof("Stream health error on region=%q, err=%q", region, err)
 				err = fmt.Errorf("error fetching stream health: %w", err)
 			} else if healthy := health.Healthy.Status; healthy == nil || !*healthy {
-				glog.Warningf("Stream unhealthy on region=%q, health=%+v", region, health)
+				glog.V(model.VVERBOSE).Infof("Stream unhealthy on region=%q, health=%+v", region, health)
 				err = fmt.Errorf("stream is unhealthy")
 			} else if healthy != nil && time.Since(health.Healthy.LastProbeTime.Time) > time.Minute {
-				glog.Warningf("Stream health outdated on region=%q, health=%+v", region, health)
+				glog.V(model.VVERBOSE).Infof("Stream health outdated on region=%q, health=%+v", region, health)
 				err = fmt.Errorf("stream health is outdated (%v)", health.Healthy.LastProbeTime.Time)
 			}
 			results <- checkResult{region, err}

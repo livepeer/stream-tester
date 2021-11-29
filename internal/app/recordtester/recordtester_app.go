@@ -187,7 +187,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	if rt.useHTTP {
 		sterr := rt.doOneHTTPStream(fileName, streamName, broadcasters[0], testDuration, stream)
 		if sterr != nil {
-			glog.Warning("Streaming returned error err=%v", sterr)
+			glog.Warningf("Streaming returned error err=%v", sterr)
 			return 3, err
 		}
 		if pauseDuration > 0 {
@@ -195,7 +195,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			time.Sleep(pauseDuration)
 			sterr = rt.doOneHTTPStream(fileName, streamName, broadcasters[0], testDuration, stream)
 			if sterr != nil {
-				glog.Warning("Second time streaming returned error err=%v", sterr)
+				glog.Warningf("Second time streaming returned error err=%v", sterr)
 				return 3, err
 			}
 			testDuration *= 2
@@ -212,12 +212,12 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			return 2, re
 		}
 		if srerr != nil {
-			glog.Warning("Streaming returned error err=%v", srerr)
+			glog.Warningf("Streaming returned error err=%v", srerr)
 			return 3, err
 		}
 		stats, err := sr2.Stats()
 		if err != nil {
-			glog.Warning("Stats returned error err=%v", err)
+			glog.Warningf("Stats returned error err=%v", err)
 			return 21, err
 		}
 		glog.Infof("Streaming success rate=%v", stats.SuccessRate)
@@ -237,12 +237,12 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 				return 2, re
 			}
 			if srerr != nil {
-				glog.Warning("Streaming second returned error err=%v", srerr)
+				glog.Warningf("Streaming second returned error err=%v", srerr)
 				return 3, err
 			}
 			stats, err := sr2.Stats()
 			if err != nil {
-				glog.Warning("Stats returned error err=%v", err)
+				glog.Warningf("Stats returned error err=%v", err)
 				return 21, err
 			}
 			glog.Infof("Streaming second time success rate=%v", stats.SuccessRate)
