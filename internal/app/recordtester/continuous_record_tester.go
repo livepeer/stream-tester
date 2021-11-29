@@ -137,7 +137,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 				}
 			}
 		} else {
-			msg := fmt.Sprintf(":white_check_mark: Test of %s succeed", crt.host)
+			msg := fmt.Sprintf(":white_check_mark: Test of %s succeeded", crt.host)
 			messenger.SendMessage(msg)
 			glog.Warning(msg)
 		}

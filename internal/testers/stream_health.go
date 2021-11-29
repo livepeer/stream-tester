@@ -2,6 +2,7 @@ package testers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -42,6 +43,9 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 	defer h.cancel()
 	unhealthyTimeout := time.After(waitForTarget)
 	checkTicker := time.NewTicker(5 * time.Second)
+	logErrs := false
+	time.AfterFunc(waitForTarget/2, func() { logErrs = true })
+
 	defer checkTicker.Stop()
 	var unhealthyRegions []checkResult
 	for {
@@ -58,7 +62,7 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 			h.fatalEnd(err)
 			return
 		case <-checkTicker.C:
-			results := h.checkAllRegions()
+			results := h.checkAllRegions(logErrs)
 			unhealthyRegions = unhealthyRegions[:0]
 			for res := range results {
 				if res.err != nil {
@@ -79,7 +83,7 @@ type checkResult struct {
 	err    error
 }
 
-func (h *streamHealth) checkAllRegions() <-chan checkResult {
+func (h *streamHealth) checkAllRegions(logErrs bool) <-chan checkResult {
 	results := make(chan checkResult, 2)
 	wg := sync.WaitGroup{}
 	for region := range h.clients {
@@ -88,14 +92,20 @@ func (h *streamHealth) checkAllRegions() <-chan checkResult {
 			defer wg.Done()
 			health, err := h.clients[region].GetStreamHealth(h.ctx, h.streamID)
 			if err != nil {
-				glog.V(model.VVERBOSE).Infof("Stream health error on region=%q, err=%q", region, err)
 				err = fmt.Errorf("error fetching stream health: %w", err)
-			} else if healthy := health.Healthy.Status; healthy == nil || !*healthy {
-				glog.V(model.VVERBOSE).Infof("Stream unhealthy on region=%q, health=%+v", region, health)
-				err = fmt.Errorf("stream is unhealthy")
-			} else if healthy != nil && time.Since(health.Healthy.LastProbeTime.Time) > time.Minute {
-				glog.V(model.VVERBOSE).Infof("Stream health outdated on region=%q, health=%+v", region, health)
-				err = fmt.Errorf("stream health is outdated (%v)", health.Healthy.LastProbeTime.Time)
+			} else if healthy := health.Healthy.Status; healthy == nil {
+				err = fmt.Errorf("healthy condition unavailable")
+			} else if !*healthy {
+				err = fmt.Errorf("healthy condition is false")
+			} else if age := time.Since(health.Healthy.LastProbeTime.Time); age > time.Minute {
+				err = fmt.Errorf("stream health is outdated (%s)", age)
+			}
+			if err != nil && (logErrs || bool(glog.V(model.VVERBOSE))) {
+				rawHealth, jsonErr := json.Marshal(health)
+				if jsonErr != nil {
+					rawHealth = []byte(fmt.Sprintf("%+v", health))
+				}
+				glog.Warningf("Stream not healthy on region=%q, err=%q, health=%s", region, err, rawHealth)
 			}
 			results <- checkResult{region, err}
 		}(region)
