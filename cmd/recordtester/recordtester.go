@@ -163,9 +163,12 @@ func main() {
 
 	userAgent := model.AppName + "/" + model.Version
 	lanalyzers := testers.AnalyzerByRegion{}
+	glog.V(model.INSANE).Infof("Creating analyzer clients servers=%s", *analyzerServers)
 	for _, url := range strings.Split(*analyzerServers, ",") {
+		glog.V(model.INSANE).Infof("Creating analyzer client for url=%s", url)
 		lanalyzers[url] = client.NewAnalyzer(url, *apiToken, userAgent, 0)
 	}
+	glog.V(model.INSANE).Infof("Analyzer clients len=%d", len(lanalyzers))
 
 	/*
 		sessionsx, err := lapi.GetSessions("1f770f0a-9177-49bd-a848-023abee7c09b")
@@ -240,7 +243,6 @@ func main() {
 		return
 	}
 	// just one stream
-	// TODO: Allow configuring checkStreamHealth from flags
 	rt := recordtester.NewRecordTester(gctx, lapi, lanalyzers, useForceURL, *useHttp, *testMP4, *testStreamHealth)
 	es, err := rt.Start(fileName, *testDuration, *pauseDuration)
 	exit(es, fileName, *fileArg, err)
