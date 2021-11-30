@@ -90,6 +90,7 @@ func (h *streamHealth) checkAllRegions(logErrs bool) <-chan checkResult {
 		wg.Add(1)
 		go func(region string) {
 			defer wg.Done()
+			glog.V(model.INSANE).Infof("Checking stream health for region=%s", region)
 			health, err := h.clients[region].GetStreamHealth(h.ctx, h.streamID)
 			if err != nil {
 				err = fmt.Errorf("error fetching stream health: %w", err)
