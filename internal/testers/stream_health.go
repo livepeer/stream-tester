@@ -87,12 +87,11 @@ func (h *streamHealth) checkAllRegions(logErrs bool) <-chan checkResult {
 	results := make(chan checkResult, 2)
 	wg := sync.WaitGroup{}
 	for region := range h.clients {
-		glog.V(model.INSANE).Infof("Starting stream health check loop for region=%s", region)
 		wg.Add(1)
-		go func(region2 string) {
+		go func(region string) {
 			defer wg.Done()
-			glog.V(model.INSANE).Infof("Checking stream health for region=%s", region2)
-			health, err := h.clients[region2].GetStreamHealth(h.ctx, h.streamID)
+			glog.V(model.INSANE).Infof("Checking stream health for region=%s", region)
+			health, err := h.clients[region].GetStreamHealth(h.ctx, h.streamID)
 			if err != nil {
 				err = fmt.Errorf("error fetching stream health: %w", err)
 			} else if healthy := health.Healthy.Status; healthy == nil {
@@ -107,9 +106,9 @@ func (h *streamHealth) checkAllRegions(logErrs bool) <-chan checkResult {
 				if jsonErr != nil {
 					rawHealth = []byte(fmt.Sprintf("%+v", health))
 				}
-				glog.Warningf("Stream not healthy on region=%q, err=%q, health=%s", region2, err, rawHealth)
+				glog.Warningf("Stream not healthy on region=%q, err=%q, health=%s", region, err, rawHealth)
 			}
-			results <- checkResult{region2, err}
+			results <- checkResult{region, err}
 		}(region)
 	}
 	go func() {
