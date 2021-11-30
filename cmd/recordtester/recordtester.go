@@ -68,6 +68,7 @@ func main() {
 		ff.WithConfigFileFlag("config"),
 		ff.WithConfigFileParser(ff.PlainParser),
 		ff.WithEnvVarPrefix("RT"),
+		ff.WithEnvVarIgnoreCommas(true),
 	)
 	flag.CommandLine.Parse(nil)
 	vFlag.Value.Set(*verbosity)
