@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -52,15 +53,6 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 		select {
 		case <-h.ctx.Done():
 			return
-		case <-unhealthyTimeout:
-			var regionErrs []string
-			for _, check := range unhealthyRegions {
-				regionErrs = append(regionErrs, fmt.Sprintf("%s: %s", check.region, check.err))
-			}
-			err := fmt.Errorf("stream failed to become healthy after timeout=%s: %s",
-				waitForTarget, strings.Join(regionErrs, "; "))
-			h.fatalEnd(err)
-			return
 		case <-checkTicker.C:
 			results := h.checkAllRegions(logErrs)
 			unhealthyRegions = unhealthyRegions[:0]
@@ -74,6 +66,23 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 			} else if unhealthyTimeout == nil {
 				unhealthyTimeout = time.After(waitForTarget)
 			}
+		case <-unhealthyTimeout:
+			errsRegions := map[string][]string{}
+			for _, check := range unhealthyRegions {
+				err := check.err.Error()
+				errsRegions[err] = append(errsRegions[err], check.region)
+			}
+			aggErrs := make([]string, 0, len(errsRegions))
+			for err, regions := range errsRegions {
+				sort.Slice(regions, func(i, j int) bool { return regions[i] < regions[j] })
+				aggErrs = append(aggErrs, fmt.Sprintf("%s in [%s]", err, strings.Join(regions, ", ")))
+			}
+			sort.Slice(aggErrs, func(i, j int) bool { return aggErrs[i] < aggErrs[j] })
+
+			err := fmt.Errorf("stream did not become healthy in global Stream Health API after %s: %s",
+				waitForTarget, strings.Join(aggErrs, "; "))
+			h.fatalEnd(err)
+			return
 		}
 	}
 }
@@ -93,7 +102,7 @@ func (h *streamHealth) checkAllRegions(logErrs bool) <-chan checkResult {
 			glog.V(model.INSANE).Infof("Checking stream health for region=%s", region)
 			health, err := h.clients[region].GetStreamHealth(h.ctx, h.streamID)
 			if err != nil {
-				err = fmt.Errorf("error fetching stream health: %w", err)
+				glog.V(model.VVERBOSE).Infof("Error fetching stream health for region=%s, err=%q", region, err)
 			} else if healthy := health.Healthy.Status; healthy == nil {
 				err = fmt.Errorf("healthy condition unavailable")
 			} else if !*healthy {
