@@ -109,7 +109,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 						Source:    crt.host,
 						Component: crt.pagerDutyComponent,
 						Severity:  "error",
-						Summary:   fmt.Sprintf("Record tester :movie_camera: for %s error: %v", crt.host, err),
+						Summary:   fmt.Sprintf(":movie_camera: Record tester for %s error: %v", crt.host, err),
 					},
 				}
 				sid := rt.StreamID()

@@ -3,6 +3,7 @@ package testers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -70,7 +71,7 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 			errsRegions := map[string][]string{}
 			for _, check := range unhealthyRegions {
 				err := check.err.Error()
-				errsRegions[err] = append(errsRegions[err], check.region)
+				errsRegions[err] = append(errsRegions[err], fmt.Sprintf("`%s`", check.region))
 			}
 			aggErrs := make([]string, 0, len(errsRegions))
 			for err, regions := range errsRegions {
@@ -79,9 +80,9 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 			}
 			sort.Slice(aggErrs, func(i, j int) bool { return aggErrs[i] < aggErrs[j] })
 
-			err := fmt.Errorf("stream did not become healthy in global Stream Health API after %s: %s",
+			msg := fmt.Sprintf("Global Stream Health API: stream did not become healthy on all regions analyzers after `%s`: %s",
 				waitForTarget, strings.Join(aggErrs, "; "))
-			h.fatalEnd(err)
+			h.fatalEnd(errors.New(msg))
 			return
 		}
 	}
@@ -102,13 +103,13 @@ func (h *streamHealth) checkAllRegions(logErrs bool) <-chan checkResult {
 			glog.V(model.INSANE).Infof("Checking stream health for region=%s", region)
 			health, err := h.clients[region].GetStreamHealth(h.ctx, h.streamID)
 			if err != nil {
-				glog.V(model.VVERBOSE).Infof("Error fetching stream health for region=%s, err=%q", region, err)
+				// do nothing, we'll log the error below if asked for.
 			} else if healthy := health.Healthy.Status; healthy == nil {
-				err = fmt.Errorf("healthy condition unavailable")
+				err = fmt.Errorf("`healthy` condition unavailable")
 			} else if !*healthy {
-				err = fmt.Errorf("healthy condition is false")
+				err = fmt.Errorf("`healthy` condition is `false`")
 			} else if age := time.Since(health.Healthy.LastProbeTime.Time); age > time.Minute {
-				err = fmt.Errorf("stream health is outdated (%s)", age)
+				err = fmt.Errorf("stream health is outdated (`%s`)", age)
 			}
 			if err != nil && (logErrs || bool(glog.V(model.VVERBOSE))) {
 				rawHealth, jsonErr := json.Marshal(health)
