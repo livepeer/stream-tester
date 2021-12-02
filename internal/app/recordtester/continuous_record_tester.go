@@ -101,45 +101,12 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			msg := fmt.Sprintf(":rotating_light: Test of %s ended with err=%v errCode=%v", crt.host, err, es)
 			messenger.SendFatalMessage(msg)
 			glog.Warning(msg)
-			if crt.pagerDutyIntegrationKey != "" {
-				event := pagerduty.V2Event{
-					RoutingKey: crt.pagerDutyIntegrationKey,
-					Action:     "trigger",
-					Payload: &pagerduty.V2Payload{
-						Source:    crt.host,
-						Component: crt.pagerDutyComponent,
-						Severity:  "error",
-						Summary:   fmt.Sprintf(":movie_camera: Record tester for %s error: %v", crt.host, err),
-					},
-				}
-				sid := rt.StreamID()
-				if sid != "" {
-					link := pagerDutyLink{
-						Href: "https://livepeer.com/dashboard/streams/" + sid,
-						Text: "Stream",
-					}
-					event.Links = append(event.Links, link)
-					stream := rt.Stream()
-					if stream != nil {
-						link = pagerDutyLink{
-							Href: "https://my.papertrailapp.com/events?q=" + stream.ID + "+OR+" + stream.StreamKey + "+OR+" + stream.PlaybackID,
-							Text: "Papertrail",
-						}
-						event.Links = append(event.Links, link)
-					}
-				}
-				resp, err := pagerduty.ManageEvent(event)
-				if err != nil {
-					glog.Error(fmt.Errorf("PAGERDUTY Error: %w", err))
-					messenger.SendFatalMessage(fmt.Sprintf("Error creating PagerDuty event: %v", err))
-				} else {
-					glog.Infof("Incident status: %s message: %s", resp.Status, resp.Message)
-				}
-			}
+			crt.sendPagerdutyEvent(rt, err)
 		} else {
 			msg := fmt.Sprintf(":white_check_mark: Test of %s succeeded", crt.host)
 			messenger.SendMessage(msg)
-			glog.Warning(msg)
+			glog.Info(msg)
+			crt.sendPagerdutyEvent(rt, nil)
 		}
 		try = 0
 		notRtmpTry = 0
@@ -150,6 +117,55 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			return context.Canceled
 		case <-time.After(pauseBetweenTests):
 		}
+	}
+}
+
+func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err error) {
+	if crt.pagerDutyIntegrationKey == "" {
+		return
+	}
+	event := pagerduty.V2Event{
+		RoutingKey: crt.pagerDutyIntegrationKey,
+		Action:     "trigger",
+		DedupKey:   fmt.Sprintf("cont-record-tester:%s", crt.host),
+	}
+	if err == nil {
+		event.Action = "resolve"
+		_, err := pagerduty.ManageEvent(event)
+		if err != nil {
+			messenger.SendMessage(fmt.Sprintf("Error resolving PagerDuty event: %v", err))
+		}
+		return
+	}
+	event.Payload = &pagerduty.V2Payload{
+		Source:    crt.host,
+		Component: crt.pagerDutyComponent,
+		Severity:  "error",
+		Summary:   fmt.Sprintf(":movie_camera: Record tester for %s error: %v", crt.host, err),
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+	sid := rt.StreamID()
+	if sid != "" {
+		link := pagerDutyLink{
+			Href: "https://livepeer.com/dashboard/streams/" + sid,
+			Text: "Stream",
+		}
+		event.Links = append(event.Links, link)
+		stream := rt.Stream()
+		if stream != nil {
+			link = pagerDutyLink{
+				Href: "https://my.papertrailapp.com/events?q=" + stream.ID + "+OR+" + stream.StreamKey + "+OR+" + stream.PlaybackID,
+				Text: "Papertrail",
+			}
+			event.Links = append(event.Links, link)
+		}
+	}
+	resp, err := pagerduty.ManageEvent(event)
+	if err != nil {
+		glog.Error(fmt.Errorf("PAGERDUTY Error: %w", err))
+		messenger.SendFatalMessage(fmt.Sprintf("Error creating PagerDuty event: %v", err))
+	} else {
+		glog.Infof("Incident status: %s message: %s", resp.Status, resp.Message)
 	}
 }
 
