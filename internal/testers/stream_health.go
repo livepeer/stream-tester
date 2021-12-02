@@ -75,12 +75,16 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 			}
 			aggErrs := make([]string, 0, len(errsRegions))
 			for err, regions := range errsRegions {
+				regionsStr := "`all` regions"
+				if len(regions) < len(h.clients) {
+					regionsStr = "[" + strings.Join(regions, ", ") + "]"
+				}
 				sort.Slice(regions, func(i, j int) bool { return regions[i] < regions[j] })
-				aggErrs = append(aggErrs, fmt.Sprintf("%s in [%s]", err, strings.Join(regions, ", ")))
+				aggErrs = append(aggErrs, fmt.Sprintf("%s in %s", err, regionsStr))
 			}
 			sort.Slice(aggErrs, func(i, j int) bool { return aggErrs[i] < aggErrs[j] })
 
-			msg := fmt.Sprintf("Global Stream Health API: stream did not become healthy on all regions analyzers after `%s`: %s",
+			msg := fmt.Sprintf("Global Stream Health API: stream did not become healthy on global analyzers after `%s`: %s",
 				waitForTarget, strings.Join(aggErrs, "; "))
 			h.fatalEnd(errors.New(msg))
 			return
