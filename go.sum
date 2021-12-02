@@ -366,6 +366,8 @@ github.com/livepeer/livepeer-data v0.4.5-beta h1:iyXhhpybqq6dceM0ldvFxHKivM3Rgrl
 github.com/livepeer/livepeer-data v0.4.5-beta/go.mod h1:KMmKC+o3b3C/n9NS5Zvp5SumxnzSW55pj45lJDb4b50=
 github.com/livepeer/livepeer-data v0.4.5-beta.2 h1:WN2CULcaixYSK2/S8wNJBFez3D1qpD3B6eR5ntZ5RIM=
 github.com/livepeer/livepeer-data v0.4.5-beta.2/go.mod h1:KMmKC+o3b3C/n9NS5Zvp5SumxnzSW55pj45lJDb4b50=
+github.com/livepeer/livepeer-data v0.4.5-beta.3 h1:ms9wKvze5zmFKRKevI1I+q3nCeV6kRFr6WKz9UgXA4Y=
+github.com/livepeer/livepeer-data v0.4.5-beta.3/go.mod h1:KMmKC+o3b3C/n9NS5Zvp5SumxnzSW55pj45lJDb4b50=
 github.com/livepeer/m3u8 v0.11.1 h1:VkUJzfNTyjy9mqsgp5JPvouwna8wGZMvd/gAfT5FinU=
 github.com/livepeer/m3u8 v0.11.1/go.mod h1:IUqAtwWPAG2CblfQa4SVzTQoDcEMPyfNOaBSxqHMS04=
 github.com/lyft/protoc-gen-validate v0.0.13/go.mod h1:XbGvPuh87YZc5TdIa2/I4pLk0QoUACkjt2znoq26NVQ=
