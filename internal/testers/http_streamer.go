@@ -82,7 +82,7 @@ func NewHTTPStreamer(pctx context.Context, saveLatencies bool, baseManifestID st
 // var savePrefix = "segmented3"
 var savePrefix = ""
 
-func pushHLSSegments(ctx context.Context, manifestFileName string, stopAfter time.Duration, out chan *hlsSegment) error {
+func pushHLSSegments(ctx context.Context, manifestFileName string, stopAfter time.Duration, out chan *HlsSegment) error {
 	f, err := os.Open(manifestFileName)
 	if err != nil {
 		return err
@@ -101,26 +101,26 @@ func pushHLSSegments(ctx context.Context, manifestFileName string, stopAfter tim
 	return nil
 }
 
-func pushHLSSegmentsLoop(dir string, pl *m3u8.MediaPlaylist, stopAfter time.Duration, out chan *hlsSegment) {
+func pushHLSSegmentsLoop(dir string, pl *m3u8.MediaPlaylist, stopAfter time.Duration, out chan *HlsSegment) {
 	for i, seg := range pl.Segments {
 		if seg == nil {
 			continue
 		}
 		segData, err := ioutil.ReadFile(path.Join(dir, seg.URI))
 		if err != nil {
-			out <- &hlsSegment{err: err}
+			out <- &HlsSegment{Err: err}
 			return
 		}
 		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(segData)
 		if verr != nil {
-			out <- &hlsSegment{err: verr}
+			out <- &HlsSegment{Err: verr}
 			return
 		}
-		hseg := &hlsSegment{
-			seqNo:    i,
-			pts:      fsttim,
-			data:     segData,
-			duration: dur,
+		hseg := &HlsSegment{
+			SeqNo:    i,
+			Pts:      fsttim,
+			Data:     segData,
+			Duration: dur,
 		}
 		time.Sleep(dur)
 		out <- hseg
@@ -128,18 +128,18 @@ func pushHLSSegmentsLoop(dir string, pl *m3u8.MediaPlaylist, stopAfter time.Dura
 			break
 		}
 	}
-	out <- &hlsSegment{err: io.EOF}
+	out <- &HlsSegment{Err: io.EOF}
 }
 
 // StartUpload starts HTTP segments. Blocks until end.
 func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToStream int, waitForTarget, stopAfter, skipFirst time.Duration) {
-	segmentsIn := make(chan *hlsSegment)
+	segmentsIn := make(chan *HlsSegment)
 	var err error
 	ext := path.Ext(fn)
 	if ext == ".m3u8" {
 		err = pushHLSSegments(hs.ctx, fn, stopAfter, segmentsIn)
 	} else {
-		err = startSegmenting(hs.ctx, fn, true, stopAfter, skipFirst, segmentsIn)
+		err = StartSegmenting(hs.ctx, fn, true, stopAfter, skipFirst, segLen, true, segmentsIn)
 	}
 	if err != nil {
 		glog.Infof("Error starting segmenter: %v", err)
@@ -147,7 +147,7 @@ func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToSt
 	}
 	hs.started = true
 	metrics.StartStream()
-	var seg *hlsSegment
+	var seg *HlsSegment
 	lastSeg := time.Now()
 outloop:
 	for {
@@ -157,13 +157,13 @@ outloop:
 			glog.V(model.DEBUG).Infof("=========>>>> got stop singal")
 			break outloop
 		}
-		if seg.err != nil {
-			if seg.err != io.EOF {
-				glog.Warningf("Error during segmenting: %v", seg.err)
+		if seg.Err != nil {
+			if seg.Err != io.EOF {
+				glog.Warningf("Error during segmenting: %v", seg.Err)
 			}
 			break
 		}
-		glog.V(model.VERBOSE).Infof("Got segment out of segmenter mainfest=%s seqNo=%d pts=%s dur=%s since last=%s", manifestID, seg.seqNo, seg.pts, seg.duration, time.Since(lastSeg))
+		glog.V(model.VERBOSE).Infof("Got segment out of segmenter mainfest=%s seqNo=%d pts=%s dur=%s since last=%s", manifestID, seg.SeqNo, seg.Pts, seg.Duration, time.Since(lastSeg))
 		lastSeg = time.Now()
 		hs.wg.Add(1)
 		go hs.pushSegment(httpURL, manifestID, seg)
@@ -176,7 +176,7 @@ outloop:
 	hs.mu.Unlock()
 }
 
-func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment) {
+func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *HlsSegment) {
 	defer hs.wg.Done()
 	hs.mu.Lock()
 	var firstOne bool
@@ -187,16 +187,16 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 	hs.mu.Unlock()
 	purl, _ := url.Parse(httpURL)
 	host := purl.Hostname()
-	urlToUp := fmt.Sprintf("%s/%d.ts", httpURL, seg.seqNo)
-	glog.V(model.DEBUG).Infof("Got source segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.seqNo, seg.pts, seg.duration, len(seg.data), urlToUp)
+	urlToUp := fmt.Sprintf("%s/%d.ts", httpURL, seg.SeqNo)
+	glog.V(model.DEBUG).Infof("Got source segment manifest=%s seqNo=%d pts=%s dur=%s len=%d bytes from segmenter, uploading to %s", manifestID, seg.SeqNo, seg.Pts, seg.Duration, len(seg.Data), urlToUp)
 	var body io.Reader
-	body = bytes.NewReader(seg.data)
+	body = bytes.NewReader(seg.Data)
 	req, err := uhttp.NewRequest("POST", urlToUp, body)
 	if err != nil {
 		panic(err)
 	}
 	req.Header.Set("Accept", "multipart/mixed")
-	req.Header.Set("Content-Duration", strconv.FormatInt(seg.duration.Milliseconds(), 10))
+	req.Header.Set("Content-Duration", strconv.FormatInt(seg.Duration.Milliseconds(), 10))
 	hc := httpClient
 	if strings.HasPrefix(urlToUp, "https:") {
 		hc = http2Client
@@ -214,7 +214,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		status = resp.Status
 	}
 	glog.V(model.DEBUG).Infof("Post segment manifest=%s seqNo=%d pts=%s dur=%s took=%s timed_out=%v status='%v' err=%v",
-		manifestID, seg.seqNo, seg.pts, seg.duration, postTook, timedout, status, err)
+		manifestID, seg.SeqNo, seg.Pts, seg.Duration, postTook, timedout, status, err)
 	if err != nil {
 		hs.mu.Lock()
 		hs.dstats.triedToSend++
@@ -241,7 +241,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		return
 		// panic(err)
 	}
-	glog.V(model.VERBOSE).Infof("Got transcoded manifest=%s seqNo=%d resp status=%s reading body started", manifestID, seg.seqNo, resp.Status)
+	glog.V(model.VERBOSE).Infof("Got transcoded manifest=%s seqNo=%d resp status=%s reading body started", manifestID, seg.SeqNo, resp.Status)
 	if resp.StatusCode != http.StatusOK {
 		b, _ := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
@@ -253,7 +253,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		hs.dstats.errors[statusStr] = hs.dstats.errors[statusStr] + 1
 		hs.dstats.errors[string(b)] = hs.dstats.errors[string(b)] + 1
 		hs.mu.Unlock()
-		glog.V(model.DEBUG).Infof("Got manifest=%s seqNo=%d resp status=%s error in body $%s", manifestID, seg.seqNo, resp.Status, string(b))
+		glog.V(model.DEBUG).Infof("Got manifest=%s seqNo=%d resp status=%s error in body $%s", manifestID, seg.SeqNo, resp.Status, string(b))
 		return
 	}
 	if firstOne {
@@ -301,7 +301,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 			}
 			body, merr := ioutil.ReadAll(p)
 			if merr != nil {
-				glog.Errorf("error reading body manifest=%s seqNo=%d err=%v", manifestID, seg.seqNo, merr)
+				glog.Errorf("error reading body manifest=%s seqNo=%d err=%v", manifestID, seg.SeqNo, merr)
 				err = merr
 				break
 			}
@@ -312,7 +312,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 				if len(body) < 5 {
 					v = 0
 				}
-				glog.V(v).Infof("Read back segment for manifest=%s seqNo=%d profile=%d len=%d bytes", manifestID, seg.seqNo, len(segments), len(body))
+				glog.V(v).Infof("Read back segment for manifest=%s seqNo=%d profile=%d len=%d bytes", manifestID, seg.SeqNo, len(segments), len(body))
 				segments = append(segments, body)
 			}
 		}
@@ -321,11 +321,11 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 		tbody, err := ioutil.ReadAll(resp.Body)
 	*/
 	took := time.Since(started)
-	glog.V(model.VERBOSE).Infof("Reading body back for manifest=%s seqNo=%d took=%s profiles=%d", manifestID, seg.seqNo, took, len(segments))
+	glog.V(model.VERBOSE).Infof("Reading body back for manifest=%s seqNo=%d took=%s profiles=%d", manifestID, seg.SeqNo, took, len(segments))
 	// glog.Infof("Body: %s", string(tbody))
 
 	if err != nil {
-		httpErr := fmt.Sprintf(`Error reading http request body for manifest=%s seqNo=%d err=%s`, manifestID, seg.seqNo, err.Error())
+		httpErr := fmt.Sprintf(`Error reading http request body for manifest=%s seqNo=%d err=%s`, manifestID, seg.SeqNo, err.Error())
 		glog.Error(httpErr)
 		// http.Error(w, httpErr, http.StatusInternalServerError)
 		hs.mu.Lock()
@@ -358,17 +358,17 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 			fsttim, dur, verr := utils.GetVideoStartTimeAndDur(tseg)
 			if verr != nil {
 				msg := fmt.Sprintf("Error parsing video data (manifest=%s seqNo=%d) profile %d result status=%s video data len=%d err=%v",
-					manifestID, seg.seqNo, i, resp.Status, len(tseg), verr)
+					manifestID, seg.SeqNo, i, resp.Status, len(tseg), verr)
 				glog.Error(msg)
 				messenger.SendFatalMessage(msg)
 				hs.mu.Lock()
 				hs.dstats.errors["Video parsing error"] = hs.dstats.errors["Video parsing error"] + 1
 				hs.mu.Unlock()
 				if model.FailHardOnBadSegments {
-					fname := fmt.Sprintf("bad_video_%s_%d_%d.ts", manifestID, seg.seqNo, i)
+					fname := fmt.Sprintf("bad_video_%s_%d_%d.ts", manifestID, seg.SeqNo, i)
 					ioutil.WriteFile(fname, tseg, 0644)
-					srcfname := fmt.Sprintf("bad_video_%s_%d_source.ts", manifestID, seg.seqNo)
-					ioutil.WriteFile(srcfname, seg.data, 0644)
+					srcfname := fmt.Sprintf("bad_video_%s_%d_source.ts", manifestID, seg.SeqNo)
+					ioutil.WriteFile(srcfname, seg.Data, 0644)
 					glog.Infof("Wrote bad segment to '%s', source segment to '%s'", fname, srcfname)
 					// glog.Infof("Data:\n%x", tseg)
 					// glog.Infof("Data as string:\n%s", string(tseg))
@@ -377,23 +377,23 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 				}
 			}
 			glog.V(model.VERBOSE).Infof("Got back manifest=%s seg seqNo=%d profile=%d len=%d bytes pts=%s dur=%s (source duration is %s)",
-				manifestID, seg.seqNo, i, len(tseg), fsttim, dur, seg.duration)
+				manifestID, seg.SeqNo, i, len(tseg), fsttim, dur, seg.Duration)
 			if savePrefix != "" {
-				fn := fmt.Sprintf("trans_%d_%d.ts", i, seg.seqNo)
+				fn := fmt.Sprintf("trans_%d_%d.ts", i, seg.SeqNo)
 				err = ioutil.WriteFile(path.Join(savePrefix, fn), tseg, 0644)
 				if err != nil {
 					glog.Fatal(err)
 				}
 			}
-			if !isTimeEqualM(fsttim, seg.pts) {
-				msg := fmt.Sprintf("Manifest=%s seqNo=%d source pts=%s transcoded (profile=%d) pts=%s", manifestID, seg.seqNo, seg.pts, i, fsttim)
+			if !isTimeEqualM(fsttim, seg.Pts) {
+				msg := fmt.Sprintf("Manifest=%s seqNo=%d source pts=%s transcoded (profile=%d) pts=%s", manifestID, seg.SeqNo, seg.Pts, i, fsttim)
 				glog.Warning(msg)
 				hs.mu.Lock()
 				hs.dstats.errors["PTS mismatch"] = hs.dstats.errors["PTS mismatch"] + 1
 				hs.mu.Unlock()
 			}
-			if !isTimeEqualM(dur, seg.duration) {
-				msg := fmt.Sprintf("Manifest=%s seqNo=%d source duration=%s transcoded (profile=%d) duration=%s", manifestID, seg.seqNo, seg.duration, i, dur)
+			if !isTimeEqualM(dur, seg.Duration) {
+				msg := fmt.Sprintf("Manifest=%s seqNo=%d source duration=%s transcoded (profile=%d) duration=%s", manifestID, seg.SeqNo, seg.Duration, i, dur)
 				glog.Warning(msg)
 				hs.mu.Lock()
 				hs.dstats.errors["Duration mismatch"] = hs.dstats.errors["Duration mismatch"] + 1
@@ -404,14 +404,14 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *hlsSegment)
 			panic(panicerr)
 		}
 		if savePrefix != "" {
-			fn := fmt.Sprintf("source_%d.ts", seg.seqNo)
-			err = ioutil.WriteFile(path.Join(savePrefix, fn), seg.data, 0644)
+			fn := fmt.Sprintf("source_%d.ts", seg.SeqNo)
+			err = ioutil.WriteFile(path.Join(savePrefix, fn), seg.Data, 0644)
 			if err != nil {
 				glog.Fatal(err)
 			}
 		}
 	} else if len(urls) > 0 {
-		glog.Infof("Manifest=%s seqNo=%d got %d urls as result: %+v", manifestID, seg.seqNo, len(urls), urls)
+		glog.Infof("Manifest=%s seqNo=%d got %d urls as result: %+v", manifestID, seg.SeqNo, len(urls), urls)
 	}
 }
 

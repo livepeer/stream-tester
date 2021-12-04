@@ -38,6 +38,10 @@ connector:
 monitor:
 	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)" cmd/stream-monitor/stream-monitor.go
 
+.PHONY: api-transcoder
+api-transcoder:
+	go build -ldflags="$(ldflags)" cmd/api-transcoder/api-transcoder.go
+
 .PHONY: docker
 docker:
 	docker build -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .
