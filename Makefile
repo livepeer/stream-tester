@@ -33,6 +33,10 @@ recordtester:
 connector:
 	go build -ldflags="$(ldflags)" cmd/mist-api-connector/mist-api-connector.go
 
+.PHONY: api-transcoder
+api-transcoder:
+	go build -ldflags="$(ldflags)" cmd/api-transcoder/api-transcoder.go
+
 .PHONY: docker
 docker:
 	docker build -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .

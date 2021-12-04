@@ -9,10 +9,10 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-    - name: Set up Go 1.15
+    - name: Set up Go 1.17
       uses: actions/setup-go@v1
       with:
-        go-version: 1.15
+        go-version: 1.17
       id: go
 
     - name: Check out code into the Go module directory
@@ -55,10 +55,10 @@ jobs:
     needs: create_release
     steps:
 
-    - name: Set up Go 1.15
+    - name: Set up Go 1.17
       uses: actions/setup-go@v1
       with:
-        go-version: 1.15
+        go-version: 1.17
       id: go
 
     - name: Check out code into the Go module directory
@@ -77,6 +77,7 @@ jobs:
         make connector
         make loadtester
         make recordtester
+        make api-transcoder
 
     - name: Compress Posix
       if: matrix.os != 'windows-latest'
@@ -88,6 +89,7 @@ jobs:
         gzip -9 -S .${{runner.os}}.gz mapi
         gzip -9 -S .${{runner.os}}.gz recordtester
         gzip -9 -S .${{runner.os}}.gz mist-api-connector
+        gzip -9 -S .${{runner.os}}.gz api-transcoder
 
     - name: Compress Windows
       if: matrix.os == 'windows-latest'
@@ -107,6 +109,7 @@ jobs:
             mapi.${{runner.os}}.gz
             testdriver.${{runner.os}}.gz
             mist-api-connector.${{runner.os}}.gz
+            api-transcoder.${{runner.os}}.gz
           # body_path: ${{ github.workflow }}-CHANGELOG.txt
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

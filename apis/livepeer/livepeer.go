@@ -7,9 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,7 +25,7 @@ import (
 )
 
 // ErrNotExists returned if stream is not found
-var ErrNotExists = errors.New("Stream does not exists")
+var ErrNotExists = errors.New("stream does not exists")
 
 const httpTimeout = 4 * time.Second
 const setActiveTimeout = 1500 * time.Millisecond
@@ -54,6 +59,7 @@ type (
 		accessToken   string
 		presets       []string
 		httpClient    *http.Client
+		broadcasters  []string
 	}
 
 	geoResp struct {
@@ -77,7 +83,7 @@ type (
 		// - P240p30fps16x9
 		// - P240p30fps4x3
 		// - P144p30fps16x9
-		Profiles []Profile `json:"profiles,omitempty"`
+		Profiles []Profile `json:"profiles"`
 		Record   bool      `json:"record,omitempty"`
 	}
 
@@ -86,7 +92,7 @@ type (
 		Name    string `json:"name,omitempty"`
 		Width   int    `json:"width,omitempty"`
 		Height  int    `json:"height,omitempty"`
-		Bitrate int    `json:"bitrate,omitempty"`
+		Bitrate int    `json:"bitrate"`
 		Fps     int    `json:"fps"`
 		FpsDen  int    `json:"fpsDen,omitempty"`
 		Gop     string `json:"gop,omitempty"`
@@ -376,7 +382,7 @@ func (lapi *API) DeleteStream(id string) error {
 		return err
 	}
 	if resp.StatusCode != 204 {
-		return fmt.Errorf("Error deleting stream %s: status is %s", id, resp.Status)
+		return fmt.Errorf("error deleting stream %s: status is %s", id, resp.Status)
 	}
 	return nil
 }
@@ -386,7 +392,24 @@ func (lapi *API) CreateStreamEx(name string, record bool, presets []string, prof
 	return lapi.CreateStreamEx2(name, record, "", presets, profiles...)
 }
 
-// CreateStreamEx creates stream with specified name and profiles
+// CreateStreamEx2R creates stream with specified name and profiles
+func (lapi *API) CreateStreamEx2R(name string, record bool, parentID string, presets []string, profiles ...Profile) (*CreateStreamResp, error) {
+	var apiTry int
+	for {
+		stream, err := lapi.CreateStreamEx2(name, record, parentID, presets, profiles...)
+		if err != nil {
+			if Timedout(err) && apiTry < 3 {
+				apiTry++
+				continue
+			}
+			glog.Errorf("Error creating stream using Livepeer API: %v", err)
+			return nil, err
+		}
+		return stream, err
+	}
+}
+
+// CreateStreamEx2 creates stream with specified name and profiles
 func (lapi *API) CreateStreamEx2(name string, record bool, parentID string, presets []string, profiles ...Profile) (*CreateStreamResp, error) {
 	// presets := profiles
 	// if len(presets) == 0 {
@@ -403,6 +426,8 @@ func (lapi *API) CreateStreamEx2(name string, record bool, parentID string, pres
 	}
 	if len(profiles) > 0 {
 		reqs.Profiles = profiles
+	} else {
+		reqs.Profiles = make([]Profile, 0)
 	}
 	b, err := json.Marshal(reqs)
 	if err != nil {
@@ -815,6 +840,114 @@ func (lapi *API) GetMultistreamTargetR(id string) (*MultistreamTarget, error) {
 		}
 		return target, err
 	}
+}
+
+func (lapi *API) PushSegment(sid string, seqNo int, dur time.Duration, segData []byte) ([][]byte, error) {
+	var err error
+	if len(lapi.broadcasters) == 0 {
+		lapi.broadcasters, err = lapi.Broadcasters()
+		if err != nil {
+			return nil, err
+		}
+		if len(lapi.broadcasters) == 0 {
+			return nil, fmt.Errorf("no broadcasters available")
+		}
+	}
+	urlToUp := fmt.Sprintf("%s/live/%s/%d.ts", lapi.broadcasters[0], sid, seqNo)
+	var body io.Reader
+	body = bytes.NewReader(segData)
+	req, err := uhttp.NewRequest("POST", urlToUp, body)
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Set("Accept", "multipart/mixed")
+	req.Header.Set("Content-Duration", strconv.FormatInt(dur.Milliseconds(), 10))
+	postStarted := time.Now()
+	resp, err := lapi.httpClient.Do(req)
+	postTook := time.Since(postStarted)
+	var timedout bool
+	var status string
+	if err != nil {
+		uerr := err.(*url.Error)
+		timedout = uerr.Timeout()
+	}
+	if resp != nil {
+		status = resp.Status
+	}
+	glog.V(model.DEBUG).Infof("Post segment manifest=%s seqNo=%d dur=%s took=%s timed_out=%v status='%v' err=%v",
+		sid, seqNo, dur, postTook, timedout, status, err)
+	if err != nil {
+		return nil, err
+	}
+	glog.V(model.VERBOSE).Infof("Got transcoded manifest=%s seqNo=%d resp status=%s reading body started", sid, seqNo, resp.Status)
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		glog.V(model.DEBUG).Infof("Got manifest=%s seqNo=%d resp status=%s error in body $%s", sid, seqNo, resp.Status, string(b))
+		return nil, fmt.Errorf("transcode error %s: %s", resp.Status, b)
+	}
+	started := time.Now()
+	mediaType, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err != nil {
+		glog.Error("Error getting mime type ", err, sid)
+		panic(err)
+		// return
+	}
+	glog.V(model.VERBOSE).Infof("mediaType=%s params=%+v", mediaType, params)
+	if glog.V(model.VVERBOSE) {
+		for k, v := range resp.Header {
+			glog.Infof("Header '%s': '%s'", k, v)
+		}
+	}
+	var segments [][]byte
+	var urls []string
+	if mediaType == "multipart/mixed" {
+		mr := multipart.NewReader(resp.Body, params["boundary"])
+		for {
+			p, merr := mr.NextPart()
+			if merr == io.EOF {
+				break
+			}
+			if merr != nil {
+				glog.Error("Could not process multipart part ", merr, sid)
+				err = merr
+				break
+			}
+			mediaType, _, err := mime.ParseMediaType(p.Header.Get("Content-Type"))
+			if err != nil {
+				glog.Error("Error getting mime type ", err, sid)
+				for k, v := range p.Header {
+					glog.Infof("Header '%s': '%s'", k, v)
+				}
+			}
+			body, merr := ioutil.ReadAll(p)
+			if merr != nil {
+				glog.Errorf("error reading body manifest=%s seqNo=%d err=%v", sid, seqNo, merr)
+				err = merr
+				break
+			}
+			if mediaType == "application/vnd+livepeer.uri" {
+				urls = append(urls, string(body))
+			} else {
+				var v glog.Level = model.DEBUG
+				if len(body) < 5 {
+					v = 0
+				}
+				glog.V(v).Infof("Read back segment for manifest=%s seqNo=%d profile=%d len=%d bytes", sid, seqNo, len(segments), len(body))
+				segments = append(segments, body)
+			}
+		}
+	}
+	took := time.Since(started)
+	glog.V(model.VERBOSE).Infof("Reading body back for manifest=%s seqNo=%d took=%s profiles=%d", sid, seqNo, took, len(segments))
+	// glog.Infof("Body: %s", string(tbody))
+
+	if err != nil {
+		httpErr := fmt.Errorf(`error reading http request body for manifest=%s seqNo=%d err=%w`, sid, seqNo, err)
+		glog.Error(httpErr)
+		return nil, err
+	}
+	return segments, nil
 }
 
 func Timedout(e error) bool {
