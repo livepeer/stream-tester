@@ -28,16 +28,8 @@ import (
 // 	}
 // }
 
-type HlsSegment struct {
-	Err      error
-	SeqNo    int
-	Pts      time.Duration
-	Duration time.Duration
-	Data     []byte
-}
-
 func StartSegmenting(ctx context.Context, fileName string, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
-	useWallTime bool, out chan<- *HlsSegment) error {
+	useWallTime bool, out chan<- *model.HlsSegment) error {
 	glog.Infof("Starting segmenting file %s", fileName)
 	inFile, err := avutil.Open(fileName)
 	if err != nil {
@@ -95,7 +87,7 @@ func (wt *Walltime) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoid
 }
 
 func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
-	useWallTime bool, out chan<- *HlsSegment) {
+	useWallTime bool, out chan<- *model.HlsSegment) {
 
 	var err error
 	var streams []av.CodecData
@@ -211,7 +203,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			}
 			glog.V(model.VVERBOSE).Infof("Wrapping segments seqNo=%d pts=%s dur=%s sending=%v", seqNo, prevPTS, curDur, send)
 			if send {
-				hlsSeg := &HlsSegment{
+				hlsSeg := &model.HlsSegment{
 					// err:      rerr,
 					SeqNo:    seqNo,
 					Pts:      prevPTS,
@@ -231,7 +223,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			// if source segment is too short
 			if rerr == nil || rerr == io.EOF {
 				if skipFirst == 0 || skipFirst < prevPTS {
-					hlsSeg := &HlsSegment{
+					hlsSeg := &model.HlsSegment{
 						// err:      rerr,
 						SeqNo:    seqNo,
 						Pts:      prevPTS,
@@ -249,7 +241,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 				// 	seqNo: seqNo,
 				// }
 				// out <- hlsSeg
-				hlsSeg := &HlsSegment{
+				hlsSeg := &model.HlsSegment{
 					Err:   io.EOF,
 					SeqNo: seqNo + 1 + sent,
 					Pts:   prevPTS + curDur,
@@ -259,7 +251,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			}
 		}
 		if stopAfter > 0 && (prevPTS+curDur) > stopAfter {
-			hlsSeg := &HlsSegment{
+			hlsSeg := &model.HlsSegment{
 				Err:   io.EOF,
 				SeqNo: seqNo + 1,
 				Pts:   prevPTS + curDur,
