@@ -151,7 +151,7 @@ func transcode(apiKey, apiHost, src, dst string, presets []string, lprofile *liv
 	fmt.Printf("Created stream id=%s name=%s\n", stream.ID, stream.Name)
 	gctx, gcancel := context.WithCancel(context.TODO())
 	defer gcancel()
-	segmentsIn := make(chan *testers.HlsSegment)
+	segmentsIn := make(chan *model.HlsSegment)
 	if err = testers.StartSegmenting(gctx, src, true, 0, 0, segLen, false, segmentsIn); err != nil {
 		return err
 	}

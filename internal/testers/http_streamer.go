@@ -82,7 +82,7 @@ func NewHTTPStreamer(pctx context.Context, saveLatencies bool, baseManifestID st
 // var savePrefix = "segmented3"
 var savePrefix = ""
 
-func pushHLSSegments(ctx context.Context, manifestFileName string, stopAfter time.Duration, out chan *HlsSegment) error {
+func pushHLSSegments(ctx context.Context, manifestFileName string, stopAfter time.Duration, out chan *model.HlsSegment) error {
 	f, err := os.Open(manifestFileName)
 	if err != nil {
 		return err
@@ -101,22 +101,22 @@ func pushHLSSegments(ctx context.Context, manifestFileName string, stopAfter tim
 	return nil
 }
 
-func pushHLSSegmentsLoop(dir string, pl *m3u8.MediaPlaylist, stopAfter time.Duration, out chan *HlsSegment) {
+func pushHLSSegmentsLoop(dir string, pl *m3u8.MediaPlaylist, stopAfter time.Duration, out chan *model.HlsSegment) {
 	for i, seg := range pl.Segments {
 		if seg == nil {
 			continue
 		}
 		segData, err := ioutil.ReadFile(path.Join(dir, seg.URI))
 		if err != nil {
-			out <- &HlsSegment{Err: err}
+			out <- &model.HlsSegment{Err: err}
 			return
 		}
 		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(segData)
 		if verr != nil {
-			out <- &HlsSegment{Err: verr}
+			out <- &model.HlsSegment{Err: verr}
 			return
 		}
-		hseg := &HlsSegment{
+		hseg := &model.HlsSegment{
 			SeqNo:    i,
 			Pts:      fsttim,
 			Data:     segData,
@@ -128,12 +128,12 @@ func pushHLSSegmentsLoop(dir string, pl *m3u8.MediaPlaylist, stopAfter time.Dura
 			break
 		}
 	}
-	out <- &HlsSegment{Err: io.EOF}
+	out <- &model.HlsSegment{Err: io.EOF}
 }
 
 // StartUpload starts HTTP segments. Blocks until end.
 func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToStream int, waitForTarget, stopAfter, skipFirst time.Duration) {
-	segmentsIn := make(chan *HlsSegment)
+	segmentsIn := make(chan *model.HlsSegment)
 	var err error
 	ext := path.Ext(fn)
 	if ext == ".m3u8" {
@@ -147,7 +147,7 @@ func (hs *httpStreamer) StartUpload(fn, httpURL, manifestID string, segmentsToSt
 	}
 	hs.started = true
 	metrics.StartStream()
-	var seg *HlsSegment
+	var seg *model.HlsSegment
 	lastSeg := time.Now()
 outloop:
 	for {
@@ -176,7 +176,7 @@ outloop:
 	hs.mu.Unlock()
 }
 
-func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *HlsSegment) {
+func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *model.HlsSegment) {
 	defer hs.wg.Done()
 	hs.mu.Lock()
 	var firstOne bool
