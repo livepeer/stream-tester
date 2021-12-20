@@ -9,6 +9,7 @@ import (
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
 	"github.com/livepeer/stream-tester/apis/mist"
+	census "github.com/livepeer/stream-tester/internal/metrics"
 )
 
 type infoProvider interface {
@@ -93,8 +94,10 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 				Bytes:       push.Stats.Bytes,
 				MediaTimeMs: push.Stats.MediaTime,
 			}
+			mediaTime := time.Duration(metrics.MediaTimeMs) * time.Millisecond
+			census.IncMultistreamMetrics(metrics.Bytes-pushInfo.pushedBytes, mediaTime-pushInfo.pushedMediaTime)
 			pushInfo.pushedBytes = metrics.Bytes
-			pushInfo.pushedMediaTime = time.Duration(metrics.MediaTimeMs) * time.Millisecond
+			pushInfo.pushedMediaTime = mediaTime
 		}
 		multistream[i] = &data.MultistreamTargetMetrics{
 			Target:  pushToMultistreamTargetInfo(pushInfo),
