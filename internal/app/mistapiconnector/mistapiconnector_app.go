@@ -72,10 +72,12 @@ type (
 	}
 
 	pushStatus struct {
-		pushStartEmitted bool
-		pushStopped      bool
 		target           *livepeer.MultistreamTarget
 		profile          string
+		pushStartEmitted bool
+		pushStopped      bool
+		pushedMinutes    float64
+		pushedBytes      int64
 	}
 
 	streamInfo struct {

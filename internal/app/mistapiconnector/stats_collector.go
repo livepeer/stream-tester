@@ -11,6 +11,8 @@ import (
 	"github.com/livepeer/stream-tester/apis/mist"
 )
 
+const msPerMinute = 60 * 1000
+
 type infoProvider interface {
 	getStreamInfo(mistID string) *streamInfo
 }
@@ -85,6 +87,7 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 	defer info.mu.Unlock()
 	multistream := make([]*data.MultistreamTargetMetrics, len(metrics.pushes))
 	for i, push := range metrics.pushes {
+		pushInfo := info.pushStatus[push.OriginalURI]
 		var metrics *data.MultistreamMetrics
 		if push.Stats != nil {
 			metrics = &data.MultistreamMetrics{
@@ -92,8 +95,9 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 				Bytes:       push.Stats.Bytes,
 				MediaTimeMs: push.Stats.MediaTime,
 			}
+			pushInfo.pushedBytes = metrics.Bytes
+			pushInfo.pushedMinutes = float64(metrics.MediaTimeMs) / msPerMinute
 		}
-		pushInfo := info.pushStatus[push.OriginalURI]
 		multistream[i] = &data.MultistreamTargetMetrics{
 			Target:  pushToMultistreamTargetInfo(pushInfo),
 			Metrics: metrics,
