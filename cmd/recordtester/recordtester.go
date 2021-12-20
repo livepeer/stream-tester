@@ -60,6 +60,7 @@ func main() {
 	discordUsersToNotify := fs.String("discord-users", "", "Id's of users to notify in case of failure")
 	pagerDutyIntegrationKey := fs.String("pagerduty-integration-key", "", "PagerDuty integration key")
 	pagerDutyComponent := fs.String("pagerduty-component", "", "PagerDuty component")
+	pagerDutyLowUrgency := fs.Bool("pagerduty-low-urgency", false, "Whether to send only low-urgency PagerDuty alerts")
 	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
 
 	_ = fs.String("config", "", "config file (optional)")
@@ -232,7 +233,7 @@ func main() {
 	} else if *continuousTest > 0 {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
-		crt := recordtester.NewContinuousRecordTester(gctx, lapi, lanalyzers, *pagerDutyIntegrationKey, *pagerDutyComponent, *useHttp, *testMP4, *testStreamHealth)
+		crt := recordtester.NewContinuousRecordTester(gctx, lapi, lanalyzers, *pagerDutyIntegrationKey, *pagerDutyComponent, *pagerDutyLowUrgency, *useHttp, *testMP4, *testStreamHealth)
 		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 		if err != nil {
 			glog.Warningf("Continuous test ended with err=%v", err)

@@ -33,6 +33,7 @@ type (
 		host                    string // API host being tested
 		pagerDutyIntegrationKey string
 		pagerDutyComponent      string
+		pagerDutyLowUrgency     bool
 		useHTTP                 bool
 		mp4                     bool
 		streamHealth            bool
@@ -45,7 +46,7 @@ type (
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, pagerDutyIntegrationKey, pagerDutyComponent string, useHTTP, mp4, streamHealth bool) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, pagerDutyIntegrationKey, pagerDutyComponent string, pagerDutyLowUrgency bool, useHTTP, mp4, streamHealth bool) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	server := lapi.GetServer()
 	u, _ := url.Parse(server)
@@ -57,6 +58,7 @@ func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyz
 		host:                    u.Host,
 		pagerDutyIntegrationKey: pagerDutyIntegrationKey,
 		pagerDutyComponent:      pagerDutyComponent,
+		pagerDutyLowUrgency:     pagerDutyLowUrgency,
 		useHTTP:                 useHTTP,
 		mp4:                     mp4,
 		streamHealth:            streamHealth,
@@ -137,11 +139,15 @@ func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err erro
 		}
 		return
 	}
+	severity, lopriPrefix := "error", ""
+	if crt.pagerDutyLowUrgency {
+		severity, lopriPrefix = "warning", "[LOPRI] "
+	}
 	event.Payload = &pagerduty.V2Payload{
 		Source:    crt.host,
 		Component: crt.pagerDutyComponent,
-		Severity:  "error",
-		Summary:   fmt.Sprintf(":movie_camera: Record tester for %s error: %v", crt.host, err),
+		Severity:  severity,
+		Summary:   fmt.Sprintf("%s:movie_camera: Record tester for %s error: %v", lopriPrefix, crt.host, err),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 	sid := rt.StreamID()
