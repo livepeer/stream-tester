@@ -100,6 +100,7 @@ type checkResult struct {
 func (h *streamHealth) checkAllRegions(logErrs bool) <-chan checkResult {
 	results := make(chan checkResult, 2)
 	wg := sync.WaitGroup{}
+	startTime := time.Now()
 	for region := range h.clients {
 		wg.Add(1)
 		go func(region string) {
@@ -112,7 +113,7 @@ func (h *streamHealth) checkAllRegions(logErrs bool) <-chan checkResult {
 				err = fmt.Errorf("`healthy` condition unavailable")
 			} else if !*healthy {
 				err = fmt.Errorf("`healthy` condition is `false`")
-			} else if age := time.Since(health.Healthy.LastProbeTime.Time); age > time.Minute {
+			} else if age := startTime.Sub(health.Healthy.LastProbeTime.Time); age > time.Minute {
 				err = fmt.Errorf("stream health is outdated (`%s`)", age)
 			}
 			if err != nil && (logErrs || bool(glog.V(model.VVERBOSE))) {
