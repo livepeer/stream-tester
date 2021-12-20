@@ -76,8 +76,8 @@ type (
 		profile          string
 		pushStartEmitted bool
 		pushStopped      bool
-		pushedMinutes    float64
 		pushedBytes      int64
+		pushedMediaTime  time.Duration
 	}
 
 	streamInfo struct {
