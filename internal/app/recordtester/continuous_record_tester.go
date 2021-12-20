@@ -126,10 +126,15 @@ func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err erro
 	if crt.pagerDutyIntegrationKey == "" {
 		return
 	}
+	severity, lopriPrefix, dedupKey := "error", "", fmt.Sprintf("cont-record-tester:%s", crt.host)
+	if crt.pagerDutyLowUrgency {
+		severity, lopriPrefix = "warning", "[LOPRI] "
+		dedupKey = "lopri-" + dedupKey
+	}
 	event := pagerduty.V2Event{
 		RoutingKey: crt.pagerDutyIntegrationKey,
 		Action:     "trigger",
-		DedupKey:   fmt.Sprintf("cont-record-tester:%s", crt.host),
+		DedupKey:   dedupKey,
 	}
 	if err == nil {
 		event.Action = "resolve"
@@ -138,10 +143,6 @@ func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err erro
 			messenger.SendMessage(fmt.Sprintf("Error resolving PagerDuty event: %v", err))
 		}
 		return
-	}
-	severity, lopriPrefix := "error", ""
-	if crt.pagerDutyLowUrgency {
-		severity, lopriPrefix = "warning", "[LOPRI] "
 	}
 	event.Payload = &pagerduty.V2Payload{
 		Source:    crt.host,
