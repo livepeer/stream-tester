@@ -25,6 +25,9 @@ type metricsCollector struct {
 }
 
 func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
+	census.IncMultistreamBytes(0)
+	census.IncMultistreamTime(0)
+
 	mc := &metricsCollector{nodeID, ownRegion, mapi, producer, amqpExchange, infop}
 	go mc.mainLoop(ctx, period)
 }
