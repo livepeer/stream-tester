@@ -35,8 +35,8 @@ type (
 		mSegmentsToDownload   *stats.Int64Measure
 		mSegmentsToDownloaded *stats.Int64Measure
 
-		mMultistreamUsageMin *stats.Float64Measure
 		mMultistreamUsageMb  *stats.Float64Measure
+		mMultistreamUsageMin *stats.Float64Measure
 
 		mStartupLatency   *stats.Float64Measure
 		mTranscodeLatency *stats.Float64Measure
@@ -95,8 +95,8 @@ func InitCensus(nodeID, version, namespace string) {
 	Census.mSegmentsToDownload = stats.Int64("segments_to_download", "Number of segments queued for download", "tot")
 	Census.mSegmentsToDownloaded = stats.Int64("segments_downloaded", "Number of segments downloaded", "tot")
 
-	Census.mMultistreamUsageMin = stats.Float64("multistream_usage_minutes", "Total minutes multistreamed, or pushed, to external services", "min")
 	Census.mMultistreamUsageMb = stats.Float64("multistream_usage_megabytes", "Total number of megabytes multistreamed, or pushed, to external services", "megabyte")
+	Census.mMultistreamUsageMin = stats.Float64("multistream_usage_minutes", "Total minutes multistreamed, or pushed, to external services", "min")
 
 	glog.Infof("Compiler: %s Arch %s OS %s Go version %s", runtime.Compiler, runtime.GOARCH, runtime.GOOS, runtime.Version())
 	glog.Infof("Streamtester version: %s", version)
@@ -151,16 +151,16 @@ func InitCensus(nodeID, version, namespace string) {
 			Aggregation: view.Count(),
 		},
 		{
-			Name:        "multistream_usage_minutes",
-			Measure:     Census.mMultistreamUsageMin,
-			Description: "Total minutes multistreamed, or pushed, to external services",
+			Name:        "multistream_usage_megabytes",
+			Measure:     Census.mMultistreamUsageMb,
+			Description: "Total number of bytes multistreamed, or pushed, to external services",
 			TagKeys:     baseTags,
 			Aggregation: view.Sum(),
 		},
 		{
-			Name:        "multistream_usage_megabytes",
-			Measure:     Census.mMultistreamUsageMb,
-			Description: "Total number of bytes multistreamed, or pushed, to external services",
+			Name:        "multistream_usage_minutes",
+			Measure:     Census.mMultistreamUsageMin,
+			Description: "Total minutes multistreamed, or pushed, to external services",
 			TagKeys:     baseTags,
 			Aggregation: view.Sum(),
 		},
