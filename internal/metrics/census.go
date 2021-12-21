@@ -153,7 +153,7 @@ func InitCensus(nodeID, version, namespace string) {
 		{
 			Name:        "multistream_usage_megabytes",
 			Measure:     Census.mMultistreamUsageMb,
-			Description: "Total number of bytes multistreamed, or pushed, to external services",
+			Description: "Total number of megabytes multistreamed, or pushed, to external services",
 			TagKeys:     baseTags,
 			Aggregation: view.Sum(),
 		},
