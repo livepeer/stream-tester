@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
@@ -67,7 +68,8 @@ func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyz
 }
 
 func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error {
-	messenger.SendMessage(fmt.Sprintf("Starting continuous test of %s", crt.host))
+	hostname, _ := os.Hostname()
+	messenger.SendMessage(fmt.Sprintf("Starting continuous test of %s on hostname=%s", crt.host, hostname))
 	try := 0
 	notRtmpTry := 0
 	maxTestDuration := 2*testDuration + pauseDuration + 15*time.Minute
@@ -83,7 +85,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		cancel()
 
 		if crt.ctx.Err() != nil {
-			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled", crt.host))
+			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled on hostname=%s", crt.host, hostname))
 			return crt.ctx.Err()
 		} else if ctxErr != nil {
 			msg := fmt.Sprintf("Record test of %s timed out, potential deadlock! ctxErr=%q err=%q", crt.host, ctxErr, err)
@@ -121,9 +123,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		glog.Infof("Waiting %s before next test", pauseBetweenTests)
 		select {
 		case <-crt.ctx.Done():
-			err := crt.ctx.Err()
-			msg := fmt.Sprintf("Continuous record test of %s cancelled err=%q", crt.host, err)
-			messenger.SendMessage(msg)
+			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled on hostname=%s", crt.host, hostname))
 			return err
 		case <-time.After(pauseBetweenTests):
 		}
