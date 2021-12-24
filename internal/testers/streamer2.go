@@ -2,7 +2,9 @@ package testers
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -94,16 +96,31 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 		tests = append(tests, startFunc(sr.ctx, mediaURL, waitForTarget, sr.Streamer2Options))
 	}
 	go func() {
-		testsDone := onAnyDone(sr.ctx, tests)
+		var (
+			ctx, cancel = context.WithCancel(sr.ctx)
+			testsDone   = onAnyDone(ctx, tests)
+			errs        = []string{}
+		)
+		defer cancel()
 		for {
 			select {
-			case <-sr.ctx.Done():
-				return
 			case test := <-testsDone:
 				if err := test.GlobalErr(); err != nil {
-					sr.fatalEnd(err)
-					return
+					if sr.globalError == nil {
+						sr.globalError = err
+						time.AfterFunc(10*time.Second, cancel)
+					}
+					errs = append(errs, err.Error())
 				}
+			case <-ctx.Done():
+				if len(errs) > 0 {
+					msg := errs[0]
+					if len(errs) > 1 {
+						msg = "Multiple errors: " + strings.Join(errs, "; ")
+					}
+					sr.fatalEnd(errors.New(msg))
+				}
+				return
 			}
 		}
 	}()
