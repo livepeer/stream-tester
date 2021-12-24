@@ -70,7 +70,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 	glog.Infof("Starting continuous test of %s", crt.host)
 	try := 0
 	notRtmpTry := 0
-	maxTestDuration := 2*(testDuration+pauseDuration) + 2*time.Minute
+	maxTestDuration := 2*testDuration + pauseDuration + 15*time.Minute
 	for {
 		msg := fmt.Sprintf(":arrow_right: Starting %s recordings test stream to %s", 2*testDuration, crt.host)
 		glog.Info(msg)
@@ -80,13 +80,13 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		rt := NewRecordTester(ctx, crt.lapi, crt.lanalyzers, true, crt.useHTTP, crt.mp4, crt.streamHealth)
 		es, err := rt.Start(fileName, testDuration, pauseDuration)
 		rt.Clean()
+		if ctxErr := ctx.Err(); ctxErr != nil && crt.ctx.Err() == nil {
+			msg := fmt.Sprintf("Record test of %s timed out, potential deadlock! ctxErr=%q err=%q", crt.host, ctxErr, err)
+			messenger.SendFatalMessage(msg)
+		}
 		cancel()
 
-		if err == context.Canceled {
-			msg := fmt.Sprintf("Test of %s cancelled", crt.host)
-			messenger.SendMessage(msg)
-			return err
-		} else if err != nil || es != 0 {
+		if err != nil || es != 0 {
 			var re *testers.RTMPError
 			if errors.As(err, &re) && try < 4 {
 				msg := fmt.Sprintf(":rotating_light: Test of %s ended with RTMP err=%v errCode=%v try=%d, trying %s time",
@@ -119,7 +119,10 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		glog.Infof("Waiting %s before next test", pauseBetweenTests)
 		select {
 		case <-crt.ctx.Done():
-			return context.Canceled
+			err := crt.ctx.Err()
+			msg := fmt.Sprintf("Continuous record test of %s cancelled err=%q", crt.host, err)
+			messenger.SendMessage(msg)
+			return err
 		case <-time.After(pauseBetweenTests):
 		}
 	}
