@@ -74,9 +74,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	}
 	// check if we can make TCP connection to RTMP target
 	if err := utils.WaitForTCP(waitForTarget, rtmpIngestURL); err != nil {
-		glog.Info(err)
-		sr.globalError = err
-		messenger.SendFatalMessage(err.Error())
+		sr.fatalEnd(err)
 		return
 	}
 
@@ -103,8 +101,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 				return
 			case test := <-testsDone:
 				if err := test.GlobalErr(); err != nil {
-					sr.globalError = err
-					sr.cancel()
+					sr.fatalEnd(err)
 					return
 				}
 			}
