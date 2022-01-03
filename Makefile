@@ -56,10 +56,14 @@ release:
 		echo "e.g. make release version=1.2.3-beta" ; \
 		exit 1 ; \
 	fi
-	@git diff --quiet || { echo "Git working directory is dirty." && exit 1 ; }
+	@git diff --quiet || { echo "Git working directory is dirty."; exit 1 ; }
 
 	git tag -a v$(version) -m "Release v$(version)"
 	git push origin v$(version)
 
-	git merge --ff-only v$(version) mapic-release-test
+	@echo -n "Release mist-api-connector? [y] "
+	@read ans && [ $${ans:-y} = y ] || { echo "Mapic release aborted, branch not fast-forwarded."; exit 1 ; }
+
+	git checkout mapic-release-test
+	git merge --ff-only v$(version)
 	git push origin mapic-release-test
