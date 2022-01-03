@@ -64,6 +64,6 @@ release:
 	@echo -n "Release mist-api-connector? [y] "
 	@read ans && [ $${ans:-y} = y ] || { echo "Mapic release aborted, branch not fast-forwarded."; exit 1 ; }
 
-	git checkout mapic-release-test
+	git checkout mapic-release
 	git merge --ff-only v$(version)
-	git push origin mapic-release-test
+	git push origin mapic-release
