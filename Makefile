@@ -61,5 +61,5 @@ release:
 	git tag -a v$(version) -m "Release v$(version)"
 	git push origin v$(version)
 
-	git merge --ff-only mapic-release
-	git push origin mapic-release
+	git merge --ff-only v$(version) mapic-release-test
+	git push origin mapic-release-test
