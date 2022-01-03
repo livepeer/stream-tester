@@ -1,6 +1,6 @@
 SHELL=/bin/bash
 
-all: streamtester
+all: streamtester loadtester testdriver lapi mapi recordtester connector
 
 ldflags := -X 'github.com/livepeer/stream-tester/model.Version=$(shell git describe --dirty)'
 # ldflags := -X 'github.com/livepeer/stream-tester/model.Version=$(shell git describe --dirty)' -X 'github.com/livepeer/stream-tester/model.IProduction=true'
