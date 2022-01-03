@@ -57,5 +57,9 @@ release:
 		exit 1 ; \
 	fi
 	@git diff --quiet || { echo "Git working directory is dirty." && exit 1 ; }
-	# git tag -a v$(version) -m "Release v$(version)"
-	echo gogo $(version)
+
+	git tag -a v$(version) -m "Release v$(version)"
+	git push origin v$(version)
+
+	git merge --ff-only mapic-release
+	git push origin mapic-release
