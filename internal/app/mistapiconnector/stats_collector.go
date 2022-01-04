@@ -9,6 +9,7 @@ import (
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
 	"github.com/livepeer/stream-tester/apis/mist"
+	census "github.com/livepeer/stream-tester/internal/metrics"
 )
 
 type infoProvider interface {
@@ -24,6 +25,9 @@ type metricsCollector struct {
 }
 
 func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
+	census.IncMultistreamBytes(0)
+	census.IncMultistreamTime(0)
+
 	mc := &metricsCollector{nodeID, ownRegion, mapi, producer, amqpExchange, infop}
 	go mc.mainLoop(ctx, period)
 }
@@ -85,6 +89,7 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 	defer info.mu.Unlock()
 	multistream := make([]*data.MultistreamTargetMetrics, len(metrics.pushes))
 	for i, push := range metrics.pushes {
+		pushInfo := info.pushStatus[push.OriginalURI]
 		var metrics *data.MultistreamMetrics
 		if push.Stats != nil {
 			metrics = &data.MultistreamMetrics{
@@ -92,8 +97,15 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 				Bytes:       push.Stats.Bytes,
 				MediaTimeMs: push.Stats.MediaTime,
 			}
+			if metrics.Bytes > pushInfo.pushedBytes {
+				census.IncMultistreamBytes(metrics.Bytes - pushInfo.pushedBytes)
+				pushInfo.pushedBytes = metrics.Bytes
+			}
+			if mediaTime := time.Duration(metrics.MediaTimeMs) * time.Millisecond; mediaTime > pushInfo.pushedMediaTime {
+				census.IncMultistreamTime(mediaTime - pushInfo.pushedMediaTime)
+				pushInfo.pushedMediaTime = mediaTime
+			}
 		}
-		pushInfo := info.pushStatus[push.OriginalURI]
 		multistream[i] = &data.MultistreamTargetMetrics{
 			Target:  pushToMultistreamTargetInfo(pushInfo),
 			Metrics: metrics,

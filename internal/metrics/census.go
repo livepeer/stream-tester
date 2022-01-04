@@ -35,6 +35,9 @@ type (
 		mSegmentsToDownload   *stats.Int64Measure
 		mSegmentsToDownloaded *stats.Int64Measure
 
+		mMultistreamUsageMb  *stats.Float64Measure
+		mMultistreamUsageMin *stats.Float64Measure
+
 		mStartupLatency   *stats.Float64Measure
 		mTranscodeLatency *stats.Float64Measure
 
@@ -92,6 +95,9 @@ func InitCensus(nodeID, version, namespace string) {
 	Census.mSegmentsToDownload = stats.Int64("segments_to_download", "Number of segments queued for download", "tot")
 	Census.mSegmentsToDownloaded = stats.Int64("segments_downloaded", "Number of segments downloaded", "tot")
 
+	Census.mMultistreamUsageMb = stats.Float64("multistream_usage_megabytes", "Total number of megabytes multistreamed, or pushed, to external services", "megabyte")
+	Census.mMultistreamUsageMin = stats.Float64("multistream_usage_minutes", "Total minutes multistreamed, or pushed, to external services", "min")
+
 	glog.Infof("Compiler: %s Arch %s OS %s Go version %s", runtime.Compiler, runtime.GOARCH, runtime.GOOS, runtime.Version())
 	glog.Infof("Streamtester version: %s", version)
 	glog.Infof("Node ID %s", nodeID)
@@ -143,6 +149,20 @@ func InitCensus(nodeID, version, namespace string) {
 			Description: "Number of segments downloaded",
 			TagKeys:     baseTags,
 			Aggregation: view.Count(),
+		},
+		{
+			Name:        "multistream_usage_megabytes",
+			Measure:     Census.mMultistreamUsageMb,
+			Description: "Total number of megabytes multistreamed, or pushed, to external services",
+			TagKeys:     baseTags,
+			Aggregation: view.Sum(),
+		},
+		{
+			Name:        "multistream_usage_minutes",
+			Measure:     Census.mMultistreamUsageMin,
+			Description: "Total minutes multistreamed, or pushed, to external services",
+			TagKeys:     baseTags,
+			Aggregation: view.Sum(),
 		},
 		{
 			Name:        "successful_streams",
@@ -248,6 +268,14 @@ func (cs *censusMetricsCounter) SegmentDownloaded() int64 {
 	stats.Record(cs.ctx, cs.mSegmentsDownloading.M(std))
 	stats.Record(cs.ctx, cs.mSegmentsToDownloaded.M(1))
 	return std
+}
+
+func IncMultistreamBytes(bytes int64) {
+	stats.Record(Census.ctx, Census.mMultistreamUsageMb.M(float64(bytes)/1024/1024))
+}
+
+func IncMultistreamTime(mediaTime time.Duration) {
+	stats.Record(Census.ctx, Census.mMultistreamUsageMin.M(mediaTime.Minutes()))
 }
 
 // CurrentStreams set number of active streams
