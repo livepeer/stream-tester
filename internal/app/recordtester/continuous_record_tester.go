@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
@@ -27,13 +28,16 @@ type (
 
 	continuousRecordTester struct {
 		lapi                    *livepeer.API
+		lanalyzers              testers.AnalyzerByRegion
 		ctx                     context.Context
 		cancel                  context.CancelFunc
 		host                    string // API host being tested
 		pagerDutyIntegrationKey string
 		pagerDutyComponent      string
+		pagerDutyLowUrgency     bool
 		useHTTP                 bool
 		mp4                     bool
+		streamHealth            bool
 	}
 
 	pagerDutyLink struct {
@@ -43,44 +47,55 @@ type (
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, pagerDutyIntegrationKey, pagerDutyComponent string, useHTTP, mp4 bool) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, pagerDutyIntegrationKey, pagerDutyComponent string, pagerDutyLowUrgency bool, useHTTP, mp4, streamHealth bool) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	server := lapi.GetServer()
 	u, _ := url.Parse(server)
 	crt := &continuousRecordTester{
 		lapi:                    lapi,
+		lanalyzers:              lanalyzers,
 		ctx:                     ctx,
 		cancel:                  cancel,
 		host:                    u.Host,
 		pagerDutyIntegrationKey: pagerDutyIntegrationKey,
 		pagerDutyComponent:      pagerDutyComponent,
+		pagerDutyLowUrgency:     pagerDutyLowUrgency,
 		useHTTP:                 useHTTP,
 		mp4:                     mp4,
+		streamHealth:            streamHealth,
 	}
 	return crt
 }
 
 func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error {
-	glog.Infof("Starting continuous test of %s", crt.host)
+	hostname, _ := os.Hostname()
+	messenger.SendMessage(fmt.Sprintf("Starting continuous test of %s on hostname=%s", crt.host, hostname))
 	try := 0
 	notRtmpTry := 0
+	maxTestDuration := 2*testDuration + pauseDuration + 15*time.Minute
 	for {
 		msg := fmt.Sprintf(":arrow_right: Starting %s recordings test stream to %s", 2*testDuration, crt.host)
-		glog.Info(msg)
 		messenger.SendMessage(msg)
-		rt := NewRecordTester(crt.ctx, crt.lapi, true, crt.useHTTP, crt.mp4)
+
+		ctx, cancel := context.WithTimeout(crt.ctx, maxTestDuration)
+		rt := NewRecordTester(ctx, crt.lapi, crt.lanalyzers, true, crt.useHTTP, crt.mp4, crt.streamHealth)
 		es, err := rt.Start(fileName, testDuration, pauseDuration)
-		if err == context.Canceled {
-			msg := fmt.Sprintf("Test of %s cancelled", crt.host)
-			messenger.SendMessage(msg)
-			return err
+		rt.Clean()
+		ctxErr := ctx.Err()
+		cancel()
+
+		if crt.ctx.Err() != nil {
+			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled on hostname=%s", crt.host, hostname))
+			return crt.ctx.Err()
+		} else if ctxErr != nil {
+			msg := fmt.Sprintf("Record test of %s timed out, potential deadlock! ctxErr=%q err=%q", crt.host, ctxErr, err)
+			messenger.SendFatalMessage(msg)
 		} else if err != nil || es != 0 {
 			var re *testers.RTMPError
 			if errors.As(err, &re) && try < 4 {
 				msg := fmt.Sprintf(":rotating_light: Test of %s ended with RTMP err=%v errCode=%v try=%d, trying %s time",
 					crt.host, err, es, try, getNth(try+2))
 				messenger.SendMessage(msg)
-				rt.Clean()
 				try++
 				time.Sleep(10 * time.Second)
 				continue
@@ -89,7 +104,6 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 				msg := fmt.Sprintf(":rotating_light: Test of %s ended with some err=%v errCode=%v try=%d, trying %s time",
 					crt.host, err, es, notRtmpTry, getNth(notRtmpTry+2))
 				messenger.SendMessage(msg)
-				rt.Clean()
 				notRtmpTry++
 				time.Sleep(5 * time.Second)
 				continue
@@ -97,56 +111,76 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			msg := fmt.Sprintf(":rotating_light: Test of %s ended with err=%v errCode=%v", crt.host, err, es)
 			messenger.SendFatalMessage(msg)
 			glog.Warning(msg)
-			if crt.pagerDutyIntegrationKey != "" {
-				event := pagerduty.V2Event{
-					RoutingKey: crt.pagerDutyIntegrationKey,
-					Action:     "trigger",
-					Payload: &pagerduty.V2Payload{
-						Source:    crt.host,
-						Component: crt.pagerDutyComponent,
-						Severity:  "error",
-						Summary:   crt.host + ": " + err.Error(),
-					},
-				}
-				sid := rt.StreamID()
-				if sid != "" {
-					link := pagerDutyLink{
-						Href: "https://livepeer.com/app/stream/" + sid,
-						Text: "Stream",
-					}
-					event.Links = append(event.Links, link)
-					stream := rt.Stream()
-					if stream != nil {
-						plink := pagerDutyLink{
-							Href: "https://my.papertrailapp.com/events?q=" + stream.ID + "+OR+" + stream.StreamKey + "+OR+" + stream.PlaybackID,
-							Text: "Papertrail",
-						}
-						event.Links = append(event.Links, plink)
-					}
-				}
-				resp, err := pagerduty.ManageEvent(event)
-				if err != nil {
-					glog.Error(fmt.Errorf("PAGERDUTY Error: %w", err))
-					messenger.SendFatalMessage(fmt.Sprintf("Error creating PagerDuty event: %v", err))
-				} else {
-					glog.Infof("Incident status: %s message: %s", resp.Status, resp.Message)
-				}
-			}
+			crt.sendPagerdutyEvent(rt, err)
 		} else {
-			msg := fmt.Sprintf(":white_check_mark: Test of %s succeed", crt.host)
+			msg := fmt.Sprintf(":white_check_mark: Test of %s succeeded", crt.host)
 			messenger.SendMessage(msg)
-			glog.Warning(msg)
+			glog.Info(msg)
+			crt.sendPagerdutyEvent(rt, nil)
 		}
 		try = 0
 		notRtmpTry = 0
-		rt.Clean()
 		glog.Infof("Waiting %s before next test", pauseBetweenTests)
-		time.Sleep(pauseBetweenTests)
 		select {
 		case <-crt.ctx.Done():
-			return context.Canceled
-		default:
+			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled on hostname=%s", crt.host, hostname))
+			return err
+		case <-time.After(pauseBetweenTests):
 		}
+	}
+}
+
+func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err error) {
+	if crt.pagerDutyIntegrationKey == "" {
+		return
+	}
+	severity, lopriPrefix, dedupKey := "error", "", fmt.Sprintf("cont-record-tester:%s", crt.host)
+	if crt.pagerDutyLowUrgency {
+		severity, lopriPrefix = "warning", "[LOPRI] "
+		dedupKey = "lopri-" + dedupKey
+	}
+	event := pagerduty.V2Event{
+		RoutingKey: crt.pagerDutyIntegrationKey,
+		Action:     "trigger",
+		DedupKey:   dedupKey,
+	}
+	if err == nil {
+		event.Action = "resolve"
+		_, err := pagerduty.ManageEvent(event)
+		if err != nil {
+			messenger.SendMessage(fmt.Sprintf("Error resolving PagerDuty event: %v", err))
+		}
+		return
+	}
+	event.Payload = &pagerduty.V2Payload{
+		Source:    crt.host,
+		Component: crt.pagerDutyComponent,
+		Severity:  severity,
+		Summary:   fmt.Sprintf("%s:movie_camera: %s for %s error: %v", lopriPrefix, crt.pagerDutyComponent, crt.host, err),
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+	sid := rt.StreamID()
+	if sid != "" {
+		link := pagerDutyLink{
+			Href: "https://livepeer.com/dashboard/streams/" + sid,
+			Text: "Stream",
+		}
+		event.Links = append(event.Links, link)
+		stream := rt.Stream()
+		if stream != nil {
+			link = pagerDutyLink{
+				Href: "https://my.papertrailapp.com/events?q=" + stream.ID + "+OR+" + stream.StreamKey + "+OR+" + stream.PlaybackID,
+				Text: "Papertrail",
+			}
+			event.Links = append(event.Links, link)
+		}
+	}
+	resp, err := pagerduty.ManageEvent(event)
+	if err != nil {
+		glog.Error(fmt.Errorf("PAGERDUTY Error: %w", err))
+		messenger.SendFatalMessage(fmt.Sprintf("Error creating PagerDuty event: %v", err))
+	} else {
+		glog.Infof("Incident status: %s message: %s", resp.Status, resp.Message)
 	}
 }
 

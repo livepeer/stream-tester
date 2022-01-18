@@ -2,7 +2,9 @@ package testers
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -18,33 +20,37 @@ var IgnoreNoCodecError bool
 var StartDelayBetweenGroups = 2 * time.Second
 
 type (
+	Streamer2Options struct {
+		WowzaMode              bool
+		MistMode               bool
+		Save                   bool
+		FailIfTranscodingStops bool
+		PrintStats             bool
+	}
+
+	StartTestFunc func(ctx context.Context, mediaURL string, waitForTarget time.Duration, opts Streamer2Options) Finite
+
 	// streamer2 is used for running continious tests against Wowza servers
 	streamer2 struct {
 		finite
-		uploader               *rtmpStreamer
-		downloader             *m3utester2
-		wowzaMode              bool
-		mistMode               bool
-		save                   bool
-		failIfTranscodingStops bool
-		printStats             bool
-		err                    error
+		Streamer2Options
+		uploader        *rtmpStreamer
+		downloader      *m3utester2
+		additionalTests []StartTestFunc
+		err             error
 	}
 )
 
 // NewStreamer2 returns new streamer2
-func NewStreamer2(pctx context.Context, wowzaMode, mistMode, save, failIfTranscodingStops, printStats bool) model.Streamer2 {
+func NewStreamer2(pctx context.Context, opts Streamer2Options, additionalTests ...StartTestFunc) model.Streamer2 {
 	ctx, cancel := context.WithCancel(pctx)
 	return &streamer2{
 		finite: finite{
 			ctx:    ctx,
 			cancel: cancel,
 		},
-		wowzaMode:              wowzaMode,
-		mistMode:               mistMode,
-		save:                   save,
-		failIfTranscodingStops: failIfTranscodingStops,
-		printStats:             printStats,
+		Streamer2Options: opts,
+		additionalTests:  additionalTests,
 	}
 }
 
@@ -70,9 +76,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	}
 	// check if we can make TCP connection to RTMP target
 	if err := utils.WaitForTCP(waitForTarget, rtmpIngestURL); err != nil {
-		glog.Info(err)
-		sr.globalError = err
-		messenger.SendFatalMessage(err.Error())
+		sr.fatalEnd(err)
 		return
 	}
 
@@ -85,15 +89,39 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 	go func() {
 		sr.uploader.StartUpload(sourceFileName, rtmpIngestURL, timeToStream, waitForTarget)
 	}()
-	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.wowzaMode, sr.mistMode,
-		sr.failIfTranscodingStops, sr.save, sr.printStats, waitForTarget, sm, false) // starts to download at creation
+	sr.downloader = newM3utester2(sr.ctx, mediaURL, sr.WowzaMode, sr.MistMode,
+		sr.FailIfTranscodingStops, sr.Save, sr.PrintStats, waitForTarget, sm, false) // starts to download at creation
+	tests := []Finite{sr.downloader}
+	for _, startFunc := range sr.additionalTests {
+		tests = append(tests, startFunc(sr.ctx, mediaURL, waitForTarget, sr.Streamer2Options))
+	}
 	go func() {
-		select {
-		case <-sr.ctx.Done():
-		case <-sr.downloader.Done():
-			sr.globalError = sr.downloader.globalError
-			// media downloader exited (probably with error), stop streaming
-			sr.cancel()
+		var (
+			ctx, cancel = context.WithCancel(sr.ctx)
+			testsDone   = onAnyDone(ctx, tests)
+			errs        = []string{}
+		)
+		defer cancel()
+		for {
+			select {
+			case test := <-testsDone:
+				if err := test.GlobalErr(); err != nil {
+					if sr.globalError == nil {
+						sr.globalError = err
+						time.AfterFunc(10*time.Second, cancel)
+					}
+					errs = append(errs, err.Error())
+				}
+			case <-ctx.Done():
+				if len(errs) > 0 {
+					msg := errs[0]
+					if len(errs) > 1 {
+						msg = "Multiple errors: " + strings.Join(errs, "; ")
+					}
+					sr.fatalEnd(errors.New(msg))
+				}
+				return
+			}
 		}
 	}()
 	started := time.Now()
@@ -106,6 +134,20 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 		messenger.SendMessage(msg)
 	}
 	sr.cancel()
+}
+
+func onAnyDone(ctx context.Context, finites []Finite) <-chan Finite {
+	finished := make(chan Finite, len(finites))
+	for _, f := range finites {
+		go func(f Finite) {
+			select {
+			case <-f.Done():
+				finished <- f
+			case <-ctx.Done():
+			}
+		}(f)
+	}
+	return finished
 }
 
 // StartPulling pull arbitrary HLS stream and report found errors

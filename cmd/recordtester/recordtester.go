@@ -16,6 +16,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/joy4/format"
+	"github.com/livepeer/livepeer-data/pkg/client"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/app/recordtester"
 	"github.com/livepeer/stream-tester/internal/metrics"
@@ -48,15 +49,18 @@ func main() {
 	pauseDuration := fs.Duration("pause-dur", 0, "How long to wait between two consecutive RTMP streams that will comprise one user session")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
+	analyzerServers := fs.String("analyzer-servers", "", "Comma-separated list of base URLs to connect for the Stream Health Analyzer API (defaults to --api-server)")
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
 	continuousTest := fs.Duration("continuous-test", 0, "Do continuous testing")
 	useHttp := fs.Bool("http", false, "Do HTTP tests instead of RTMP")
 	testMP4 := fs.Bool("mp4", false, "Download MP4 of recording")
+	testStreamHealth := fs.Bool("stream-health", false, "Check stream health during test")
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
 	discordUsersToNotify := fs.String("discord-users", "", "Id's of users to notify in case of failure")
 	pagerDutyIntegrationKey := fs.String("pagerduty-integration-key", "", "PagerDuty integration key")
 	pagerDutyComponent := fs.String("pagerduty-component", "", "PagerDuty component")
+	pagerDutyLowUrgency := fs.Bool("pagerduty-low-urgency", false, "Whether to send only low-urgency PagerDuty alerts")
 	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
 
 	_ = fs.String("config", "", "config file (optional)")
@@ -65,6 +69,7 @@ func main() {
 		ff.WithConfigFileFlag("config"),
 		ff.WithConfigFileParser(ff.PlainParser),
 		ff.WithEnvVarPrefix("RT"),
+		ff.WithEnvVarIgnoreCommas(true),
 	)
 	flag.CommandLine.Parse(nil)
 	vFlag.Value.Set(*verbosity)
@@ -78,7 +83,7 @@ func main() {
 	if *version {
 		return
 	}
-	metrics.InitCensus(hostName, model.Version, "loadtester")
+	metrics.InitCensus(hostName, model.Version, "recordtester")
 	testers.IgnoreNoCodecError = true
 	testers.IgnoreGaps = true
 	testers.IgnoreTimeDrift = true
@@ -93,8 +98,11 @@ func main() {
 		fmt.Println("Pause should be less than 5 min")
 		os.Exit(1)
 	}
-	var err error
+	if *analyzerServers == "" {
+		*analyzerServers = *apiServer
+	}
 	var fileName string
+	var err error
 
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
 	defer gcancel()
@@ -155,6 +163,12 @@ func main() {
 	lapi.Init()
 	glog.Infof("Choosen server: %s", lapi.GetServer())
 
+	userAgent := model.AppName + "/" + model.Version
+	lanalyzers := testers.AnalyzerByRegion{}
+	for _, url := range strings.Split(*analyzerServers, ",") {
+		lanalyzers[url] = client.NewAnalyzer(url, *apiToken, userAgent, 0)
+	}
+
 	/*
 		sessionsx, err := lapi.GetSessions("1f770f0a-9177-49bd-a848-023abee7c09b")
 		if err != nil {
@@ -185,7 +199,7 @@ func main() {
 		start := time.Now()
 
 		for i := 0; i < *sim; i++ {
-			rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, *testMP4)
+			rt := recordtester.NewRecordTester(gctx, lapi, lanalyzers, useForceURL, *useHttp, *testMP4, *testStreamHealth)
 			eses = append(eses, 0)
 			testers = append(testers, rt)
 			wg.Add(1)
@@ -196,7 +210,7 @@ func main() {
 				if les != 0 {
 					es = les
 				}
-				if err != nil {
+				if lerr != nil {
 					err = lerr
 				}
 				wg.Done()
@@ -219,7 +233,7 @@ func main() {
 	} else if *continuousTest > 0 {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
-		crt := recordtester.NewContinuousRecordTester(gctx, lapi, *pagerDutyIntegrationKey, *pagerDutyComponent, *useHttp, *testMP4)
+		crt := recordtester.NewContinuousRecordTester(gctx, lapi, lanalyzers, *pagerDutyIntegrationKey, *pagerDutyComponent, *pagerDutyLowUrgency, *useHttp, *testMP4, *testStreamHealth)
 		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 		if err != nil {
 			glog.Warningf("Continuous test ended with err=%v", err)
@@ -228,7 +242,7 @@ func main() {
 		return
 	}
 	// just one stream
-	rt := recordtester.NewRecordTester(gctx, lapi, useForceURL, *useHttp, *testMP4)
+	rt := recordtester.NewRecordTester(gctx, lapi, lanalyzers, useForceURL, *useHttp, *testMP4, *testStreamHealth)
 	es, err := rt.Start(fileName, *testDuration, *pauseDuration)
 	exit(es, fileName, *fileArg, err)
 }

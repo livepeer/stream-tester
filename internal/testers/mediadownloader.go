@@ -41,7 +41,7 @@ type downloadStats struct {
 
 type downloadTask struct {
 	baseURL  *url.URL
-	url      string
+	url      *url.URL
 	seqNo    uint64
 	title    string
 	duration float64
@@ -186,13 +186,9 @@ func (md *mediaDownloader) statsFormatted() string {
 }
 
 func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan downloadResult) {
-	purl, err := url.Parse(task.url)
-	if err != nil {
-		glog.Fatal(err)
-	}
-	fsurl := task.url
-	if !purl.IsAbs() {
-		fsurl = md.u.ResolveReference(purl).String()
+	fsurl := task.url.String()
+	if !task.url.IsAbs() {
+		fsurl = md.u.ResolveReference(task.url).String()
 	}
 	try := 0
 	for {
@@ -250,7 +246,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 				}
 			}
 			if md.picartoMode {
-				fsttim = time.Duration(mistGetTimeFromSegURI(task.url)) * time.Millisecond
+				fsttim = time.Duration(mistGetTimeFromSegURI(task.url.String())) * time.Millisecond
 			}
 		} else {
 			// add keys
@@ -319,7 +315,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 
 		if md.saveSegmentsToDisk {
 			seg := new(m3u8.MediaSegment)
-			seg.URI = task.url
+			seg.URI = task.url.String()
 			seg.SeqId = task.seqNo
 			seg.Duration = task.duration
 			seg.Title = task.title
@@ -331,7 +327,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			upts := strings.Split(fsurl, "/")
 			// fn := upts[len(upts)-2] + "-" + path.Base(task.url)
 			ind := len(upts) - 2
-			fn := path.Base(task.url)
+			fn := path.Base(task.url.String())
 			if !md.livepeerNameSchema {
 				// ind = 0
 				// fn = upts[0]
@@ -378,7 +374,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 				glog.V(model.DEBUG).Infof("Segment %s saved to %s", seg.URI, filepath.Join(md.saveDir, fn))
 			}(fn, fullpath, b)
 		}
-		res <- downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url, seqNo: task.seqNo, downloadCompetedAt: now,
+		res <- downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url.String(), seqNo: task.seqNo, downloadCompetedAt: now,
 			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime, keyFrames: keyFrames}
 		return
 	}
@@ -560,7 +556,11 @@ func (md *mediaDownloader) manifestDownloadLoop() {
 				if err == nil {
 					seqNo = parsedSeq
 				}
-				md.downTasks <- downloadTask{url: segment.URI, seqNo: seqNo, title: segment.Title, duration: segment.Duration, mySeqNo: mySeqNo, appTime: now}
+				segUrl, err := url.Parse(segment.URI)
+				if err != nil {
+					glog.Fatal(err)
+				}
+				md.downTasks <- downloadTask{url: segUrl, seqNo: seqNo, title: segment.Title, duration: segment.Duration, mySeqNo: mySeqNo, appTime: now}
 				md.segmentsToDownload++
 				now = now.Add(time.Millisecond)
 				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
