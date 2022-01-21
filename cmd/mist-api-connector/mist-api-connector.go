@@ -15,6 +15,7 @@ import (
 	mistapi "github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/app/mistapiconnector"
 	"github.com/livepeer/stream-tester/internal/metrics"
+	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/peterbourgon/ff"
@@ -25,6 +26,8 @@ func main() {
 	flag.Set("logtostderr", "true")
 	vFlag := flag.Lookup("v")
 	fs := flag.NewFlagSet("testdriver", flag.ExitOnError)
+
+	mistJson := fs.Bool("j", false, "Print application info as json")
 
 	verbosity := fs.String("v", "", "Log verbosity.  {4|5|6}")
 	host := fs.String("host", "localhost", "Hostname to bind to")
@@ -61,6 +64,12 @@ func main() {
 	)
 	flag.CommandLine.Parse(nil)
 	vFlag.Value.Set(*verbosity)
+
+	if *mistJson {
+		mistconnector.PrintMistConfigJson("mist-api-connector", "Sidecar for connecting Mist with Livepeer API", "Mist API Connector", model.Version, fs)
+		return
+	}
+
 	hostName, _ := os.Hostname()
 	fmt.Println("mist-api-connector version: " + model.Version)
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
