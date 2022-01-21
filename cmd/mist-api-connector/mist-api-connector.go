@@ -66,7 +66,7 @@ func main() {
 	vFlag.Value.Set(*verbosity)
 
 	if *mistJson {
-		mistconnector.PrintMistConfigJson("mist-api-connector", "", "Mist API Connector", model.Version, fs)
+		mistconnector.PrintMistConfigJson("mist-api-connector", "Sidecar for connecting Mist with Livepeer API", "Mist API Connector", model.Version, fs)
 		return
 	}
 
