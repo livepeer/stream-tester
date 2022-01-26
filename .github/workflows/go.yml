@@ -47,14 +47,7 @@ jobs:
 
   build:
     name: Build
-    # runs-on: ubuntu-latest
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os:
-          - macos-latest
-          - windows-latest
-          - ubuntu-latest
+    runs-on: macos-latest
     # needs: create_release
     steps:
       - name: Set up Go 1.17
@@ -69,40 +62,25 @@ jobs:
           go get -v -t -d ./...
       - name: Build
         run: |
-          for arch in arm64 amd64
+          for platform in linux darwin windows
           do
-            GOARCH="$arch" make all GO_BUILD_DIR="build/${RUNNER_OS}/${arch}/"
-          done
-
-      - name: Compress Posix
-        if: matrix.os != 'windows-latest'
-        run: |
-          for arch in arm64 amd64
-          do
-            cd "build/${RUNNER_OS}/${arch}"
-            for file in $(find . -type f -perm -a+x)
+            for arch in arm64 amd64
             do
-              f_name="$(basename $file)"
-              mv "${f_name}" "livepeer-${f_name}"
-              tar -czf "livepeer-${f_name}-${RUNNER_OS}-${arch}.tar.gz" "livepeer-${f_name}"
+              GOOS="$platform" GOARCH="$arch" make all GO_BUILD_DIR="build/${platform}/${arch}/"
+              cd "build/${platform}/${arch}"
+              for file in $(find . -type f -perm -a+x)
+              do
+                f_name="$(basename $file)"
+                mv "${f_name}" "livepeer-${f_name}"
+                if [ "$platform" = "windows" ]
+                then
+                  zip -9 "livepeer-${f_name/.exe//}-windows-${arch}.zip" "livepeer-${f_name}"
+                else
+                  tar -czf "livepeer-${f_name}-${platform}-${arch}.tar.gz" "livepeer-${f_name}"
+                fi
+              done
+              cd -
             done
-            cd -
-          done
-          ls -lhR build/
-
-      - name: Compress Windows
-        if: matrix.os == 'windows-latest'
-        run: |
-          for arch in arm64 amd64
-          do
-            cd "build/${RUNNER_OS}/${arch}"
-            for file in $(find . -type f -perm -a+x)
-            do
-              f_name="$(basename $file)"
-              mv "${f_name}" "livepeer-${f_name}"
-              7z a "livepeer-${f_name/.exe//}-${RUNNER_OS}-${arch}.zip" "livepeer-${f_name}"
-            done
-            cd -
           done
           ls -lhR build/
 
