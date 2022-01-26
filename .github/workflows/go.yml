@@ -80,10 +80,11 @@ jobs:
           for arch in arm64 amd64
           do
             cd "build/${RUNNER_OS}/${arch}"
-            for file in "$(find . -type f -perm -a+x)"
+            for file in $(find . -type f -perm -a+x)
             do
-              mv "${file}" "livepeer-${file}"
-              tar -czf "livepeer-${file}-${RUNNER_OS}-${arch}.tar.gz" "livepeer-${file}"
+              f_name="$(basename $file)"
+              mv "${f_name}" "livepeer-${f_name}"
+              tar -czf "livepeer-${f_name}-${RUNNER_OS}-${arch}.tar.gz" "livepeer-${f_name}"
             done
             cd -
           done
@@ -95,10 +96,11 @@ jobs:
           for arch in arm64 amd64
           do
             cd "build/${RUNNER_OS}/${arch}"
-            for file in "$(find . -type f -perm -a+x)"
+            for file in $(find . -type f -perm -a+x)
             do
-              mv "${file}" "livepeer-${file}"
-              7z a "livepeer-${file}-${RUNNER_OS}-${arch}.zip" "livepeer-${file}"
+              f_name="$(basename $file)"
+              mv "${f_name}" "livepeer-${f_name}"
+              7z a "livepeer-${f_name/.exe//}-${RUNNER_OS}-${arch}.zip" "livepeer-${f_name}"
             done
             cd -
           done
