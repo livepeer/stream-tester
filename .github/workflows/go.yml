@@ -74,7 +74,7 @@ jobs:
                 mv "${f_name}" "livepeer-${f_name}"
                 if [ "$platform" = "windows" ]
                 then
-                  zip -9 "livepeer-${f_name/.exe//}-windows-${arch}.zip" "livepeer-${f_name}"
+                  zip -9 "livepeer-${f_name/.exe/}-windows-${arch}.zip" "livepeer-${f_name}"
                 else
                   tar -czf "livepeer-${f_name}-${platform}-${arch}.tar.gz" "livepeer-${f_name}"
                 fi
