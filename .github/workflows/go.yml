@@ -73,7 +73,7 @@ jobs:
         run: |
           for arch in arm64 amd64
           do
-            GOARCH="$arch" make all GO_BUILD_DIR="build/${arch}/"
+            GOARCH="$arch" make all GO_BUILD_DIR="build/${RUNNER_OS}/${arch}/"
           done
 
       - name: Compress Posix
@@ -81,7 +81,7 @@ jobs:
         run: |
           for arch in arm64 amd64
           do
-            cd "build/${arch}"
+            cd "build/${RUNNER_OS}/${arch}"
             for file in "$(find . -type f -perm -a+x)"
             do
               mv "${file}" "livepeer-${file}"
@@ -96,7 +96,7 @@ jobs:
         run: |
           for arch in arm64 amd64
           do
-            cd "build/${arch}"
+            cd "build/${RUNNER_OS}/${arch}"
             for file in "$(find . -type f -perm -a+x)"
             do
               mv "${file}" "livepeer-${file}"
