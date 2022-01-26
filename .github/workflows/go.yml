@@ -57,7 +57,7 @@ jobs:
           - macos-latest
           - windows-latest
           - ubuntu-latest
-    needs: create_release
+    # needs: create_release
     steps:
       - name: Set up Go 1.15
         uses: actions/setup-go@v1
