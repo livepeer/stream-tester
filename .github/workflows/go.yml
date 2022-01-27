@@ -84,50 +84,9 @@ jobs:
 
       - name: Release Posix
         uses: softprops/action-gh-release@v1
-        # if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            build/livepeer-lapi-darwin-amd64.tar.gz
-            build/livepeer-lapi-darwin-arm64.tar.gz
-            build/livepeer-lapi-linux-amd64.tar.gz
-            build/livepeer-lapi-linux-arm64.tar.gz
-            build/livepeer-lapi-windows-amd64.zip
-            build/livepeer-lapi-windows-arm64.zip
-            build/livepeer-loadtester-darwin-amd64.tar.gz
-            build/livepeer-loadtester-darwin-arm64.tar.gz
-            build/livepeer-loadtester-linux-amd64.tar.gz
-            build/livepeer-loadtester-linux-arm64.tar.gz
-            build/livepeer-loadtester-windows-amd64.zip
-            build/livepeer-loadtester-windows-arm64.zip
-            build/livepeer-mapi-darwin-amd64.tar.gz
-            build/livepeer-mapi-darwin-arm64.tar.gz
-            build/livepeer-mapi-linux-amd64.tar.gz
-            build/livepeer-mapi-linux-arm64.tar.gz
-            build/livepeer-mapi-windows-amd64.zip
-            build/livepeer-mapi-windows-arm64.zip
-            build/livepeer-mist-api-connector-darwin-amd64.tar.gz
-            build/livepeer-mist-api-connector-darwin-arm64.tar.gz
-            build/livepeer-mist-api-connector-linux-amd64.tar.gz
-            build/livepeer-mist-api-connector-linux-arm64.tar.gz
-            build/livepeer-mist-api-connector-windows-amd64.zip
-            build/livepeer-mist-api-connector-windows-arm64.zip
-            build/livepeer-recordtester-darwin-amd64.tar.gz
-            build/livepeer-recordtester-darwin-arm64.tar.gz
-            build/livepeer-recordtester-linux-amd64.tar.gz
-            build/livepeer-recordtester-linux-arm64.tar.gz
-            build/livepeer-recordtester-windows-amd64.zip
-            build/livepeer-recordtester-windows-arm64.zip
-            build/livepeer-streamtester-darwin-amd64.tar.gz
-            build/livepeer-streamtester-darwin-arm64.tar.gz
-            build/livepeer-streamtester-linux-amd64.tar.gz
-            build/livepeer-streamtester-linux-arm64.tar.gz
-            build/livepeer-streamtester-windows-amd64.zip
-            build/livepeer-streamtester-windows-arm64.zip
-            build/livepeer-testdriver-darwin-amd64.tar.gz
-            build/livepeer-testdriver-darwin-arm64.tar.gz
-            build/livepeer-testdriver-linux-amd64.tar.gz
-            build/livepeer-testdriver-linux-arm64.tar.gz
-            build/livepeer-testdriver-windows-amd64.zip
-            build/livepeer-testdriver-windows-arm64.zip
+            build/livepeer-*.tar.gz
+            build/livepeer-*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
