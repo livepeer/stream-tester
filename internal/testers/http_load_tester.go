@@ -143,12 +143,12 @@ func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, r
 		}
 		manifestID := fmt.Sprintf("%s_%d_%d", baseManifestID, repeatNum, i)
 		if hlt.lapi != nil {
-			sid, err := hlt.lapi.CreateStream(manifestID)
+			stream, err := hlt.lapi.CreateStream(livepeer.CreateStreamReq{Name: manifestID})
 			if err != nil {
 				glog.Errorf("Error creating stream using Livepeer API: %v", err)
 				return err
 			}
-			manifestID = sid
+			manifestID = stream.ID
 		}
 		httpIngestURLTemplate := httpIngestURLTemplates[i%len(httpIngestURLTemplates)]
 		httpIngestURL := fmt.Sprintf(httpIngestURLTemplate, manifestID)

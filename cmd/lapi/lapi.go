@@ -176,17 +176,18 @@ func main() {
 	}
 }
 
-func createStream(token, presets, name string) (string, *livepeer.API, error) {
-	fmt.Printf("Creating new stream with name %s profiles %s\n", name, presets)
-	profiles := strings.Split(presets, ",")
+func createStream(token, presetsStr, name string) (string, *livepeer.API, error) {
+	fmt.Printf("Creating new stream with name %s presets %s\n", name, presetsStr)
+	presets := strings.Split(presetsStr, ",")
 
 	lapi := livepeer.NewLivepeer(token, server, nil) // hardcode AC server for now
 	lapi.Init()
-	sid, err := lapi.CreateStream(name, profiles...)
+	stream, err := lapi.CreateStream(livepeer.CreateStreamReq{Name: name, Presets: presets})
 	if err != nil {
 		fmt.Println("Error creating stream:")
 		return "", nil, err
 	}
+	sid := stream.ID
 	fmt.Printf("Stream created: %+v", sid)
 	return sid, lapi, nil
 }
