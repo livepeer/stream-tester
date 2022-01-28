@@ -46,7 +46,7 @@ jobs:
   build:
     name: Build
     runs-on: macos-latest
-    # needs: create_release
+    needs: create_release
     steps:
       - name: Set up Go 1.17
         uses: actions/setup-go@v1
@@ -80,7 +80,7 @@ jobs:
               cd -
             done
           done
-          find . -type f -name 'livepeer-*.zip' -o 'livepeer-*.tar.gz' -exec mv -t build/ {} \+
+          find . -type f -name 'livepeer-*.zip' -o 'livepeer-*.tar.gz' -exec mv -t build/ '{}' +
 
       - name: Release Posix
         uses: softprops/action-gh-release@v1
