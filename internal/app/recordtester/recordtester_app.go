@@ -153,7 +153,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	var stream *livepeer.CreateStreamResp
 	for {
-		stream, err = rt.lapi.CreateStreamEx(streamName, true, nil, standardProfiles...)
+		stream, err = rt.lapi.CreateStream(livepeer.CreateStreamReq{Name: streamName, Profiles: standardProfiles, Record: true})
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -386,7 +386,12 @@ func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL str
 	var err error
 	apiTry := 0
 	for {
-		session, err = rt.lapi.CreateStreamEx2(streamName, true, stream.ID, nil, standardProfiles...)
+		session, err = rt.lapi.CreateStream(livepeer.CreateStreamReq{
+			Name:     streamName,
+			ParentID: stream.ID,
+			Profiles: standardProfiles,
+			Record:   true,
+		})
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
