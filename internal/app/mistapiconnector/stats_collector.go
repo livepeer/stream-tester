@@ -25,8 +25,8 @@ type metricsCollector struct {
 }
 
 func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
-	census.IncMultistreamBytes(0)
-	census.IncMultistreamTime(0)
+	census.IncMultistreamBytes(0, "")
+	census.IncMultistreamTime(0, "")
 
 	mc := &metricsCollector{nodeID, ownRegion, mapi, producer, amqpExchange, infop}
 	go mc.mainLoop(ctx, period)
@@ -98,11 +98,11 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 				MediaTimeMs: push.Stats.MediaTime,
 			}
 			if metrics.Bytes > pushInfo.pushedBytes {
-				census.IncMultistreamBytes(metrics.Bytes - pushInfo.pushedBytes)
+				census.IncMultistreamBytes(metrics.Bytes-pushInfo.pushedBytes, info.stream.ID)
 				pushInfo.pushedBytes = metrics.Bytes
 			}
 			if mediaTime := time.Duration(metrics.MediaTimeMs) * time.Millisecond; mediaTime > pushInfo.pushedMediaTime {
-				census.IncMultistreamTime(mediaTime - pushInfo.pushedMediaTime)
+				census.IncMultistreamTime(mediaTime-pushInfo.pushedMediaTime, info.stream.ID)
 				pushInfo.pushedMediaTime = mediaTime
 			}
 		}
