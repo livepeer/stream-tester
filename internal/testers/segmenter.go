@@ -27,6 +27,17 @@ import (
 // 		stopAtFileEnd: stopAtFileEnd,
 // 	}
 // }
+func StartSegmentingR(ctx context.Context, reader io.ReadSeekCloser, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
+	useWallTime bool, out chan<- *model.HlsSegment) error {
+	inFile, err := avutil.OpenRC(reader)
+	if err != nil {
+		glog.Errorf("avutil.OpenRC err=%v", err)
+		return err
+	}
+	go segmentingLoop(ctx, "", inFile, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
+
+	return err
+}
 
 func StartSegmenting(ctx context.Context, fileName string, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
 	useWallTime bool, out chan<- *model.HlsSegment) error {
@@ -186,7 +197,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 		if err != nil {
 			glog.Fatal(err)
 		}
-		if rerr == io.EOF && stopAfter > 0 && (prevPTS+curDur) < stopAfter {
+		if rerr == io.EOF && stopAfter > 0 && (prevPTS+curDur) < stopAfter && len(fileName) > 0 {
 			// re-open same file and stream it again
 			firstFramePacket = nil
 			ts.timeShift = lastPacket.Time + 30*time.Millisecond

@@ -353,6 +353,8 @@ github.com/lightstep/lightstep-tracer-common/golang/gogo v0.0.0-20190605223551-b
 github.com/lightstep/lightstep-tracer-go v0.18.1/go.mod h1:jlF1pusYV4pidLvZ+XD0UBX0ZE6WURAspgAczcDHrL4=
 github.com/livepeer/joy4 v0.1.2-0.20210601043311-c1b885884cc7 h1:gGU8CE90+YL2I+irPM6aQNfBBe8HYGyy7epnZYNo4QM=
 github.com/livepeer/joy4 v0.1.2-0.20210601043311-c1b885884cc7/go.mod h1:RDTLvmm/NJWjzuUpEDyIWmLTqSfpZEcnPnacG8sfh34=
+github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07 h1:ISkFQYYDgfnM6Go+VyemF66DKFc8kNoI9SwMv7GC9sM=
+github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07/go.mod h1:RDTLvmm/NJWjzuUpEDyIWmLTqSfpZEcnPnacG8sfh34=
 github.com/livepeer/leaderboard-serverless v1.0.0 h1:QqUxAEorjtfFxQO7tqTbxOLK+LFTJU27hvXf3/8YRZw=
 github.com/livepeer/leaderboard-serverless v1.0.0/go.mod h1:0H4gFyyTO3lXtqfRIwyRaWPuW0pBMXkNUDtIjHHniW0=
 github.com/livepeer/livepeer-data v0.4.0 h1:17rELy6TFoY+gjFgQtKbVNkn1jF7+QFD7aotMVlhnfI=

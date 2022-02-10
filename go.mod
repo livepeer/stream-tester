@@ -11,7 +11,7 @@ require (
 	github.com/bwmarrin/discordgo v0.20.2
 	github.com/golang/glog v0.0.0-20210429001901-424d2337a529
 	github.com/gosuri/uiprogress v0.0.1
-	github.com/livepeer/joy4 v0.1.2-0.20210601043311-c1b885884cc7
+	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
 	github.com/livepeer/livepeer-data v0.4.0
 	github.com/livepeer/m3u8 v0.11.1
