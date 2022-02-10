@@ -95,11 +95,11 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 				MediaTimeMs: push.Stats.MediaTime,
 			}
 			if metrics.Bytes > pushInfo.pushedBytes {
-				census.IncMultistreamBytes(metrics.Bytes-pushInfo.pushedBytes, info.id)
+				census.IncMultistreamBytes(metrics.Bytes-pushInfo.pushedBytes, info.stream.PlaybackID) // manifestID === playbackID
 				pushInfo.pushedBytes = metrics.Bytes
 			}
 			if mediaTime := time.Duration(metrics.MediaTimeMs) * time.Millisecond; mediaTime > pushInfo.pushedMediaTime {
-				census.IncMultistreamTime(mediaTime-pushInfo.pushedMediaTime, info.id)
+				census.IncMultistreamTime(mediaTime-pushInfo.pushedMediaTime, info.stream.PlaybackID)
 				pushInfo.pushedMediaTime = mediaTime
 			}
 		}
