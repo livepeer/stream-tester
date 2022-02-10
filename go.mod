@@ -13,7 +13,7 @@ require (
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/livepeer/go-livepeer v0.5.31
-	github.com/livepeer/joy4 v0.1.2-0.20210601043311-c1b885884cc7
+	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
 	github.com/livepeer/livepeer-data v0.4.11
 	github.com/livepeer/m3u8 v0.11.1
