@@ -26,6 +26,7 @@ type (
 		nodeID                string
 		ctx                   context.Context
 		kNodeID               tag.Key
+		kManifestID           tag.Key
 		kTrigger              tag.Key
 		kType                 tag.Key
 		mCurrentStreams       *stats.Int64Measure
@@ -70,6 +71,7 @@ func InitCensus(nodeID, version, namespace string) {
 	var err error
 	ctx := context.Background()
 	Census.kNodeID = tag.MustNewKey("node_id")
+	Census.kManifestID = tag.MustNewKey("manifest_id")
 	Census.kTrigger = tag.MustNewKey("trigger")
 	Census.kType = tag.MustNewKey("type")
 	Census.ctx, err = tag.New(ctx, tag.Insert(Census.kNodeID, nodeID))
@@ -154,14 +156,14 @@ func InitCensus(nodeID, version, namespace string) {
 			Name:        "multistream_usage_megabytes",
 			Measure:     Census.mMultistreamUsageMb,
 			Description: "Total number of megabytes multistreamed, or pushed, to external services",
-			TagKeys:     baseTags,
+			TagKeys:     append([]tag.Key{Census.kManifestID}, baseTags...),
 			Aggregation: view.Sum(),
 		},
 		{
 			Name:        "multistream_usage_minutes",
 			Measure:     Census.mMultistreamUsageMin,
 			Description: "Total minutes multistreamed, or pushed, to external services",
-			TagKeys:     baseTags,
+			TagKeys:     append([]tag.Key{Census.kManifestID}, baseTags...),
 			Aggregation: view.Sum(),
 		},
 		{
@@ -270,12 +272,22 @@ func (cs *censusMetricsCounter) SegmentDownloaded() int64 {
 	return std
 }
 
-func IncMultistreamBytes(bytes int64) {
-	stats.Record(Census.ctx, Census.mMultistreamUsageMb.M(float64(bytes)/1024/1024))
+func IncMultistreamBytes(bytes int64, manifestID string) {
+	ctx, err := tag.New(Census.ctx, tag.Insert(Census.kManifestID, manifestID))
+	if err != nil {
+		glog.Error("Error creating context", err)
+		return
+	}
+	stats.Record(ctx, Census.mMultistreamUsageMb.M(float64(bytes)/1024/1024))
 }
 
-func IncMultistreamTime(mediaTime time.Duration) {
-	stats.Record(Census.ctx, Census.mMultistreamUsageMin.M(mediaTime.Minutes()))
+func IncMultistreamTime(mediaTime time.Duration, manifestID string) {
+	ctx, err := tag.New(Census.ctx, tag.Insert(Census.kManifestID, manifestID))
+	if err != nil {
+		glog.Error("Error creating context", err)
+		return
+	}
+	stats.Record(ctx, Census.mMultistreamUsageMin.M(mediaTime.Minutes()))
 }
 
 // CurrentStreams set number of active streams
