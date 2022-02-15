@@ -60,33 +60,32 @@ jobs:
           go get -v -t -d ./...
       - name: Build
         run: |
+          mkdir -p build/ releases/
           for platform in linux darwin windows
           do
             for arch in arm64 amd64
             do
-              GOOS="$platform" GOARCH="$arch" make -j4 all GO_BUILD_DIR="build/${platform}/${arch}/"
-              cd "build/${platform}/${arch}"
+              GOOS="$platform" GOARCH="$arch" make -j4 all GO_BUILD_DIR="build/"
+              cd "build/"
               for file in $(find . -type f -perm -a+x)
               do
                 f_name="$(basename $file)"
                 mv "${f_name}" "livepeer-${f_name}"
                 if [ "$platform" = "windows" ]
                 then
-                  zip -9 "livepeer-${f_name/.exe/}-windows-${arch}.zip" "livepeer-${f_name}"
+                  zip -9 "../releases/livepeer-${f_name/.exe/}-windows-${arch}.zip" "livepeer-${f_name}"
                 else
-                  tar -czf "livepeer-${f_name}-${platform}-${arch}.tar.gz" "livepeer-${f_name}"
+                  tar -czf "../releases/livepeer-${f_name}-${platform}-${arch}.tar.gz" "livepeer-${f_name}"
                 fi
               done
               cd -
             done
           done
-          find . -type f -name 'livepeer-*.zip' -o -name 'livepeer-*.tar.gz' -exec mv '{}' build/ \;
 
       - name: Release Posix
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            build/livepeer-*.tar.gz
-            build/livepeer-*.zip
+            releases/livepeer-*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
