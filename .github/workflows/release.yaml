@@ -15,8 +15,20 @@ jobs:
         with:
           go-version: 1.15
         id: go
+
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
+
+      - name: Restore go modules cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
       - name: Get dependencies
         run: |
           go get -v -t -d ./...
@@ -55,9 +67,21 @@ jobs:
         id: go
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
+
+      - name: Restore go modules cache
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
       - name: Get dependencies
         run: |
           go get -v -t -d ./...
+
       - name: Build
         run: |
           mkdir -p build/ releases/
@@ -82,10 +106,18 @@ jobs:
             done
           done
 
+      - name: Generate sha256 checksum and gpg signatures for release artifacts
+        uses: livepeer/action-gh-checksum-and-gpg-sign@latest
+        with:
+          artifacts-dir: releases
+          release-name: livepeer
+          gpg-key: ${{ secrets.CI_GPG_SIGNING_KEY }}
+          gpg-key-passphrase: ${{ secrets.CI_GPG_SIGNING_PASSPHRASE }}
+
       - name: Release Posix
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            releases/livepeer-*
+            releases/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
