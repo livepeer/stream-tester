@@ -99,7 +99,7 @@ jobs:
                 mv "${f_name}" "livepeer-${f_name}"
                 if [ "$platform" == "windows" ]
                 then
-                  zip -9 "../releases/livepeer-${f_name/.exe/}-windows-${arch}.zip" "livepeer-${f_name}"
+                  zip -q9 "../releases/livepeer-${f_name/.exe/}-windows-${arch}.zip" "livepeer-${f_name}"
                 else
                   tar -czf "../releases/livepeer-${f_name}-${platform}-${arch}.tar.gz" "livepeer-${f_name}"
                 fi
@@ -107,6 +107,27 @@ jobs:
               cd -
             done
           done
+
+      - name: Upload artifacts for processing further in linux
+        uses: actions/upload-artifact@master
+        with:
+          name: release-artifacts
+          path: releases/
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: checkout
+        uses: actions/checkout@master
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts from build stage
+        uses: actions/download-artifact@master
+        with:
+          name: release-artifacts
+          path: releases/
 
       - name: Generate sha256 checksum and gpg signatures for release artifacts
         uses: livepeer/action-gh-checksum-and-gpg-sign@latest

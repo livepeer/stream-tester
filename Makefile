@@ -62,7 +62,7 @@ release:
 	git tag -a v$(version) -m "Release v$(version)"
 	git push origin v$(version)
 
-	echo -n "Release mist-api-connector? [y] "
+	@echo "Release mist-api-connector? [y] "
 	@read ans && [ $${ans:-y} = y ] || { echo "Mapic release aborted, branch not fast-forwarded."; exit 1 ; }
 
 	git checkout mapic-release
