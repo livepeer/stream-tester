@@ -6,6 +6,7 @@ tmp
 .ash_history
 .env
 build/
+releases/
 
 # Created by https://www.toptal.com/developers/gitignore/api/emacs,vim,go,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=emacs,vim,go,visualstudiocode
