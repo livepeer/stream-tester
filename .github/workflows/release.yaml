@@ -82,20 +82,22 @@ jobs:
         run: |
           go get -v -t -d ./...
 
-      - name: Build
+      - name: Build binaries
+        shell: bash
         run: |
           mkdir -p build/ releases/
           for platform in linux darwin windows
           do
             for arch in arm64 amd64
             do
+              cd "build/" && rm -rf * && cd -
               GOOS="$platform" GOARCH="$arch" make -j4 all GO_BUILD_DIR="build/"
               cd "build/"
               for file in $(find . -type f -perm -a+x)
               do
                 f_name="$(basename $file)"
                 mv "${f_name}" "livepeer-${f_name}"
-                if [ "$platform" = "windows" ]
+                if [ "$platform" == "windows" ]
                 then
                   zip -9 "../releases/livepeer-${f_name/.exe/}-windows-${arch}.zip" "livepeer-${f_name}"
                 else
