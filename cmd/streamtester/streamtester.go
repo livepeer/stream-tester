@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -159,12 +160,22 @@ func main() {
 		// sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
 		// sr2.StartPulling(*mediaURL)
 		started := time.Now()
-		downloader := testers.NewM3utester2(gctx, *infinitePull, *wowza, *mist,
-			false, *save, 30*time.Second, nil, *statsOnly) // starts to download at creation
-		<-downloader.Done()
+		var wg sync.WaitGroup
+		for i := 0; i < int(*sim); i++ {
+			wg.Add(1)
+			go (func(i int) {
+				glog.Infof(`Starting downloader i=%d`, i)
+				downloader := testers.NewM3utester2(gctx, *infinitePull, *wowza, *mist,
+					false, *save, *streamDuration, nil, *statsOnly) // starts to download at creation
+				<-downloader.Done()
+				vs := downloader.VODStats()
+				glog.Infof("Stats: %s", vs.String())
+				wg.Done()
+			})(i)
+			time.Sleep(1 * time.Second)
+		}
+		wg.Wait()
 		glog.Infof(`Pulling stopped after %s`, time.Since(started))
-		vs := downloader.VODStats()
-		glog.Infof("Stats: %s", vs.String())
 		return
 	}
 	var lapi *livepeer.API
