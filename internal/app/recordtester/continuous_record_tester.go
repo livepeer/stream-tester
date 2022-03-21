@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
@@ -66,8 +65,7 @@ func NewContinuousRecordTester(gctx context.Context, opts ContinuousRecordTester
 }
 
 func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error {
-	hostname, _ := os.Hostname()
-	messenger.SendMessage(fmt.Sprintf("Starting continuous test of %s on hostname=%s", crt.host, hostname))
+	messenger.SendMessage(fmt.Sprintf("Starting continuous test of %s", crt.host))
 	try := 0
 	notRtmpTry := 0
 	maxTestDuration := 2*testDuration + pauseDuration + 15*time.Minute

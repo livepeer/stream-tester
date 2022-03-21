@@ -6,8 +6,10 @@ package messenger
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -300,6 +302,8 @@ func sendLoop() {
 	}
 }
 
+var hostname, _ = os.Hostname()
+
 func sendMessage(msg string) {
 	if len(msg) > maxMessageLen {
 		for {
@@ -316,6 +320,7 @@ func sendMessage(msg string) {
 		}
 		return
 	}
+	msg = fmt.Sprintf("%s: %s", hostname, msg)
 	sendRawMessage(encodeMessage(msg))
 }
 
@@ -323,23 +328,6 @@ func sendRawMessage(msg []byte) {
 	if webhookURL == "" || msgCh == nil {
 		return
 	}
-	/*
-		if len(msg) > maxMessageLen {
-			for {
-				l := maxMessageLen - 10
-				if l > len(msg) {
-					l = len(msg)
-				}
-				msg1 := msg[:l]
-				msg = msg[l:]
-				sendMessage(msg1)
-				if len(msg) == 0 {
-					break
-				}
-			}
-			return
-		}
-	*/
 	msgCh <- msg
 }
 
