@@ -25,6 +25,13 @@ type (
 		Done() <-chan struct{}
 	}
 
+	ContinuousRecordTesterOptions struct {
+		PagerDutyIntegrationKey string
+		PagerDutyComponent      string
+		PagerDutyLowUrgency     bool
+		RecordTesterOptions
+	}
+
 	continuousRecordTester struct {
 		ctx                     context.Context
 		cancel                  context.CancelFunc
@@ -42,18 +49,18 @@ type (
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, pagerDutyIntegrationKey, pagerDutyComponent string, pagerDutyLowUrgency bool, rtOpts RecordTesterOptions) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, opts ContinuousRecordTesterOptions) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
-	server := rtOpts.API.GetServer()
+	server := opts.API.GetServer()
 	u, _ := url.Parse(server)
 	crt := &continuousRecordTester{
 		ctx:                     ctx,
 		cancel:                  cancel,
 		host:                    u.Host,
-		pagerDutyIntegrationKey: pagerDutyIntegrationKey,
-		pagerDutyComponent:      pagerDutyComponent,
-		pagerDutyLowUrgency:     pagerDutyLowUrgency,
-		rtOpts:                  rtOpts,
+		pagerDutyIntegrationKey: opts.PagerDutyIntegrationKey,
+		pagerDutyComponent:      opts.PagerDutyComponent,
+		pagerDutyLowUrgency:     opts.PagerDutyLowUrgency,
+		rtOpts:                  opts.RecordTesterOptions,
 	}
 	return crt
 }

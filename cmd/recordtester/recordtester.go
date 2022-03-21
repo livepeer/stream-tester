@@ -249,7 +249,13 @@ func main() {
 	} else if *continuousTest > 0 {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
-		crt := recordtester.NewContinuousRecordTester(gctx, *pagerDutyIntegrationKey, *pagerDutyComponent, *pagerDutyLowUrgency, rtOpts)
+		crtOpts := recordtester.ContinuousRecordTesterOptions{
+			PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
+			PagerDutyComponent:      *pagerDutyComponent,
+			PagerDutyLowUrgency:     *pagerDutyLowUrgency,
+			RecordTesterOptions:     rtOpts,
+		}
+		crt := recordtester.NewContinuousRecordTester(gctx, crtOpts)
 		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 		if err != nil {
 			glog.Warningf("Continuous test ended with err=%v", err)
