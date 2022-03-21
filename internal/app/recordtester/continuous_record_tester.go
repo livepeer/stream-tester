@@ -35,6 +35,7 @@ type (
 		pagerDutyIntegrationKey string
 		pagerDutyComponent      string
 		pagerDutyLowUrgency     bool
+		ingest                  *livepeer.Ingest
 		useHTTP                 bool
 		mp4                     bool
 		streamHealth            bool
@@ -47,7 +48,7 @@ type (
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, pagerDutyIntegrationKey, pagerDutyComponent string, pagerDutyLowUrgency bool, useHTTP, mp4, streamHealth bool) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, pagerDutyIntegrationKey, pagerDutyComponent string, pagerDutyLowUrgency bool, ingest *livepeer.Ingest, useHTTP, mp4, streamHealth bool) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	server := lapi.GetServer()
 	u, _ := url.Parse(server)
@@ -60,6 +61,7 @@ func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyz
 		pagerDutyIntegrationKey: pagerDutyIntegrationKey,
 		pagerDutyComponent:      pagerDutyComponent,
 		pagerDutyLowUrgency:     pagerDutyLowUrgency,
+		ingest:                  ingest,
 		useHTTP:                 useHTTP,
 		mp4:                     mp4,
 		streamHealth:            streamHealth,
@@ -78,7 +80,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		messenger.SendMessage(msg)
 
 		ctx, cancel := context.WithTimeout(crt.ctx, maxTestDuration)
-		rt := NewRecordTester(ctx, crt.lapi, crt.lanalyzers, true, crt.useHTTP, crt.mp4, crt.streamHealth)
+		rt := NewRecordTester(ctx, crt.lapi, crt.lanalyzers, crt.ingest, true, crt.useHTTP, crt.mp4, crt.streamHealth)
 		es, err := rt.Start(fileName, testDuration, pauseDuration)
 		rt.Clean()
 		ctxErr := ctx.Err()
