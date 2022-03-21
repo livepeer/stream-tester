@@ -12,7 +12,6 @@ import (
 	"github.com/PagerDuty/go-pagerduty"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/messenger"
 )
@@ -27,18 +26,13 @@ type (
 	}
 
 	continuousRecordTester struct {
-		lapi                    *livepeer.API
-		lanalyzers              testers.AnalyzerByRegion
 		ctx                     context.Context
 		cancel                  context.CancelFunc
 		host                    string // API host being tested
 		pagerDutyIntegrationKey string
 		pagerDutyComponent      string
 		pagerDutyLowUrgency     bool
-		ingest                  *livepeer.Ingest
-		useHTTP                 bool
-		mp4                     bool
-		streamHealth            bool
+		rtOpts                  RecordTesterOptions
 	}
 
 	pagerDutyLink struct {
@@ -48,23 +42,18 @@ type (
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, pagerDutyIntegrationKey, pagerDutyComponent string, pagerDutyLowUrgency bool, ingest *livepeer.Ingest, useHTTP, mp4, streamHealth bool) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, pagerDutyIntegrationKey, pagerDutyComponent string, pagerDutyLowUrgency bool, rtOpts RecordTesterOptions) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
-	server := lapi.GetServer()
+	server := rtOpts.API.GetServer()
 	u, _ := url.Parse(server)
 	crt := &continuousRecordTester{
-		lapi:                    lapi,
-		lanalyzers:              lanalyzers,
 		ctx:                     ctx,
 		cancel:                  cancel,
 		host:                    u.Host,
 		pagerDutyIntegrationKey: pagerDutyIntegrationKey,
 		pagerDutyComponent:      pagerDutyComponent,
 		pagerDutyLowUrgency:     pagerDutyLowUrgency,
-		ingest:                  ingest,
-		useHTTP:                 useHTTP,
-		mp4:                     mp4,
-		streamHealth:            streamHealth,
+		rtOpts:                  rtOpts,
 	}
 	return crt
 }
@@ -80,7 +69,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		messenger.SendMessage(msg)
 
 		ctx, cancel := context.WithTimeout(crt.ctx, maxTestDuration)
-		rt := NewRecordTester(ctx, crt.lapi, crt.lanalyzers, crt.ingest, true, crt.useHTTP, crt.mp4, crt.streamHealth)
+		rt := NewRecordTester(ctx, crt.rtOpts)
 		es, err := rt.Start(fileName, testDuration, pauseDuration)
 		rt.Clean()
 		ctxErr := ctx.Err()

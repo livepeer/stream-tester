@@ -32,6 +32,17 @@ type (
 		Stream() *livepeer.CreateStreamResp
 	}
 
+	RecordTesterOptions struct {
+		*livepeer.API
+		Analyzers        testers.AnalyzerByRegion
+		Ingest           *livepeer.Ingest
+		VODStats         model.VODStats
+		UseForceURL      bool
+		UseHTTP          bool
+		TestMP4          bool
+		TestStreamHealth bool
+	}
+
 	recordTester struct {
 		lapi         *livepeer.API
 		lanalyzers   testers.AnalyzerByRegion
@@ -84,18 +95,18 @@ var standardProfiles = []livepeer.Profile{
 }
 
 // NewRecordTester ...
-func NewRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, ingest *livepeer.Ingest, useForceURL, useHTTP, mp4, streamHealth bool) IRecordTester {
+func NewRecordTester(gctx context.Context, opts RecordTesterOptions) IRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	rt := &recordTester{
-		lapi:         lapi,
-		lanalyzers:   lanalyzers,
-		ingest:       ingest,
-		useForceURL:  useForceURL,
+		lapi:         opts.API,
+		lanalyzers:   opts.Analyzers,
+		ingest:       opts.Ingest,
+		useForceURL:  opts.UseForceURL,
 		ctx:          ctx,
 		cancel:       cancel,
-		useHTTP:      useHTTP,
-		mp4:          mp4,
-		streamHealth: streamHealth,
+		useHTTP:      opts.UseHTTP,
+		mp4:          opts.TestMP4,
+		streamHealth: opts.TestStreamHealth,
 	}
 	return rt
 }

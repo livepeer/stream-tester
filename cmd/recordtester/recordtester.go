@@ -29,8 +29,6 @@ import (
 	"github.com/peterbourgon/ff/v2"
 )
 
-const useForceURL = true
-
 func init() {
 	format.RegisterAll()
 	rand.Seed(time.Now().UnixNano())
@@ -199,6 +197,15 @@ func main() {
 	}(fileName, *fileArg)
 	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
 
+	rtOpts := recordtester.RecordTesterOptions{
+		API:              lapi,
+		Analyzers:        lanalyzers,
+		Ingest:           ingest,
+		UseForceURL:      true,
+		UseHTTP:          *useHttp,
+		TestMP4:          *testMP4,
+		TestStreamHealth: *testStreamHealth,
+	}
 	if *sim > 1 {
 		var testers []recordtester.IRecordTester
 		var eses []int
@@ -208,7 +215,7 @@ func main() {
 		start := time.Now()
 
 		for i := 0; i < *sim; i++ {
-			rt := recordtester.NewRecordTester(gctx, lapi, lanalyzers, ingest, useForceURL, *useHttp, *testMP4, *testStreamHealth)
+			rt := recordtester.NewRecordTester(gctx, rtOpts)
 			eses = append(eses, 0)
 			testers = append(testers, rt)
 			wg.Add(1)
@@ -242,7 +249,7 @@ func main() {
 	} else if *continuousTest > 0 {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
-		crt := recordtester.NewContinuousRecordTester(gctx, lapi, lanalyzers, *pagerDutyIntegrationKey, *pagerDutyComponent, *pagerDutyLowUrgency, ingest, *useHttp, *testMP4, *testStreamHealth)
+		crt := recordtester.NewContinuousRecordTester(gctx, *pagerDutyIntegrationKey, *pagerDutyComponent, *pagerDutyLowUrgency, rtOpts)
 		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 		if err != nil {
 			glog.Warningf("Continuous test ended with err=%v", err)
@@ -251,7 +258,7 @@ func main() {
 		return
 	}
 	// just one stream
-	rt := recordtester.NewRecordTester(gctx, lapi, lanalyzers, ingest, useForceURL, *useHttp, *testMP4, *testStreamHealth)
+	rt := recordtester.NewRecordTester(gctx, rtOpts)
 	es, err := rt.Start(fileName, *testDuration, *pauseDuration)
 	exit(es, fileName, *fileArg, err)
 }
