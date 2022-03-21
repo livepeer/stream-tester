@@ -320,7 +320,7 @@ func sendMessage(msg string) {
 		}
 		return
 	}
-	msg = fmt.Sprintf("%s: %s", hostname, msg)
+	msg = fmt.Sprintf("`[%s]` %s", hostname, msg)
 	sendRawMessage(encodeMessage(msg))
 }
 
