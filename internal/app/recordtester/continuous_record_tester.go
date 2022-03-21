@@ -81,7 +81,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		cancel()
 
 		if crt.ctx.Err() != nil {
-			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled on hostname=%s", crt.host, hostname))
+			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled", crt.host))
 			return crt.ctx.Err()
 		} else if ctxErr != nil {
 			msg := fmt.Sprintf("Record test of %s timed out, potential deadlock! ctxErr=%q err=%q", crt.host, ctxErr, err)
@@ -119,7 +119,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		glog.Infof("Waiting %s before next test", pauseBetweenTests)
 		select {
 		case <-crt.ctx.Done():
-			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled on hostname=%s", crt.host, hostname))
+			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled", crt.host))
 			return err
 		case <-time.After(pauseBetweenTests):
 		}
