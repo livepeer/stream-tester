@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -28,8 +29,6 @@ import (
 	"github.com/peterbourgon/ff/v2"
 )
 
-const useForceURL = true
-
 func init() {
 	format.RegisterAll()
 	rand.Seed(time.Now().UnixNano())
@@ -49,6 +48,7 @@ func main() {
 	pauseDuration := fs.Duration("pause-dur", 0, "How long to wait between two consecutive RTMP streams that will comprise one user session")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
+	ingestStr := fs.String("ingest", "", "Ingest server info in JSON format including ingest and playback URLs. Should follow Livepeer API schema")
 	analyzerServers := fs.String("analyzer-servers", "", "Comma-separated list of base URLs to connect for the Stream Health Analyzer API (defaults to --api-server)")
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
 	continuousTest := fs.Duration("continuous-test", 0, "Do continuous testing")
@@ -132,6 +132,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	var ingest *livepeer.Ingest
+	if *ingestStr != "" {
+		if err := json.Unmarshal([]byte(*ingestStr), &ingest); err != nil {
+			glog.Fatalf("Error parsing -ingest argument: %v", err)
+		}
+	}
+
 	var lapi *livepeer.API
 	var createdAPIStreams []string
 	cleanup := func(fn, fa string) {
@@ -190,6 +197,15 @@ func main() {
 	}(fileName, *fileArg)
 	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
 
+	rtOpts := recordtester.RecordTesterOptions{
+		API:              lapi,
+		Analyzers:        lanalyzers,
+		Ingest:           ingest,
+		UseForceURL:      true,
+		UseHTTP:          *useHttp,
+		TestMP4:          *testMP4,
+		TestStreamHealth: *testStreamHealth,
+	}
 	if *sim > 1 {
 		var testers []recordtester.IRecordTester
 		var eses []int
@@ -199,7 +215,7 @@ func main() {
 		start := time.Now()
 
 		for i := 0; i < *sim; i++ {
-			rt := recordtester.NewRecordTester(gctx, lapi, lanalyzers, useForceURL, *useHttp, *testMP4, *testStreamHealth)
+			rt := recordtester.NewRecordTester(gctx, rtOpts)
 			eses = append(eses, 0)
 			testers = append(testers, rt)
 			wg.Add(1)
@@ -233,7 +249,13 @@ func main() {
 	} else if *continuousTest > 0 {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
-		crt := recordtester.NewContinuousRecordTester(gctx, lapi, lanalyzers, *pagerDutyIntegrationKey, *pagerDutyComponent, *pagerDutyLowUrgency, *useHttp, *testMP4, *testStreamHealth)
+		crtOpts := recordtester.ContinuousRecordTesterOptions{
+			PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
+			PagerDutyComponent:      *pagerDutyComponent,
+			PagerDutyLowUrgency:     *pagerDutyLowUrgency,
+			RecordTesterOptions:     rtOpts,
+		}
+		crt := recordtester.NewContinuousRecordTester(gctx, crtOpts)
 		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 		if err != nil {
 			glog.Warningf("Continuous test ended with err=%v", err)
@@ -242,7 +264,7 @@ func main() {
 		return
 	}
 	// just one stream
-	rt := recordtester.NewRecordTester(gctx, lapi, lanalyzers, useForceURL, *useHttp, *testMP4, *testStreamHealth)
+	rt := recordtester.NewRecordTester(gctx, rtOpts)
 	es, err := rt.Start(fileName, *testDuration, *pauseDuration)
 	exit(es, fileName, *fileArg, err)
 }

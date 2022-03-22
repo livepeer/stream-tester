@@ -32,9 +32,21 @@ type (
 		Stream() *livepeer.CreateStreamResp
 	}
 
+	RecordTesterOptions struct {
+		*livepeer.API
+		Analyzers        testers.AnalyzerByRegion
+		Ingest           *livepeer.Ingest
+		VODStats         model.VODStats
+		UseForceURL      bool
+		UseHTTP          bool
+		TestMP4          bool
+		TestStreamHealth bool
+	}
+
 	recordTester struct {
 		lapi         *livepeer.API
 		lanalyzers   testers.AnalyzerByRegion
+		ingest       *livepeer.Ingest
 		useForceURL  bool
 		ctx          context.Context
 		cancel       context.CancelFunc
@@ -83,17 +95,18 @@ var standardProfiles = []livepeer.Profile{
 }
 
 // NewRecordTester ...
-func NewRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, useForceURL, useHTTP, mp4, streamHealth bool) IRecordTester {
+func NewRecordTester(gctx context.Context, opts RecordTesterOptions) IRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	rt := &recordTester{
-		lapi:         lapi,
-		lanalyzers:   lanalyzers,
-		useForceURL:  useForceURL,
+		lapi:         opts.API,
+		lanalyzers:   opts.Analyzers,
+		ingest:       opts.Ingest,
+		useForceURL:  opts.UseForceURL,
 		ctx:          ctx,
 		cancel:       cancel,
-		useHTTP:      useHTTP,
-		mp4:          mp4,
-		streamHealth: streamHealth,
+		useHTTP:      opts.UseHTTP,
+		mp4:          opts.TestMP4,
+		streamHealth: opts.TestStreamHealth,
 	}
 	return rt
 }
@@ -101,23 +114,12 @@ func NewRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers tester
 func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.Duration) (int, error) {
 	defer rt.cancel()
 	var err error
-	var ingests []livepeer.Ingest
-	apiTry := 0
-	for {
-		ingests, err = rt.lapi.Ingest(false)
-		if err != nil {
-			if testers.Timedout(err) && apiTry < 3 {
-				apiTry++
-				continue
-			}
-			// exit(255, fileName, *fileArg, err)
-			return 255, err
-		}
-		break
-	}
-	apiTry = 0
-	glog.Infof("Got ingests: %+v", ingests)
 	var broadcasters []string
+	ingest, err := rt.getIngestInfo()
+	if err != nil {
+		return 255, err
+	}
+	apiTry := 0
 	for {
 		broadcasters, err = rt.lapi.Broadcasters()
 		if err != nil {
@@ -142,8 +144,8 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	if rt.useHTTP && len(broadcasters) == 0 {
 		// exit(254, fileName, *fileArg, errors.New("Empty list of broadcasters"))
 		return 254, errors.New("empty list of broadcasters")
-	} else if !rt.useHTTP && len(ingests) == 0 {
-		return 254, errors.New("empty list of ingests")
+	} else if (!rt.useHTTP && ingest.Ingest == "") || ingest.Playback == "" {
+		return 254, errors.New("empty ingest URLs")
 		// exit(254, fileName, *fileArg, errors.New("Empty list of ingests"))
 	}
 	// glog.Infof("All cool!")
@@ -171,7 +173,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	glog.V(model.VERBOSE).Infof("Created Livepeer stream id=%s streamKey=%s playbackId=%s name=%s", stream.ID, stream.StreamKey, stream.PlaybackID, streamName)
 	// glog.Infof("Waiting 5 second for stream info to propagate to the Postgres replica")
 	// time.Sleep(5 * time.Second)
-	rtmpURL := fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.StreamKey)
+	rtmpURL := fmt.Sprintf("%s/%s", ingest.Ingest, stream.StreamKey)
 	// rtmpURL = fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.ID)
 
 	testerFuncs := []testers.StartTestFunc{}
@@ -181,7 +183,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		})
 	}
 
-	mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingests[0].Playback, stream.PlaybackID)
+	mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingest.Playback, stream.PlaybackID)
 	glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 	glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
 	if rt.useHTTP {
@@ -352,6 +354,31 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	// uploader := testers.NewRtmpStreamer(gctx, rtmpURL)
 	// uploader.StartUpload(fileName, rtmpURL, -1, 30*time.Second)
 	return es, err
+}
+
+func (rt *recordTester) getIngestInfo() (*livepeer.Ingest, error) {
+	if rt.ingest != nil {
+		return rt.ingest, nil
+	}
+	var ingests []livepeer.Ingest
+	apiTry := 0
+	for {
+		var err error
+		ingests, err = rt.lapi.Ingest(false)
+		if err != nil {
+			if testers.Timedout(err) && apiTry < 3 {
+				apiTry++
+				continue
+			}
+			return nil, err
+		}
+		break
+	}
+	glog.Infof("Got ingests: %+v", ingests)
+	if len(ingests) == 0 {
+		return nil, errors.New("empty list of ingests")
+	}
+	return &ingests[0], nil
 }
 
 func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL string, testDuration time.Duration, stream *livepeer.CreateStreamResp) error {

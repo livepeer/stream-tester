@@ -5,14 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/PagerDuty/go-pagerduty"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/messenger"
 )
@@ -26,18 +24,21 @@ type (
 		Done() <-chan struct{}
 	}
 
+	ContinuousRecordTesterOptions struct {
+		PagerDutyIntegrationKey string
+		PagerDutyComponent      string
+		PagerDutyLowUrgency     bool
+		RecordTesterOptions
+	}
+
 	continuousRecordTester struct {
-		lapi                    *livepeer.API
-		lanalyzers              testers.AnalyzerByRegion
 		ctx                     context.Context
 		cancel                  context.CancelFunc
 		host                    string // API host being tested
 		pagerDutyIntegrationKey string
 		pagerDutyComponent      string
 		pagerDutyLowUrgency     bool
-		useHTTP                 bool
-		mp4                     bool
-		streamHealth            bool
+		rtOpts                  RecordTesterOptions
 	}
 
 	pagerDutyLink struct {
@@ -47,29 +48,24 @@ type (
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, lapi *livepeer.API, lanalyzers testers.AnalyzerByRegion, pagerDutyIntegrationKey, pagerDutyComponent string, pagerDutyLowUrgency bool, useHTTP, mp4, streamHealth bool) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, opts ContinuousRecordTesterOptions) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
-	server := lapi.GetServer()
+	server := opts.API.GetServer()
 	u, _ := url.Parse(server)
 	crt := &continuousRecordTester{
-		lapi:                    lapi,
-		lanalyzers:              lanalyzers,
 		ctx:                     ctx,
 		cancel:                  cancel,
 		host:                    u.Host,
-		pagerDutyIntegrationKey: pagerDutyIntegrationKey,
-		pagerDutyComponent:      pagerDutyComponent,
-		pagerDutyLowUrgency:     pagerDutyLowUrgency,
-		useHTTP:                 useHTTP,
-		mp4:                     mp4,
-		streamHealth:            streamHealth,
+		pagerDutyIntegrationKey: opts.PagerDutyIntegrationKey,
+		pagerDutyComponent:      opts.PagerDutyComponent,
+		pagerDutyLowUrgency:     opts.PagerDutyLowUrgency,
+		rtOpts:                  opts.RecordTesterOptions,
 	}
 	return crt
 }
 
 func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error {
-	hostname, _ := os.Hostname()
-	messenger.SendMessage(fmt.Sprintf("Starting continuous test of %s on hostname=%s", crt.host, hostname))
+	messenger.SendMessage(fmt.Sprintf("Starting continuous test of %s", crt.host))
 	try := 0
 	notRtmpTry := 0
 	maxTestDuration := 2*testDuration + pauseDuration + 15*time.Minute
@@ -78,14 +74,14 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		messenger.SendMessage(msg)
 
 		ctx, cancel := context.WithTimeout(crt.ctx, maxTestDuration)
-		rt := NewRecordTester(ctx, crt.lapi, crt.lanalyzers, true, crt.useHTTP, crt.mp4, crt.streamHealth)
+		rt := NewRecordTester(ctx, crt.rtOpts)
 		es, err := rt.Start(fileName, testDuration, pauseDuration)
 		rt.Clean()
 		ctxErr := ctx.Err()
 		cancel()
 
 		if crt.ctx.Err() != nil {
-			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled on hostname=%s", crt.host, hostname))
+			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled", crt.host))
 			return crt.ctx.Err()
 		} else if ctxErr != nil {
 			msg := fmt.Sprintf("Record test of %s timed out, potential deadlock! ctxErr=%q err=%q", crt.host, ctxErr, err)
@@ -123,7 +119,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		glog.Infof("Waiting %s before next test", pauseBetweenTests)
 		select {
 		case <-crt.ctx.Done():
-			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled on hostname=%s", crt.host, hostname))
+			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled", crt.host))
 			return err
 		case <-time.After(pauseBetweenTests):
 		}
