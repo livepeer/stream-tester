@@ -1,146 +1,50 @@
-name: Publish new Release
+name: Create release on github
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_run:
+    workflows:
+      - Build binaries
+    types:
+      - "completed"
 
 jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up Go 1.15
-        uses: actions/setup-go@v1
-        with:
-          go-version: 1.15
-        id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v1
-
-      - name: Restore go modules cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Get dependencies
-        run: |
-          go get -v -t -d ./...
-      - name: Check that can be compiled
-        run: go build -v cmd/streamtester/streamtester.go
-
-  create_release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@master
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-
-  build:
-    name: Build
-    runs-on: macos-latest
-    needs: create_release
-    steps:
-      - name: Set up Go 1.17
-        uses: actions/setup-go@v1
-        with:
-          go-version: 1.17
-        id: go
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v1
-
-      - name: Restore go modules cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Get dependencies
-        run: |
-          go get -v -t -d ./...
-
-      - name: Build binaries
-        shell: bash
-        run: |
-          mkdir -p build/ releases/
-          for platform in linux darwin windows
-          do
-            for arch in arm64 amd64
-            do
-              cd "build/" && rm -rf * && cd -
-              GOOS="$platform" GOARCH="$arch" make -j4 all GO_BUILD_DIR="build/"
-              cd "build/"
-              for file in $(find . -type f -perm -a+x)
-              do
-                f_name="$(basename $file)"
-                mv "${f_name}" "livepeer-${f_name}"
-                if [ "$platform" == "windows" ]
-                then
-                  zip -q9 "../releases/livepeer-${f_name/.exe/}-windows-${arch}.zip" "livepeer-${f_name}"
-                else
-                  tar -czf "../releases/livepeer-${f_name}-${platform}-${arch}.tar.gz" "livepeer-${f_name}"
-                fi
-              done
-              cd -
-            done
-          done
-
-      - name: Upload artifacts for processing further in linux
-        uses: actions/upload-artifact@master
-        with:
-          name: release-artifacts
-          path: releases/
-
   release:
-    runs-on: ubuntu-latest
-    needs: build
+    runs-on: ubuntu-20.04
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: checkout
         uses: actions/checkout@master
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Download artifacts from build stage
-        uses: actions/download-artifact@master
+        uses: dawidd6/action-download-artifact@v2
         with:
+          workflow: build.yaml
           name: release-artifacts
           path: releases/
 
+      - uses: actions-ecosystem/action-regex-match@v2
+        id: match-tag
+        with:
+          text: ${{ github.event.workflow_run.head_branch }}
+          regex: '^v([0-9]+\.\d+\.\d+)$'
+
       - name: Generate sha256 checksum and gpg signatures for release artifacts
+        if: ${{ steps.match-tag.outputs.match != '' }}
         uses: livepeer/action-gh-checksum-and-gpg-sign@latest
         with:
           artifacts-dir: releases
-          release-name: ${{ github.ref_name }}
+          release-name: ${{ github.event.workflow_run.head_branch }}
           gpg-key: ${{ secrets.CI_GPG_SIGNING_KEY }}
           gpg-key-passphrase: ${{ secrets.CI_GPG_SIGNING_PASSPHRASE }}
 
-      - name: Release Posix
+      - name: Release to github
         uses: softprops/action-gh-release@v1
+        if: ${{ steps.match-tag.outputs.match != '' }}
         with:
+          generate_release_notes: true
+          tag_name: ${{ github.event.workflow_run.head_branch }}
           files: |
             releases/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

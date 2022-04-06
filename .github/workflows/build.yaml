@@ -1,0 +1,243 @@
+name: Build binaries
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+    tags:
+      - "v*"
+
+jobs:
+  linux:
+    strategy:
+      matrix:
+        platform:
+          - linux
+          - windows
+        arch:
+          - arm64
+          - amd64
+    name: Build binaries for ${{ matrix.platform }} platform (${{ matrix.arch }})
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Export OS and platform env
+        run: |
+          echo "GOOS=${{ matrix.platform }}" >> $GITHUB_ENV
+          echo "GOARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+
+      - name: Set up go
+        id: go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.17
+
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          # Check https://github.com/livepeer/go-livepeer/pull/1891
+          # for ref value discussion
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Restore cache
+        id: cache-go-mod
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-${{ matrix.arch }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-go-
+
+      - name: Download dependencies
+        if: steps.cache-go-mod.outputs.cache-hit != 'true'
+        run: go mod download
+
+      - name: Build
+        run: |
+          mkdir -p build/ releases/
+          make -j4 all GO_BUILD_DIR="build/"
+
+      - name: Archive binaries for windows
+        if: matrix.platform == 'windows'
+        run: |
+          cd build/
+          for file in $(find . -type f -perm -a+x)
+          do
+            f_name="$(basename $file)"
+            mv "${f_name}" "livepeer-${f_name}"
+            zip -9q "../releases/livepeer-${f_name/.exe/}-${GOOS}-${GOARCH}.zip" "livepeer-${f_name}"
+          done
+
+      - name: Archive binaries for linux
+        if: matrix.platform == 'linux'
+        run: |
+          cd build/
+          for file in $(find . -type f -perm -a+x)
+          do
+            f_name="$(basename $file)"
+            mv "${f_name}" "livepeer-${f_name}"
+            tar -czf "../releases/livepeer-${f_name}-${GOOS}-${GOARCH}.tar.gz" "livepeer-${f_name}"
+          done
+
+      - name: Upload artifacts for cutting release
+        uses: actions/upload-artifact@master
+        with:
+          name: release-artifacts
+          path: releases/
+
+  macos:
+    strategy:
+      matrix:
+        arch:
+          - arm64
+          - amd64
+    name: Build binaries for macOS platform
+    runs-on: macos-11
+    steps:
+      - name: Set up go
+        id: go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.17
+
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          # Check https://github.com/livepeer/go-livepeer/pull/1891
+          # for ref value discussion
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Restore cache
+        id: cache-go-mod
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-${{ matrix.arch }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-go-
+
+      - name: Download dependencies
+        if: steps.cache-go-mod.outputs.cache-hit != 'true'
+        run: go mod download
+
+      - name: Build
+        run: |
+          mkdir -p build/ releases/
+          GOARCH="${{ matrix.arch }}" make -j4 all GO_BUILD_DIR="build/"
+          cd build/
+          for file in $(find . -type f -perm -a+x)
+          do
+            f_name="$(basename $file)"
+            mv "${f_name}" "livepeer-${f_name}"
+          done
+          cd -
+
+      - uses: actions-ecosystem/action-regex-match@v2
+        id: match-tag
+        with:
+          text: ${{ github.ref_name }}
+          regex: '^(master|main|v[0-9]+\.\d+\.\d+)$'
+
+      - name: Codesign and notarize binaries
+        if: ${{ steps.match-tag.outputs.match != '' }}
+        uses: livepeer/action-gh-codesign-apple@latest
+        with:
+          developer-certificate-id: ${{ secrets.CI_MACOS_CERTIFICATE_ID }}
+          developer-certificate-base64: ${{ secrets.CI_MACOS_CERTIFICATE_BASE64 }}
+          developer-certificate-password: ${{ secrets.CI_MACOS_CERTIFICATE_PASSWORD }}
+          app-notarization-email: ${{ secrets.CI_MACOS_NOTARIZATION_USER }}
+          app-notarization-password: ${{ secrets.CI_MACOS_NOTARIZATION_PASSWORD }}
+          binary-path: "build/"
+          app-bundle-id: "org.livepeer.lapi"
+
+      - name: Archive signed binary
+        run: |
+          cd build/
+          for file in $(find . -type f -perm -a+x)
+          do
+            f_name="$(basename $file)"
+            tar -czf "../releases/${f_name}-darwin-${{ matrix.arch }}.tar.gz" "${f_name}"
+          done
+          cd -
+
+      - name: Upload artifacts for cutting release
+        uses: actions/upload-artifact@master
+        with:
+          name: release-artifacts
+          path: releases/
+
+  # Disabled windows build job, to reduce time consumed overall
+  # windows:
+  #   defaults:
+  #     run:
+  #       shell: msys2 {0}
+  #   strategy:
+  #     matrix:
+  #       arch:
+  #         - arm64
+  #         - amd64
+  #   name: Build binaries for windows platform
+  #   runs-on: windows-2022
+  #   steps:
+  #     - uses: msys2/setup-msys2@v2
+  #       with:
+  #         update: true
+  #         install: >-
+  #           mingw-w64-x86_64-binutils
+  #           mingw-w64-x86_64-gcc
+  #           mingw-w64-x86_64-go
+  #           git
+  #           make
+  #           autoconf
+  #           automake
+  #           patch
+  #           libtool
+  #           texinfo
+  #           gtk-doc
+  #           zip
+
+  #     - name: Check out code
+  #       uses: actions/checkout@v3
+  #       with:
+  #         fetch-depth: 0
+  #         # Check https://github.com/livepeer/go-livepeer/pull/1891
+  #         # for ref value discussion
+  #         ref: ${{ github.event.pull_request.head.sha }}
+
+  #     - name: Restore cache
+  #       uses: actions/cache@v3
+  #       with:
+  #         path: |
+  #           ~/.cache/go-build
+  #           ~/go/pkg/mod
+  #         key: ${{ runner.os }}-${{ matrix.arch }}-go-${{ hashFiles('**/go.sum') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-${{ matrix.arch }}-go-
+
+  #     - name: Download dependencies
+  #       run: go mod download
+
+  #     - name: Build
+  #       run: |
+  #         mkdir -p build/ releases/
+  #         GOARCH="${{ matrix.arch }}" make -j4 all GO_BUILD_DIR="build/"
+  #         cd build/
+  #         for file in $(find . -type f -perm -a+x)
+  #         do
+  #           f_name="$(basename $file)"
+  #           mv "${f_name}" "livepeer-${f_name}"
+  #           zip -q9 "../releases/livepeer-${f_name/.exe/}-windows-${{ matrix.arch }}.zip" "livepeer-${f_name}"
+  #         done
+  #         cd -
+
+  #     - name: Upload artifacts for cutting release
+  #       uses: actions/upload-artifact@master
+  #       with:
+  #         name: release-artifacts
+  #         path: releases/
