@@ -596,7 +596,7 @@ func (lapi *API) SetActiveR(id string, active bool, startedAt time.Time) (bool, 
 				apiTry++
 				continue
 			}
-			glog.Errorf("Fatal error calling API /setactive id=%s active=%s err=%v", id, active, err)
+			glog.Errorf("Fatal error calling API /setactive id=%s active=%v err=%v", id, active, err)
 		}
 		return ok, err
 	}
@@ -637,7 +637,7 @@ func (lapi *API) SetActive(id string, active bool, startedAt time.Time) (bool, e
 	defer resp.Body.Close()
 	b, err = ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.Errorf("id=%s/setactive Error set active (body) %v", err)
+		glog.Errorf("id=%s/setactive Error set active (body) %v", id, err)
 		metrics.APIRequest("set_active", 0, err)
 		return true, err
 	}

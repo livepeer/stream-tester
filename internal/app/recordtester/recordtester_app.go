@@ -284,8 +284,8 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	}
 	sess := sessions[0]
 	if len(sess.Profiles) != len(stream.Profiles) {
-		glog.Infof("session: %+v")
-		err := fmt.Errorf("got %d, but should have %d", len(sess.Profiles), len(stream.Profiles))
+		glog.Infof("session: %+v", sess)
+		err := fmt.Errorf("got %d profiles but should have %d", len(sess.Profiles), len(stream.Profiles))
 		return 251, err
 		// exit(251, fileName, *fileArg, err)
 	}
