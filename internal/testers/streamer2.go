@@ -108,7 +108,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 				if err := test.GlobalErr(); err != nil {
 					if sr.globalError == nil {
 						sr.globalError = err
-						time.AfterFunc(10*time.Second, cancel)
+						time.AfterFunc(waitForTarget, cancel)
 					}
 					errs = append(errs, err.Error())
 				}
