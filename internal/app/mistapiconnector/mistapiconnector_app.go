@@ -473,6 +473,77 @@ func (mc *mac) generateRouteKeys(stream *livepeer.CreateStreamResp) []string {
 	return keys
 }
 
+func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
+	if len(lines) != 6 {
+		glog.Errorf("Expected 6 lines, got %d, request \n%s", len(lines), rawRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("false"))
+		return false
+	}
+
+	playbackId := lines[0]
+	stream, err := mc.lapi.GetStreamByPlaybackID(playbackId)
+	if err != nil || stream == nil {
+		glog.Errorf("Error getting stream info from Livepeer API playbackId=%s err=%v", playbackId, err)
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("false"))
+		return false
+	}
+
+	userId := stream.UserID
+	userWebhooks, err := mc.lapi.GetWebhooksByUserId(userId, "user.new")
+	if err != nil {
+		glog.Errorf("Error getting webhooks for user %s err=%v", userId, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("false"))
+		return false
+	}
+
+	if len(userWebhooks) == 0 {
+		glog.V(model.DEBUG).Infof("No user.new webhooks for user %s", userId)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("false"))
+		return false
+	}
+
+	for _, userWebhook := range userWebhooks {
+		if userWebhook.Url == "" {
+			glog.Errorf("User webhook %s has no URL", userWebhook.ID)
+			continue
+		}
+		glog.V(model.DEBUG).Infof("Calling user.new webhook %s", userWebhook.Url)
+
+		resp, err := http.Post(userWebhook.Url, "text/plain", strings.NewReader(rawRequest))
+		if err != nil {
+			glog.Errorf("Error calling user.new webhook %s err=%v", userWebhook.Url, err)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("false"))
+			return false
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			glog.Errorf("Error reading response body from user.new webhook %s err=%v", userWebhook.Url, err)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("false"))
+			return false
+		}
+
+		if resp.StatusCode/100 != 2 {
+			glog.Errorf("Error calling user.new webhook %s status code=%d body=%s", userWebhook.Url, resp.StatusCode, string(body))
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("false"))
+			return false
+		}
+
+		glog.V(model.DEBUG).Infof("Response from user.new webhook %s: %s", userWebhook.Url, string(body))
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("true"))
+	return true
+}
+
 func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
 	if len(lines) != 3 {
 		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), rawRequest)
@@ -808,6 +879,8 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		doLogRequestEnd = mc.triggerPushOutStart(w, r, lines, bs)
 	case "PUSH_END":
 		doLogRequestEnd = mc.triggerPushEnd(w, r, lines, bs)
+	case "USER_NEW":
+		doLogRequestEnd = mc.triggerUserNew(w, r, lines, bs)
 	default:
 		glog.Errorf("Got unsupported trigger: '%s'", trigger)
 		w.WriteHeader(http.StatusBadRequest)

@@ -132,6 +132,18 @@ type (
 		Mp4Url          string `json:"mp4Url,omitempty"`
 	}
 
+	// User Webhooks
+	UserWebhook struct {
+		ID           string   `json:"id,omitempty"`
+		Url          string   `json:"url,omitempty"`
+		Kind         string   `json:"kind,omitempty"`
+		Name         string   `json:"name,omitempty"`
+		Events       []string `json:"events,omitempty"`
+		UserID       string   `json:"userId,omitempty"`
+		CreatedAt    int64    `json:"createdAt,omitempty"`
+		SharedSecret string   `json:"sharedSecret,omitempty"`
+	}
+
 	MultistreamTarget struct {
 		ID        string `json:"id,omitempty"`
 		URL       string `json:"url,omitempty"`
@@ -449,6 +461,15 @@ func (lapi *API) DefaultPresets() []string {
 	return lapi.presets
 }
 
+// GetWebhooksByUserId gets webhooks by user id
+func (lapi *API) GetWebhooksByUserId(userId string, event string) ([]UserWebhook, error) {
+	if userId == "" || event == "" {
+		return nil, fmt.Errorf("userId and event must be specified")
+	}
+	u := fmt.Sprintf("%s/api/webhook/subscribed/%s?userId=%s", lapi.choosenServer, event, userId)
+	return lapi.GetWebhooks(u)
+}
+
 // GetStreamByKey gets stream by streamKey
 func (lapi *API) GetStreamByKey(key string) (*CreateStreamResp, error) {
 	if key == "" {
@@ -753,6 +774,49 @@ func (lapi *API) getStream(u, rType string) (*CreateStreamResp, error) {
 	if err != nil {
 		return nil, err
 	}
+	return r, nil
+}
+
+func (lapi *API) GetWebhooks(u string) ([]UserWebhook, error) {
+	rType := "get_webhooks"
+	start := time.Now()
+	req := uhttp.GetRequest(u)
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	resp, err := lapi.httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error getting webhooks from Livepeer API server (%s) error: %v", u, err)
+		metrics.APIRequest(rType, 0, err)
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		glog.Errorf("Status error getting webhooks from Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		if resp.StatusCode == http.StatusNotFound {
+			metrics.APIRequest(rType, 0, ErrNotExists)
+			return nil, ErrNotExists
+		}
+		err := errors.New(http.StatusText(resp.StatusCode))
+		metrics.APIRequest(rType, 0, err)
+		return nil, err
+	}
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		glog.Errorf("Error getting webhooks from Livepeer API server (%s) error: %v", u, err)
+		metrics.APIRequest(rType, 0, err)
+		return nil, err
+	}
+
+	took := time.Since(start)
+	metrics.APIRequest(rType, took, nil)
+	r := []UserWebhook{}
+	err = json.Unmarshal(b, &r)
+	if err != nil {
+		return nil, err
+	}
+
 	return r, nil
 }
 
