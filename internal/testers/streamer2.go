@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -108,7 +109,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 				if err := test.GlobalErr(); err != nil {
 					if sr.globalError == nil {
 						sr.globalError = err
-						time.AfterFunc(10*time.Second, cancel)
+						time.AfterFunc(waitForTarget, cancel)
 					}
 					errs = append(errs, err.Error())
 				}
@@ -116,6 +117,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 				if len(errs) > 0 {
 					msg := errs[0]
 					if len(errs) > 1 {
+						sortErrs(errs)
 						msg = "Multiple errors: " + strings.Join(errs, "; ")
 					}
 					sr.fatalEnd(errors.New(msg))
@@ -148,6 +150,24 @@ func onAnyDone(ctx context.Context, finites []Finite) <-chan Finite {
 		}(f)
 	}
 	return finished
+}
+
+func sortErrs(errs []string) {
+	sortIdx := func(idx int) int {
+		err := strings.ToLower(errs[idx])
+		if strings.Contains(err, "health") {
+			// stream health errs should go last. they're never the root cause when
+			// there are multiple errors.
+			return 1
+		}
+		return 0
+	}
+	sort.Slice(errs, func(idx1, idx2 int) bool {
+		if si1, si2 := sortIdx(idx1), sortIdx(idx2); si1 != si2 {
+			return si1 < si2
+		}
+		return errs[idx1] < errs[idx2]
+	})
 }
 
 // StartPulling pull arbitrary HLS stream and report found errors

@@ -34,28 +34,31 @@ type (
 
 	RecordTesterOptions struct {
 		*livepeer.API
-		Analyzers        testers.AnalyzerByRegion
-		Ingest           *livepeer.Ingest
-		VODStats         model.VODStats
-		UseForceURL      bool
-		UseHTTP          bool
-		TestMP4          bool
-		TestStreamHealth bool
+		Analyzers           testers.AnalyzerByRegion
+		Ingest              *livepeer.Ingest
+		RecordObjectStoreId string
+		UseForceURL         bool
+		UseHTTP             bool
+		TestMP4             bool
+		TestStreamHealth    bool
 	}
 
 	recordTester struct {
-		lapi         *livepeer.API
-		lanalyzers   testers.AnalyzerByRegion
-		ingest       *livepeer.Ingest
-		useForceURL  bool
-		ctx          context.Context
-		cancel       context.CancelFunc
-		vodeStats    model.VODStats
-		streamID     string
-		stream       *livepeer.CreateStreamResp
-		useHTTP      bool
-		mp4          bool
-		streamHealth bool
+		ctx                 context.Context
+		cancel              context.CancelFunc
+		lapi                *livepeer.API
+		lanalyzers          testers.AnalyzerByRegion
+		ingest              *livepeer.Ingest
+		recordObjectStoreId string
+		useForceURL         bool
+		useHTTP             bool
+		mp4                 bool
+		streamHealth        bool
+
+		// mutable fields
+		streamID string
+		stream   *livepeer.CreateStreamResp
+		vodStats model.VODStats
 	}
 )
 
@@ -98,15 +101,16 @@ var standardProfiles = []livepeer.Profile{
 func NewRecordTester(gctx context.Context, opts RecordTesterOptions) IRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	rt := &recordTester{
-		lapi:         opts.API,
-		lanalyzers:   opts.Analyzers,
-		ingest:       opts.Ingest,
-		useForceURL:  opts.UseForceURL,
-		ctx:          ctx,
-		cancel:       cancel,
-		useHTTP:      opts.UseHTTP,
-		mp4:          opts.TestMP4,
-		streamHealth: opts.TestStreamHealth,
+		lapi:                opts.API,
+		lanalyzers:          opts.Analyzers,
+		ingest:              opts.Ingest,
+		ctx:                 ctx,
+		cancel:              cancel,
+		recordObjectStoreId: opts.RecordObjectStoreId,
+		useForceURL:         opts.UseForceURL,
+		useHTTP:             opts.UseHTTP,
+		mp4:                 opts.TestMP4,
+		streamHealth:        opts.TestStreamHealth,
 	}
 	return rt
 }
@@ -153,7 +157,12 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	var stream *livepeer.CreateStreamResp
 	for {
-		stream, err = rt.lapi.CreateStreamEx(streamName, true, nil, standardProfiles...)
+		stream, err = rt.lapi.CreateStream(livepeer.CreateStreamReq{
+			Name:                streamName,
+			Profiles:            standardProfiles,
+			Record:              true,
+			RecordObjectStoreId: rt.recordObjectStoreId,
+		})
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -276,7 +285,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	sess := sessions[0]
 	if len(sess.Profiles) != len(stream.Profiles) {
 		glog.Infof("session: %+v", sess)
-		err := fmt.Errorf("got %d, but should have %d", len(sess.Profiles), len(stream.Profiles))
+		err := fmt.Errorf("got %d profiles but should have %d", len(sess.Profiles), len(stream.Profiles))
 		return 251, err
 		// exit(251, fileName, *fileArg, err)
 	}
@@ -386,7 +395,13 @@ func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL str
 	var err error
 	apiTry := 0
 	for {
-		session, err = rt.lapi.CreateStreamEx2(streamName, true, stream.ID, nil, standardProfiles...)
+		session, err = rt.lapi.CreateStream(livepeer.CreateStreamReq{
+			Name:                streamName,
+			ParentID:            stream.ID,
+			Profiles:            standardProfiles,
+			Record:              true,
+			RecordObjectStoreId: rt.recordObjectStoreId,
+		})
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -478,7 +493,7 @@ func (rt *recordTester) checkDown(stream *livepeer.CreateStreamResp, url string,
 		return 0, err
 	}
 	vs := downloader.VODStats()
-	rt.vodeStats = vs
+	rt.vodStats = vs
 	if len(vs.SegmentsNum) != len(standardProfiles)+1 {
 		glog.Warningf("Number of renditions doesn't match! Has %d should %d", len(vs.SegmentsNum), len(standardProfiles)+1)
 		es = 35
@@ -504,7 +519,7 @@ func (rt *recordTester) Done() <-chan struct{} {
 }
 
 func (rt *recordTester) VODStats() model.VODStats {
-	return rt.vodeStats
+	return rt.vodStats
 }
 
 func (rt *recordTester) Clean() {

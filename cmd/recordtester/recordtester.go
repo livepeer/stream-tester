@@ -55,6 +55,7 @@ func main() {
 	useHttp := fs.Bool("http", false, "Do HTTP tests instead of RTMP")
 	testMP4 := fs.Bool("mp4", false, "Download MP4 of recording")
 	testStreamHealth := fs.Bool("stream-health", false, "Check stream health during test")
+	recordObjectStoreId := fs.String("record-object-store-id", "", "ID for the Object Store to use for recording storage. Forwarded to the streams created in the API")
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
 	discordUsersToNotify := fs.String("discord-users", "", "Id's of users to notify in case of failure")
@@ -198,13 +199,14 @@ func main() {
 	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
 
 	rtOpts := recordtester.RecordTesterOptions{
-		API:              lapi,
-		Analyzers:        lanalyzers,
-		Ingest:           ingest,
-		UseForceURL:      true,
-		UseHTTP:          *useHttp,
-		TestMP4:          *testMP4,
-		TestStreamHealth: *testStreamHealth,
+		API:                 lapi,
+		Analyzers:           lanalyzers,
+		Ingest:              ingest,
+		RecordObjectStoreId: *recordObjectStoreId,
+		UseForceURL:         true,
+		UseHTTP:             *useHttp,
+		TestMP4:             *testMP4,
+		TestStreamHealth:    *testStreamHealth,
 	}
 	if *sim > 1 {
 		var testers []recordtester.IRecordTester
