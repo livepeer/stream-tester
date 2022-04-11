@@ -491,7 +491,7 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 	}
 
 	userId := stream.UserID
-	userWebhooks, err := mc.lapi.GetWebhooksByUserId(userId, "user.new")
+	userWebhooks, err := mc.lapi.GetWebhooksByUserId(userId, "playback.user.new")
 	if err != nil {
 		glog.Errorf("Error getting webhooks for user %s err=%v", userId, err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -500,7 +500,7 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 	}
 
 	if len(userWebhooks) == 0 {
-		glog.V(model.DEBUG).Infof("No user.new webhooks for user %s", userId)
+		glog.V(model.DEBUG).Infof("No playback.user.new webhooks for user %s", userId)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("false"))
 		return false
@@ -511,11 +511,11 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 			glog.Errorf("User webhook %s has no URL", userWebhook.ID)
 			continue
 		}
-		glog.V(model.DEBUG).Infof("Calling user.new webhook %s", userWebhook.Url)
+		glog.V(model.DEBUG).Infof("Calling playback.user.new webhook %s", userWebhook.Url)
 
 		resp, err := http.Post(userWebhook.Url, "text/plain", strings.NewReader(rawRequest))
 		if err != nil {
-			glog.Errorf("Error calling user.new webhook %s err=%v", userWebhook.Url, err)
+			glog.Errorf("Error calling playback.user.new webhook %s err=%v", userWebhook.Url, err)
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("false"))
 			return false
@@ -523,20 +523,20 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			glog.Errorf("Error reading response body from user.new webhook %s err=%v", userWebhook.Url, err)
+			glog.Errorf("Error reading response body from playback.user.new webhook %s err=%v", userWebhook.Url, err)
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("false"))
 			return false
 		}
 
 		if resp.StatusCode/100 != 2 {
-			glog.Errorf("Error calling user.new webhook %s status code=%d body=%s", userWebhook.Url, resp.StatusCode, string(body))
+			glog.Errorf("Error calling playback.user.new webhook %s status code=%d body=%s", userWebhook.Url, resp.StatusCode, string(body))
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("false"))
 			return false
 		}
 
-		glog.V(model.DEBUG).Infof("Response from user.new webhook %s: %s", userWebhook.Url, string(body))
+		glog.V(model.DEBUG).Infof("Response from playback.user.new webhook %s: %s", userWebhook.Url, string(body))
 	}
 
 	w.WriteHeader(http.StatusOK)
