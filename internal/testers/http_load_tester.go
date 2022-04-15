@@ -3,6 +3,7 @@ package testers
 import (
 	"context"
 	"fmt"
+	"github.com/livepeer/stream-tester/internal/metrics"
 	"math/rand"
 	"path"
 	"strconv"
@@ -245,6 +246,7 @@ func (hlt *HTTPLoadTester) Stats(basedManifestID string) (*model.Stats, error) {
 	if stats.SentSegments > 0 {
 		stats.SuccessRate = float64(stats.DownloadedSegments) / (float64(model.ProfilesNum) * float64(stats.SentSegments)) * 100
 	}
+	metrics.RecordSuccessRate(stats.SuccessRate)
 	stats.ShouldHaveDownloadedSegments = model.ProfilesNum * stats.SentSegments
 	stats.ProfilesNum = model.ProfilesNum
 	stats.RawTranscodedLatencies = transcodedLatencies.Raw()

@@ -10,12 +10,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	census "github.com/livepeer/stream-tester/internal/metrics"
 	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -70,6 +72,8 @@ func main() {
 	if *region == "" {
 		log.Fatal("region is required")
 	}
+
+	//startMetricsServer()
 
 	metricsURL, err := defaultAddr(*metrics, "127.0.0.1", prometheusPort)
 	if err != nil {
@@ -235,6 +239,18 @@ func main() {
 			continue
 		}
 	}
+}
+
+func startMetricsServer() {
+	hostName, _ := os.Hostname()
+	census.InitCensus(hostName, model.Version, "orchtester")
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", census.Exporter)
+	srv := &http.Server{
+		Addr:    "localhost:7934",
+		Handler: mux,
+	}
+	srv.ListenAndServe()
 }
 
 func validateURL(addr string) (string, error) {
@@ -517,6 +533,7 @@ func (s *streamerClient) queryVectorMetric(qry string) (*promModels.Vector, erro
 }
 
 func (s *streamerClient) postStats(stats *apiModels.Stats) error {
+	//census.PostStats(stats)
 	input, err := json.Marshal(stats)
 	if err != nil {
 		return err
