@@ -73,7 +73,7 @@ func main() {
 		log.Fatal("region is required")
 	}
 
-	startMetricsServer()
+	go startMetricsServer()
 
 	metricsURL, err := defaultAddr(*metrics, "127.0.0.1", prometheusPort)
 	if err != nil {
