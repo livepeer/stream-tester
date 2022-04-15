@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	apiModels "github.com/livepeer/leaderboard-serverless/models"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -23,14 +24,14 @@ const (
 
 type (
 	censusMetricsCounter struct {
-		nodeID      string
-		ctx         context.Context
-		kNodeID     tag.Key
-		kManifestID tag.Key
-		kTrigger    tag.Key
-		kType       tag.Key
-		//kRegion               tag.Key
-		//kOrchestrator         tag.Key
+		nodeID                string
+		ctx                   context.Context
+		kNodeID               tag.Key
+		kManifestID           tag.Key
+		kTrigger              tag.Key
+		kType                 tag.Key
+		kRegion               tag.Key
+		kOrchestrator         tag.Key
 		mCurrentStreams       *stats.Int64Measure
 		mSuccessfulStreams    *stats.Int64Measure
 		mTotalStreams         *stats.Int64Measure
@@ -52,8 +53,8 @@ type (
 		mConsulErrors  *stats.Int64Measure
 		mConsulLatency *stats.Float64Measure
 
-		mSuccessRate *stats.Float64Measure
-		//mRoundTripTime *stats.Float64Measure
+		mSuccessRate   *stats.Float64Measure
+		mRoundTripTime *stats.Float64Measure
 
 		activeStreams int64
 		lock          sync.Mutex
@@ -79,8 +80,8 @@ func InitCensus(nodeID, version, namespace string) {
 	Census.kManifestID = tag.MustNewKey("manifest_id")
 	Census.kTrigger = tag.MustNewKey("trigger")
 	Census.kType = tag.MustNewKey("type")
-	//Census.kRegion = tag.MustNewKey("region")
-	//Census.kOrchestrator = tag.MustNewKey("orchestrator")
+	Census.kRegion = tag.MustNewKey("region")
+	Census.kOrchestrator = tag.MustNewKey("orchestrator")
 	Census.ctx, err = tag.New(ctx, tag.Insert(Census.kNodeID, nodeID))
 	if err != nil {
 		glog.Fatal("Error creating context", err)
@@ -392,15 +393,15 @@ func APIRequest(rType string, duration time.Duration, err error) {
 	}
 }
 
-//func PostStats(s *apiModels.Stats) {
-//	m := []tag.Mutator{tag.Insert(Census.kRegion, s.Region), tag.Insert(Census.kOrchestrator, s.Orchestrator)}
-//	if err := stats.RecordWithTags(Census.ctx, m, Census.mSuccessRate.M(s.SuccessRate)); err != nil {
-//		glog.Errorf("Error recording metrics region=%s orchestrator=%s err=%q", s.Region, s.Orchestrator, err)
-//	}
-//	if err := stats.RecordWithTags(Census.ctx, m, Census.mRoundTripTime.M(s.RoundTripTime)); err != nil {
-//		glog.Errorf("Error recording metrics region=%s orchestrator=%s err=%q", s.Region, s.Orchestrator, err)
-//	}
-//}
+func PostStats(s *apiModels.Stats) {
+	m := []tag.Mutator{tag.Insert(Census.kRegion, s.Region), tag.Insert(Census.kOrchestrator, s.Orchestrator)}
+	if err := stats.RecordWithTags(Census.ctx, m, Census.mSuccessRate.M(s.SuccessRate)); err != nil {
+		glog.Errorf("Error recording metrics region=%s orchestrator=%s err=%q", s.Region, s.Orchestrator, err)
+	}
+	if err := stats.RecordWithTags(Census.ctx, m, Census.mRoundTripTime.M(s.RoundTripTime)); err != nil {
+		glog.Errorf("Error recording metrics region=%s orchestrator=%s err=%q", s.Region, s.Orchestrator, err)
+	}
+}
 
 func RecordSuccessRate(successRate float64) {
 	stats.Record(Census.ctx, Census.mSuccessRate.M(successRate))

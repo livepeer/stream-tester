@@ -73,7 +73,7 @@ func main() {
 		log.Fatal("region is required")
 	}
 
-	//startMetricsServer()
+	startMetricsServer()
 
 	metricsURL, err := defaultAddr(*metrics, "127.0.0.1", prometheusPort)
 	if err != nil {
@@ -533,7 +533,7 @@ func (s *streamerClient) queryVectorMetric(qry string) (*promModels.Vector, erro
 }
 
 func (s *streamerClient) postStats(stats *apiModels.Stats) error {
-	//census.PostStats(stats)
+	census.PostStats(stats)
 	input, err := json.Marshal(stats)
 	if err != nil {
 		return err
