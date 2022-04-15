@@ -109,7 +109,7 @@ func InitCensus(nodeID, version, namespace string) {
 	Census.mMultistreamUsageMin = stats.Float64("multistream_usage_minutes", "Total minutes multistreamed, or pushed, to external services", "min")
 
 	Census.mSuccessRate = stats.Float64("success_rate", "Success rate of orch test for the given orchestrator", "per")
-	//Census.mRoundTripTime = stats.Float64("round_trip_time", "Round trip time of orch test for the given orchestrator", "sec")
+	Census.mRoundTripTime = stats.Float64("round_trip_time", "Round trip time of orch test for the given orchestrator", "sec")
 
 	glog.Infof("Compiler: %s Arch %s OS %s Go version %s", runtime.Compiler, runtime.GOARCH, runtime.GOOS, runtime.Version())
 	glog.Infof("Streamtester version: %s", version)
