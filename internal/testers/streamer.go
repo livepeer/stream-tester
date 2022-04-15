@@ -3,7 +3,6 @@ package testers
 import (
 	"context"
 	"fmt"
-	"github.com/livepeer/stream-tester/internal/metrics"
 	"math/rand"
 	"path"
 	"strconv"
@@ -509,7 +508,7 @@ func (sr *streamer) Stats(basedManifestID string) (*model.Stats, error) {
 			stats.SuccessRate = stats.SuccessRate2
 		}
 	}
-	metrics.RecordSuccessRate(stats.SuccessRate)
+	//metrics.RecordSuccessRate(stats.SuccessRate)
 	stats.ShouldHaveDownloadedSegments = (model.ProfilesNum + 1) * stats.SentSegments
 	stats.ProfilesNum = model.ProfilesNum
 	stats.RawSourceLatencies = sourceLatencies.Raw()

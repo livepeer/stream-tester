@@ -490,7 +490,7 @@ func (hs *httpStats) Stats() (*model.Stats, error) {
 		// stats.SuccessRate = float64(stats.DownloadedSegments) / (float64(model.ProfilesNum) * float64(stats.SentSegments)) * 100
 		stats.SuccessRate = float64(hs.success1) / float64(hs.triedToSend) * 100
 	}
-	metrics.RecordSuccessRate(stats.SuccessRate)
+	//metrics.RecordSuccessRate(stats.SuccessRate)
 	stats.ShouldHaveDownloadedSegments = model.ProfilesNum * stats.SentSegments
 	stats.ProfilesNum = model.ProfilesNum
 	stats.RawTranscodedLatencies = transcodedLatencies.Raw()

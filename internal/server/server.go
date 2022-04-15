@@ -144,6 +144,7 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 	// glog.Infof("Lat avg %d p50 %d p95 %d p99 %d  avg %s p50 %s p95 %s p99 %s", stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95,
 	// 	stats.SourceLatencies.P99, stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95, stats.SourceLatencies.P99)
 	glog.Infof("stats: %+v", stats)
+	metrics.RecordSuccessRate(stats.SuccessRate)
 	b, err := json.Marshal(stats)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
