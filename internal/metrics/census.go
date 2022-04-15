@@ -23,12 +23,14 @@ const (
 
 type (
 	censusMetricsCounter struct {
-		nodeID                string
-		ctx                   context.Context
-		kNodeID               tag.Key
-		kManifestID           tag.Key
-		kTrigger              tag.Key
-		kType                 tag.Key
+		nodeID      string
+		ctx         context.Context
+		kNodeID     tag.Key
+		kManifestID tag.Key
+		kTrigger    tag.Key
+		kType       tag.Key
+		//kRegion               tag.Key
+		//kOrchestrator         tag.Key
 		mCurrentStreams       *stats.Int64Measure
 		mSuccessfulStreams    *stats.Int64Measure
 		mTotalStreams         *stats.Int64Measure
@@ -49,6 +51,9 @@ type (
 
 		mConsulErrors  *stats.Int64Measure
 		mConsulLatency *stats.Float64Measure
+
+		mSuccessRate *stats.Float64Measure
+		//mRoundTripTime *stats.Float64Measure
 
 		activeStreams int64
 		lock          sync.Mutex
@@ -74,6 +79,8 @@ func InitCensus(nodeID, version, namespace string) {
 	Census.kManifestID = tag.MustNewKey("manifest_id")
 	Census.kTrigger = tag.MustNewKey("trigger")
 	Census.kType = tag.MustNewKey("type")
+	//Census.kRegion = tag.MustNewKey("region")
+	//Census.kOrchestrator = tag.MustNewKey("orchestrator")
 	Census.ctx, err = tag.New(ctx, tag.Insert(Census.kNodeID, nodeID))
 	if err != nil {
 		glog.Fatal("Error creating context", err)
@@ -99,6 +106,9 @@ func InitCensus(nodeID, version, namespace string) {
 
 	Census.mMultistreamUsageMb = stats.Float64("multistream_usage_megabytes", "Total number of megabytes multistreamed, or pushed, to external services", "megabyte")
 	Census.mMultistreamUsageMin = stats.Float64("multistream_usage_minutes", "Total minutes multistreamed, or pushed, to external services", "min")
+
+	Census.mSuccessRate = stats.Float64("success_rate", "Success rate of orch test for the given orchestrator", "per")
+	//Census.mRoundTripTime = stats.Float64("round_trip_time", "Round trip time of orch test for the given orchestrator", "sec")
 
 	glog.Infof("Compiler: %s Arch %s OS %s Go version %s", runtime.Compiler, runtime.GOARCH, runtime.GOOS, runtime.Version())
 	glog.Infof("Streamtester version: %s", version)
@@ -229,6 +239,21 @@ func InitCensus(nodeID, version, namespace string) {
 			TagKeys:     append([]tag.Key{Census.kType}, baseTags...),
 			Aggregation: view.Distribution(0, 0.050, 0.100, .250, .500, .750, 1.000, 1.250, 1.500, 2.000, 2.500, 3.000, 3.500, 4.000, 4.500, 5.000, 10.000, 20.0, 30.0, 60.0),
 		},
+		{
+			Name:        "success_rate",
+			Measure:     Census.mSuccessRate,
+			Description: "Success rate",
+			//TagKeys:     append([]tag.Key{Census.kRegion, Census.kOrchestrator}, baseTags...),
+			TagKeys:     baseTags,
+			Aggregation: view.LastValue(),
+		},
+		//{
+		//	Name:        "round_trip_time",
+		//	Measure:     Census.mRoundTripTime,
+		//	Description: "Round trip time",
+		//	TagKeys:     append([]tag.Key{Census.kRegion, Census.kOrchestrator}, baseTags...),
+		//	Aggregation: view.LastValue(),
+		//},
 	}
 
 	// Register the views
@@ -365,4 +390,18 @@ func APIRequest(rType string, duration time.Duration, err error) {
 	} else {
 		stats.Record(ctx, Census.mAPILatency.M(duration.Seconds()))
 	}
+}
+
+//func PostStats(s *apiModels.Stats) {
+//	m := []tag.Mutator{tag.Insert(Census.kRegion, s.Region), tag.Insert(Census.kOrchestrator, s.Orchestrator)}
+//	if err := stats.RecordWithTags(Census.ctx, m, Census.mSuccessRate.M(s.SuccessRate)); err != nil {
+//		glog.Errorf("Error recording metrics region=%s orchestrator=%s err=%q", s.Region, s.Orchestrator, err)
+//	}
+//	if err := stats.RecordWithTags(Census.ctx, m, Census.mRoundTripTime.M(s.RoundTripTime)); err != nil {
+//		glog.Errorf("Error recording metrics region=%s orchestrator=%s err=%q", s.Region, s.Orchestrator, err)
+//	}
+//}
+
+func RecordSuccessRate(successRate float64) {
+	stats.Record(Census.ctx, Census.mSuccessRate.M(successRate))
 }
