@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/sha256"
+	"crypto/hmac"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -96,7 +97,7 @@ type (
 	userNewPayload struct {
 		StreamName   	   string   `json:"streamName"`
 		IpAddress		   string	`json:"ipAddress"`
-		UserAgent		   string	`json:"userAgent"`
+		Timestamp		   int64	`json:"timestamp"`
 		OutputProtocol	   string	`json:"outputProtocol"`
 		RequestUrl 		   string	`json:"requestUrl"`
 		SessionID		   string	`json:"sessionID"`
@@ -484,10 +485,10 @@ func (mc *mac) generateRouteKeys(stream *livepeer.CreateStreamResp) []string {
 	return keys
 }
 
-func (mc *mac) sign(sharedSecret string) string {
-	s := sha256.New()
-	s.Write([]byte(sharedSecret))
-	signature := hex.EncodeToString(s.Sum(nil))
+func (mc *mac) sign(body string, sharedSecret string) string {
+	hmac := hmac.New(sha256.New, []byte(sharedSecret))
+	hmac.Write([]byte(body))
+	signature := hex.EncodeToString(hmac.Sum(nil))
 	return signature
 }
 
@@ -500,10 +501,12 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 		return false
 	}
 
+	timestamp := time.Now().Unix()
+
 	u := &userNewPayload{
 		StreamName:    	lines[0],
 		IpAddress:     	lines[1],
-		UserAgent:     	lines[2],
+		Timestamp:     	timestamp,
 		OutputProtocol: lines[3],
 		RequestUrl:    	lines[4],
 		SessionID:     	lines[5],
@@ -567,9 +570,8 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 			}
 
 			if userWebhook.SharedSecret != "" {
-				signature := mc.sign(userWebhook.SharedSecret)
-				timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-				signature_header := fmt.Sprintf("t=%s,v1=%s", timestamp, signature)
+				signature := mc.sign(payload, userWebhook.SharedSecret)
+				signature_header := fmt.Sprintf("t=%s,v1=%s", strconv.FormatInt(timestamp,10), signature)
 				req.Header.Add("Livepeer-Signature", signature_header)
 			}
 
