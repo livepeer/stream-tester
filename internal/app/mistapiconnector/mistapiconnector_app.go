@@ -3,6 +3,8 @@ package mistapiconnector
 import (
 	"context"
 	"crypto/tls"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -89,6 +91,15 @@ type (
 		mu                 sync.Mutex
 		pushStatus         map[string]*pushStatus
 		startedAt          time.Time
+	}
+
+	userNewPayload struct {
+		StreamName   	   string   `json:"streamName"`
+		IpAddress		   string	`json:"ipAddress"`
+		UserAgent		   string	`json:"userAgent"`
+		OutputProtocol	   string	`json:"outputProtocol"`
+		RequestUrl 		   string	`json:"requestUrl"`
+		SessionID		   string	`json:"sessionID"`
 	}
 
 	trackListDesc struct {
@@ -473,13 +484,40 @@ func (mc *mac) generateRouteKeys(stream *livepeer.CreateStreamResp) []string {
 	return keys
 }
 
+func (mc *mac) sign(sharedSecret string) string {
+	s := sha256.New()
+	s.Write([]byte(sharedSecret))
+	signature := hex.EncodeToString(s.Sum(nil))
+	return signature
+}
+
 func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
+
 	if len(lines) != 6 {
 		glog.Errorf("Expected 6 lines, got %d, request \n%s", len(lines), rawRequest)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
 		return false
 	}
+
+	u := &userNewPayload{
+		StreamName:    	lines[0],
+		IpAddress:     	lines[1],
+		UserAgent:     	lines[2],
+		OutputProtocol: lines[3],
+		RequestUrl:    	lines[4],
+		SessionID:     	lines[5],
+	}
+
+	b, err := json.Marshal(u)
+    if err != nil {
+        glog.Errorf("Error marshalling userNewPayload: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("false"))
+        return false
+    }
+
+    payload := string(b)
 
 	playbackId := lines[0]
 	stream, err := mc.lapi.GetStreamByPlaybackID(playbackId)
@@ -505,38 +543,65 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 		w.Write([]byte("false"))
 		return false
 	}
-
+	
 	for _, userWebhook := range userWebhooks {
-		if userWebhook.Url == "" {
-			glog.Errorf("User webhook %s has no URL", userWebhook.ID)
-			continue
-		}
-		glog.V(model.DEBUG).Infof("Calling playback.user.new webhook %s", userWebhook.Url)
+		
+			if userWebhook.Url == "" {
+				glog.Errorf("User webhook %s has no URL", userWebhook.ID)
+				return true
+			}
 
-		resp, err := http.Post(userWebhook.Url, "text/plain", strings.NewReader(rawRequest))
-		if err != nil {
-			glog.Errorf("Error calling playback.user.new webhook %s err=%v", userWebhook.Url, err)
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("false"))
-			return false
-		}
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			glog.Errorf("Error reading response body from playback.user.new webhook %s err=%v", userWebhook.Url, err)
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("false"))
-			return false
-		}
+			req := &http.Request{
+				Method: "POST",
+				Header: http.Header{
+					"Content-Type": []string{"application/json"},
+				},
+				Body: ioutil.NopCloser(strings.NewReader(payload)),
+			}
 
-		if resp.StatusCode/100 != 2 {
-			glog.Errorf("Error calling playback.user.new webhook %s status code=%d body=%s", userWebhook.Url, resp.StatusCode, string(body))
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("false"))
-			return false
-		}
+			req.URL, err = url.Parse(userWebhook.Url)
 
-		glog.V(model.DEBUG).Infof("Response from playback.user.new webhook %s: %s", userWebhook.Url, string(body))
+			if err != nil {
+				glog.Errorf("Error parsing URL %s for user webhook %s err=%v", userWebhook.Url, userWebhook.ID, err)
+				return false
+			}
+
+			if userWebhook.SharedSecret != "" {
+				signature := mc.sign(userWebhook.SharedSecret)
+				timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+				signature_header := fmt.Sprintf("t=%s,v1=%s", timestamp, signature)
+				req.Header.Add("Livepeer-Signature", signature_header)
+			}
+
+			glog.V(model.DEBUG).Infof("Calling playback.user.new webhook %s", userWebhook.Url)
+
+			resp, err := http.DefaultClient.Do(req)
+			
+			if err != nil {
+				glog.Errorf("Error calling playback.user.new webhook %s err=%v", userWebhook.Url, err)
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("false"))
+				return false
+			}
+
+			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				glog.Errorf("Error reading response body from playback.user.new webhook %s err=%v", userWebhook.Url, err)
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("false"))
+				return false
+			}
+
+			if resp.StatusCode/100 != 2 {
+				glog.Errorf("Response calling playback.user.new webhook %s got status code=%d body=%s", userWebhook.Url, resp.StatusCode, string(body))
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("false"))
+				return false
+			}
+
+			glog.V(model.DEBUG).Infof("Response from playback.user.new webhook %s: %s", userWebhook.Url, string(body))
+		
 	}
 
 	w.WriteHeader(http.StatusOK)
