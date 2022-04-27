@@ -123,6 +123,7 @@ func main() {
 	refreshWait := 70 * time.Second
 
 	var summary statsSummary
+	var postStatsCount int
 	start = time.Now()
 
 	for _, o := range orchestrators {
@@ -221,11 +222,12 @@ func main() {
 		}
 		apiStats.Errors = errors
 
-		summary.add(apiStats)
 		if err := streamer.postStats(apiStats); err != nil {
 			glog.Error(err)
 			continue
 		}
+		postStatsCount++
+		summary.add(apiStats)
 
 		// if we haven't found a random sample by now cancel and wait for the backup attempt to complete before returning
 		if *randomSample {
@@ -237,6 +239,7 @@ func main() {
 			continue
 		}
 	}
+	glog.Infof("Posted stats count: %v", postStatsCount)
 	summary.log()
 }
 
