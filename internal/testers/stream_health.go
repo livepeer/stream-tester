@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/livepeer-data/health/reducers"
 	"github.com/livepeer/livepeer-data/pkg/client"
+	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/stream-tester/model"
 )
 
@@ -107,14 +109,15 @@ func (h *streamHealth) checkAllRegions(logErrs bool) <-chan checkResult {
 			defer wg.Done()
 			glog.V(model.INSANE).Infof("Checking stream health for region=%s", region)
 			health, err := h.clients[region].GetStreamHealth(h.ctx, h.streamID)
-			if err != nil {
-				// do nothing, we'll log the error below if asked for.
-			} else if healthy := health.Healthy.Status; healthy == nil {
-				err = fmt.Errorf("`healthy` condition unavailable")
-			} else if !*healthy {
-				err = fmt.Errorf("`healthy` condition is `false`")
-			} else if age := startTime.Sub(health.Healthy.LastProbeTime.Time); age > time.Minute {
-				err = fmt.Errorf("stream health is outdated (`%s`)", age)
+			if err == nil {
+				conds := strings.Join(conditionsStatus(health), ", ")
+				if healthy := health.Healthy.Status; healthy == nil {
+					err = fmt.Errorf("stream health info is unavailable (`nil`). health conditions: %s", conds)
+				} else if !*healthy {
+					err = fmt.Errorf("stream is unhealthy. health conditions: %s", conds)
+				} else if age := startTime.Sub(health.Healthy.LastProbeTime.Time); age > time.Minute {
+					err = fmt.Errorf("stream health is outdated (`%s`)", age)
+				}
 			}
 			if err != nil && (logErrs || bool(glog.V(model.VVERBOSE))) {
 				rawHealth, jsonErr := json.Marshal(health)
@@ -131,4 +134,16 @@ func (h *streamHealth) checkAllRegions(logErrs bool) <-chan checkResult {
 		close(results)
 	}()
 	return results
+}
+
+func conditionsStatus(health *data.HealthStatus) []string {
+	failed := []string{}
+	for _, cond := range health.Conditions {
+		if cond.Status != nil {
+			failed = append(failed, fmt.Sprintf("`%s=%v`", cond.Type, *cond.Status))
+		} else if cond.Type != reducers.ConditionMultistreaming {
+			failed = append(failed, fmt.Sprintf("`%s=nil` (unavailable)", cond.Type))
+		}
+	}
+	return failed
 }
