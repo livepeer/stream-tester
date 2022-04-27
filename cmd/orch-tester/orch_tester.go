@@ -122,6 +122,7 @@ func main() {
 
 	refreshWait := 70 * time.Second
 
+	var summary statsSummary
 	start = time.Now()
 
 	for _, o := range orchestrators {
@@ -224,6 +225,7 @@ func main() {
 			glog.Error(err)
 			continue
 		}
+		summary.add(apiStats)
 
 		// if we haven't found a random sample by now cancel and wait for the backup attempt to complete before returning
 		if *randomSample {
@@ -235,6 +237,7 @@ func main() {
 			continue
 		}
 	}
+	summary.log()
 }
 
 func validateURL(addr string) (string, error) {
@@ -819,4 +822,31 @@ func (s *streamerClient) downloadMediaPlaylist(uri string) (*m3u8.MediaPlaylist,
 	}
 	pl := gpl.(*m3u8.MediaPlaylist)
 	return pl, nil
+}
+
+const (
+	minSanityCheckSuccessRate       = 0.8
+	maxSanityCheckRoundTripTime     = 2.0
+	minSanityCheckOrchestratorCount = 20
+)
+
+type statsSummary struct {
+	sanityCheckSuccessRateCount   int
+	sanityCheckRoundTripTimeCount int
+}
+
+func (s *statsSummary) add(stats *apiModels.Stats) {
+	if stats.SuccessRate >= minSanityCheckSuccessRate {
+		s.sanityCheckSuccessRateCount++
+	}
+	if stats.RoundTripTime <= maxSanityCheckRoundTripTime {
+		s.sanityCheckRoundTripTimeCount++
+	}
+}
+
+func (s *statsSummary) log() {
+	glog.Infof("Completed the orch-tester job, number of orchestrators with success rate higher than %v: %v, number of orchestrators with round trip time lower than %v: %v", minSanityCheckSuccessRate, s.sanityCheckSuccessRateCount, maxSanityCheckRoundTripTime, s.sanityCheckRoundTripTimeCount)
+	if s.sanityCheckSuccessRateCount < minSanityCheckOrchestratorCount || s.sanityCheckRoundTripTimeCount < minSanityCheckOrchestratorCount {
+		glog.Warning("Low number of orchestrators which passed the sanity check, please make sure that the orch-tester job is configured correctly")
+	}
 }
