@@ -123,7 +123,6 @@ func main() {
 	refreshWait := 70 * time.Second
 
 	var summary statsSummary
-	var postStatsCount int
 	start = time.Now()
 
 	for _, o := range orchestrators {
@@ -226,7 +225,6 @@ func main() {
 			glog.Error(err)
 			continue
 		}
-		postStatsCount++
 		summary.add(apiStats)
 
 		// if we haven't found a random sample by now cancel and wait for the backup attempt to complete before returning
@@ -239,7 +237,6 @@ func main() {
 			continue
 		}
 	}
-	glog.Infof("Posted stats count: %v", postStatsCount)
 	summary.log()
 }
 
@@ -839,22 +836,16 @@ type statsSummary struct {
 }
 
 func (s *statsSummary) add(stats *apiModels.Stats) {
-	glog.Infof("Adding stats SuccessRate %v", stats.SuccessRate)
-	fmt.Printf("Adding stats SuccessRate %v\n", stats.SuccessRate)
 	if stats.SuccessRate >= minSanityCheckSuccessRate {
-		glog.Infof("Good success rate")
 		s.sanityCheckSuccessRateCount++
 	}
-	glog.Infof("Adding stats RoundTripTime %v", stats.RoundTripTime)
 	if stats.RoundTripTime <= maxSanityCheckRoundTripTime {
-		glog.Infof("Good round trip time")
 		s.sanityCheckRoundTripTimeCount++
 	}
 }
 
 func (s *statsSummary) log() {
-	glog.Infof("Completed the orch-tester job, number of orchestrators with success rate higher than %v: %v, number of orchestrators with round trip time lower than %v: %v", minSanityCheckSuccessRate, s.sanityCheckRoundTripTimeCount, maxSanityCheckRoundTripTime, s.sanityCheckRoundTripTimeCount)
-	glog.Warning("Check warning!!!")
+	glog.Infof("Completed the orch-tester job, number of orchestrators with success rate higher than %v: %v, number of orchestrators with round trip time lower than %v: %v", minSanityCheckSuccessRate, s.sanityCheckSuccessRateCount, maxSanityCheckRoundTripTime, s.sanityCheckRoundTripTimeCount)
 	if s.sanityCheckSuccessRateCount < minSanityCheckOrchestratorCount || s.sanityCheckRoundTripTimeCount < minSanityCheckOrchestratorCount {
 		glog.Warning("Low number of orchestrators which passed the sanity check, please make sure that the orch-tester job is configured correctly")
 	}
