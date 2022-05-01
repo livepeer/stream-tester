@@ -94,13 +94,18 @@ type (
 		startedAt          time.Time
 	}
 
-	userNewPayload struct {
-		StreamName     string `json:"streamName"`
-		IpAddress      string `json:"ipAddress"`
-		Timestamp      int64  `json:"timestamp"`
-		OutputProtocol string `json:"outputProtocol"`
-		RequestUrl     string `json:"requestUrl"`
-		SessionID      string `json:"sessionID"`
+	userNewHook struct {
+		// StreamName     string `json:"streamName"`
+		// IpAddress      string `json:"ipAddress"`
+		Timestamp int64 `json:"timestamp"`
+		// OutputProtocol string `json:"outputProtocol"`
+		// RequestUrl     string `json:"requestUrl"`
+		// SessionID      string `json:"sessionID"`
+		Payload userNewHookPayload `json:"payload"`
+	}
+
+	userNewHookPayload struct {
+		RequestUrl string `json:"requestUrl"`
 	}
 
 	trackListDesc struct {
@@ -503,13 +508,15 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 
 	timestamp := time.Now().Unix()
 
-	u := &userNewPayload{
-		StreamName:     lines[0],
-		IpAddress:      lines[1],
-		Timestamp:      timestamp,
-		OutputProtocol: lines[3],
-		RequestUrl:     lines[4],
-		SessionID:      lines[5],
+	u := &userNewHook{
+		Timestamp: timestamp,
+		Payload: userNewHookPayload{
+			RequestUrl: lines[4],
+		},
+		// StreamName:     lines[0],
+		// IpAddress:      lines[1],
+		// OutputProtocol: lines[3],
+		// SessionID:      lines[5],
 	}
 
 	b, err := json.Marshal(u)
