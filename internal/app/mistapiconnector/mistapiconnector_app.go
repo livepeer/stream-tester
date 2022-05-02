@@ -1259,6 +1259,7 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 	added = mc.addTrigger(triggers, "LIVE_TRACK_LIST", ownURI, "", "", false) || added
 	added = mc.addTrigger(triggers, "PUSH_OUT_START", ownURI, "", "", false) || added
 	added = mc.addTrigger(triggers, "PUSH_END", ownURI, "", "", false) || added
+	added = mc.addTrigger(triggers, "USER_NEW", ownURI, "", "", true) || added
 	if added {
 		err = mc.mapi.SetTriggers(triggers)
 	}
