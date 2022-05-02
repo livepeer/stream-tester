@@ -548,10 +548,10 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 	}
 
 	if len(userWebhooks) == 0 {
-		glog.V(model.DEBUG).Infof("No playback.user.new webhooks for user %s", userId)
+		glog.V(model.VVERBOSE).Infof("No playback.user.new webhooks for user %s", userId)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("true"))
-		return false
+		return true
 	}
 
 	for _, userWebhook := range userWebhooks {
