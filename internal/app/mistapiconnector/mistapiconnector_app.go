@@ -92,6 +92,7 @@ type (
 		mu                 sync.Mutex
 		pushStatus         map[string]*pushStatus
 		startedAt          time.Time
+		userNewHooks       []livepeer.UserWebhook
 	}
 
 	userNewHook struct {
@@ -538,14 +539,7 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 		return false
 	} 
 	userId := info.stream.UserID
-
-	userWebhooks, err := mc.lapi.GetWebhooksForEvent(userId, "playback.user.new")
-	if err != nil {
-		glog.Errorf("Error getting webhooks for user %s err=%v", userId, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("false"))
-		return false
-	}
+	userWebhooks := info.userNewHooks
 
 	if len(userWebhooks) == 0 {
 		glog.V(model.VVERBOSE).Infof("No playback.user.new webhooks for user %s", userId)
@@ -688,13 +682,18 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			glog.Infof("Stream playbackID=%s stopped=%v already in map, removing its info", stream.PlaybackID, streamStopped)
 			mc.removeInfo(stream.PlaybackID)
 		}
+
+		userNewHooks, err := mc.lapi.GetWebhooksForEvent(stream.UserID, "playback.user.new")
+
 		mc.pub2info[stream.PlaybackID] = &streamInfo{
-			id:         stream.ID,
-			stream:     stream,
-			done:       make(chan struct{}),
-			pushStatus: make(map[string]*pushStatus),
-			startedAt:  time.Now(),
+			id:         	stream.ID,
+			stream:     	stream,
+			done:       	make(chan struct{}),
+			pushStatus: 	make(map[string]*pushStatus),
+			startedAt:  	time.Now(),
+			userNewHooks: 	userNewHooks,
 		}
+
 		streamKey = stream.PlaybackID
 		// streamKey = strings.ReplaceAll(streamKey, "-", "")
 		if mc.balancerHost != "" {
