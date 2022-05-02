@@ -530,16 +530,16 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 	payload := string(b)
 
 	playbackId := lines[0]
-	stream, err := mc.lapi.GetStreamByPlaybackID(playbackId)
-	if err != nil || stream == nil {
-		glog.Errorf("Error getting stream info from Livepeer API playbackId=%s err=%v", playbackId, err)
+	info := mc.getStreamInfo(playbackId)
+	if info == nil {
+		glog.Errorf("Error getting stream info from streamInfo playbackId=%s err=%v", playbackId, err)
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("false"))
 		return false
-	}
+	} 
+	userId := info.stream.UserID
 
-	userId := stream.UserID
-	userWebhooks, err := mc.lapi.GetWebhooksByUserId(userId, "playback.user.new")
+	userWebhooks, err := mc.lapi.GetWebhooksForEvent(userId, "playback.user.new")
 	if err != nil {
 		glog.Errorf("Error getting webhooks for user %s err=%v", userId, err)
 		w.WriteHeader(http.StatusInternalServerError)

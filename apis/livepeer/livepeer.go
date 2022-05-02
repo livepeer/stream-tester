@@ -461,8 +461,8 @@ func (lapi *API) DefaultPresets() []string {
 	return lapi.presets
 }
 
-// GetWebhooksByUserId gets webhooks by user id
-func (lapi *API) GetWebhooksByUserId(userId string, event string) ([]UserWebhook, error) {
+// GetWebhooksForEvent gets webhooks for an event by user id
+func (lapi *API) GetWebhooksForEvent(userId string, event string) ([]UserWebhook, error) {
 	if userId == "" || event == "" {
 		return nil, fmt.Errorf("userId and event must be specified")
 	}
