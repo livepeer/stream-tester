@@ -129,7 +129,7 @@ type (
 		Height   int    `json:"height,omitempty"`
 	}
 
-	// MacOptions configuration objboolect
+	// MacOptions configuration object
 	MacOptions struct {
 		NodeID, MistHost string
 		MistAPI          *mist.API
