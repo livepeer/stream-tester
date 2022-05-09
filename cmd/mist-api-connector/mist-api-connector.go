@@ -42,6 +42,7 @@ func main() {
 	sendAudio := fs.String("send-audio", "record", "when should we send audio?  {always|never|record}")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
+	disableTrigger:= fs.String("disable-trigger", "", "Disable trigger for Mist server e.g 'USER_NEW'")
 	routePrefix := fs.String("route-prefix", "", "Prefix to be prepended to all created routes e.g. 'nyc-'")
 	playbackDomain := fs.String("playback-domain", "", "regex of domain to create routes for (ex: playback.livepeer.live)")
 	mistURL := fs.String("route-mist-url", "", "external URL of this Mist instance (used for routing) (ex: https://mist-server-0.livepeer.live)")
@@ -111,6 +112,7 @@ func main() {
 		MistURL:        *mistURL,
 		BaseStreamName: *baseStreamName,
 		CheckBandwidth: false,
+		DisableTrigger: *disableTrigger,
 		SendAudio:      *sendAudio,
 		EtcdEndpoints:  etcdEndpoints,
 		EtcdCaCert:     *etcdCaCert,

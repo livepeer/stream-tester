@@ -129,13 +129,14 @@ type (
 		Height   int    `json:"height,omitempty"`
 	}
 
-	// MacOptions configuration object
+	// MacOptions configuration objboolect
 	MacOptions struct {
 		NodeID, MistHost string
 		MistAPI          *mist.API
 		LivepeerAPI      *livepeer.API
 		BalancerHost     string
 		CheckBandwidth   bool
+		DisableTrigger   string
 		RoutePrefix, PlaybackDomain, MistURL,
 		SendAudio, BaseStreamName string
 		EtcdEndpoints                 []string
@@ -156,6 +157,7 @@ type (
 		mu             sync.RWMutex
 		mistHot        string
 		checkBandwidth bool
+		disableTrigger string
 		routePrefix    string
 		mistURL        string
 		playbackDomain string
@@ -256,6 +258,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 		mapi:           opts.MistAPI,
 		lapi:           opts.LivepeerAPI,
 		checkBandwidth: opts.CheckBandwidth,
+		disableTrigger: opts.DisableTrigger,
 		balancerHost:   opts.BalancerHost,
 		// pub2id:         make(map[string]string), // public key to stream id
 		pub2info:       make(map[string]*streamInfo), // public key to info
@@ -1259,7 +1262,9 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 	added = mc.addTrigger(triggers, "LIVE_TRACK_LIST", ownURI, "", "", false) || added
 	added = mc.addTrigger(triggers, "PUSH_OUT_START", ownURI, "", "", false) || added
 	added = mc.addTrigger(triggers, "PUSH_END", ownURI, "", "", false) || added
-	added = mc.addTrigger(triggers, "USER_NEW", ownURI, "", "", true) || added
+	if mc.disableTrigger != "USER_NEW" {
+		added = mc.addTrigger(triggers, "USER_NEW", ownURI, "", "", true) || added
+	}
 	if added {
 		err = mc.mapi.SetTriggers(triggers)
 	}
