@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	livepeerAPI "github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format/mp4"
 	"github.com/livepeer/joy4/format/mp4/mp4io"
 	"github.com/livepeer/stream-tester/apis/livepeer"
@@ -29,13 +30,13 @@ type (
 		VODStats() model.VODStats
 		Clean()
 		StreamID() string
-		Stream() *livepeer.CreateStreamResp
+		Stream() *livepeerAPI.CreateStreamResp
 	}
 
 	RecordTesterOptions struct {
-		*livepeer.API
+		*livepeerAPI.Client
 		Analyzers           testers.AnalyzerByRegion
-		Ingest              *livepeer.Ingest
+		Ingest              *livepeerAPI.Ingest
 		RecordObjectStoreId string
 		UseForceURL         bool
 		UseHTTP             bool
@@ -46,9 +47,9 @@ type (
 	recordTester struct {
 		ctx                 context.Context
 		cancel              context.CancelFunc
-		lapi                *livepeer.API
+		lapi                *livepeerAPI.Client
 		lanalyzers          testers.AnalyzerByRegion
-		ingest              *livepeer.Ingest
+		ingest              *livepeerAPI.Ingest
 		recordObjectStoreId string
 		useForceURL         bool
 		useHTTP             bool
@@ -57,51 +58,16 @@ type (
 
 		// mutable fields
 		streamID string
-		stream   *livepeer.CreateStreamResp
+		stream   *livepeerAPI.CreateStreamResp
 		vodStats model.VODStats
 	}
 )
-
-var standardProfiles = []livepeer.Profile{
-	{
-		Name:    "240p0",
-		Fps:     0,
-		Bitrate: 250000,
-		Width:   426,
-		Height:  240,
-		Gop:     "2.0",
-	},
-	{
-		Name:    "360p0",
-		Fps:     0,
-		Bitrate: 800000,
-		Width:   640,
-		Height:  360,
-		Gop:     "2.0",
-	},
-	{
-		Name:    "480p0",
-		Fps:     0,
-		Bitrate: 1600000,
-		Width:   854,
-		Height:  480,
-		Gop:     "2.0",
-	},
-	{
-		Name:    "720p0",
-		Fps:     0,
-		Bitrate: 3000000,
-		Width:   1280,
-		Height:  720,
-		Gop:     "2.0",
-	},
-}
 
 // NewRecordTester ...
 func NewRecordTester(gctx context.Context, opts RecordTesterOptions) IRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	rt := &recordTester{
-		lapi:                opts.API,
+		lapi:                opts.Client,
 		lanalyzers:          opts.Analyzers,
 		ingest:              opts.Ingest,
 		ctx:                 ctx,
@@ -155,14 +121,9 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	// glog.Infof("All cool!")
 	hostName, _ := os.Hostname()
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	var stream *livepeer.CreateStreamResp
+	var stream *livepeerAPI.CreateStreamResp
 	for {
-		stream, err = rt.lapi.CreateStream(livepeer.CreateStreamReq{
-			Name:                streamName,
-			Profiles:            standardProfiles,
-			Record:              true,
-			RecordObjectStoreId: rt.recordObjectStoreId,
-		})
+		stream, err = rt.lapi.CreateStreamEx2(streamName, true, rt.recordObjectStoreId, "", nil, livepeerAPI.StandardProfiles...)
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -365,11 +326,11 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	return es, err
 }
 
-func (rt *recordTester) getIngestInfo() (*livepeer.Ingest, error) {
+func (rt *recordTester) getIngestInfo() (*livepeerAPI.Ingest, error) {
 	if rt.ingest != nil {
 		return rt.ingest, nil
 	}
-	var ingests []livepeer.Ingest
+	var ingests []livepeerAPI.Ingest
 	apiTry := 0
 	for {
 		var err error
@@ -390,18 +351,12 @@ func (rt *recordTester) getIngestInfo() (*livepeer.Ingest, error) {
 	return &ingests[0], nil
 }
 
-func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL string, testDuration time.Duration, stream *livepeer.CreateStreamResp) error {
-	var session *livepeer.CreateStreamResp
+func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL string, testDuration time.Duration, stream *livepeerAPI.CreateStreamResp) error {
+	var session *livepeerAPI.CreateStreamResp
 	var err error
 	apiTry := 0
 	for {
-		session, err = rt.lapi.CreateStream(livepeer.CreateStreamReq{
-			Name:                streamName,
-			ParentID:            stream.ID,
-			Profiles:            standardProfiles,
-			Record:              true,
-			RecordObjectStoreId: rt.recordObjectStoreId,
-		})
+		session, err = rt.lapi.CreateStreamEx2(streamName, true, rt.recordObjectStoreId, stream.ID, nil, livepeerAPI.StandardProfiles...)
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -433,7 +388,7 @@ func (rt *recordTester) isCancelled() error {
 	return nil
 }
 
-func (rt *recordTester) checkDownMp4(stream *livepeer.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
+func (rt *recordTester) checkDownMp4(stream *livepeerAPI.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
 	es := 0
 	started := time.Now()
 	glog.V(model.VERBOSE).Infof("Downloading mp4 url=%s stream id=%s", url, stream.ID)
@@ -483,7 +438,7 @@ func (rt *recordTester) checkDownMp4(stream *livepeer.CreateStreamResp, url stri
 	return es, nil
 }
 
-func (rt *recordTester) checkDown(stream *livepeer.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
+func (rt *recordTester) checkDown(stream *livepeerAPI.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
 	es := 0
 	started := time.Now()
 	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil, false)
@@ -494,8 +449,8 @@ func (rt *recordTester) checkDown(stream *livepeer.CreateStreamResp, url string,
 	}
 	vs := downloader.VODStats()
 	rt.vodStats = vs
-	if len(vs.SegmentsNum) != len(standardProfiles)+1 {
-		glog.Warningf("Number of renditions doesn't match! Has %d should %d", len(vs.SegmentsNum), len(standardProfiles)+1)
+	if len(vs.SegmentsNum) != len(livepeerAPI.StandardProfiles)+1 {
+		glog.Warningf("Number of renditions doesn't match! Has %d should %d", len(vs.SegmentsNum), len(livepeerAPI.StandardProfiles)+1)
 		es = 35
 	}
 	glog.Infof("Stats for %s: %s", stream.ID, vs.String())
@@ -532,7 +487,7 @@ func (rt *recordTester) StreamID() string {
 	return rt.streamID
 }
 
-func (rt *recordTester) Stream() *livepeer.CreateStreamResp {
+func (rt *recordTester) Stream() *livepeerAPI.CreateStreamResp {
 	return rt.stream
 }
 
