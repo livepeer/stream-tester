@@ -132,7 +132,7 @@ func main() {
 	}
 	for _, o := range orchestrators {
 		fmt.Printf("#### Orchestrator address: %v\n", o.Address)
-		if !whitelistedAddrs[o.Address] {
+		if len(whitelistedAddrs) > 0 && !whitelistedAddrs[o.Address] {
 			continue
 		}
 		fmt.Printf("#### Processing orchestrator address: %v\n", o.Address)
