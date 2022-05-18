@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -125,11 +126,13 @@ func main() {
 	var summary statsSummary
 	start = time.Now()
 
+	whitelistedAddrs := make(map[string]bool)
+	for _, s := range strings.Split(os.Getenv("ST_WHITELISTED"), ",") {
+		whitelistedAddrs[s] = true
+	}
 	for _, o := range orchestrators {
 		fmt.Printf("#### Orchestrator address: %v\n", o.Address)
-		if o.Address != "0x6c06d3246fbb77c4ad75480e03d2a0a8eaf68121" &&
-			o.Address != "0x001ffe939761eea3f37dd2223bd08401a3848bf3" &&
-			o.Address != "0x00803b76dc924ceabf4380a6f9edc2ddd3c90f38" {
+		if !whitelistedAddrs[o.Address] {
 			continue
 		}
 		fmt.Printf("#### Processing orchestrator address: %v\n", o.Address)
