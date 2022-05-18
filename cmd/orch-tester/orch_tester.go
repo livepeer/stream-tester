@@ -131,6 +131,7 @@ func main() {
 	for _, s := range strings.Split(os.Getenv("ST_WHITELISTED"), ",") {
 		whitelistedAddrs[s] = true
 	}
+	delete(whitelistedAddrs, "")
 	fmt.Printf("ST_WHITELISTED: len: %v, content: %v\n", len(whitelistedAddrs), whitelistedAddrs)
 	for _, o := range orchestrators {
 		fmt.Printf("#### Orchestrator address: %v\n", o.Address)
