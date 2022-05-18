@@ -126,6 +126,11 @@ func main() {
 	start = time.Now()
 
 	for _, o := range orchestrators {
+		fmt.Printf("#### Orchestrator address: %v", o.Address)
+		if o.Address != "0x6c06d3246fbb77c4ad75480e03d2a0a8eaf68121" {
+			continue
+		}
+		fmt.Printf("#### Processing orchestrator address: %v", o.Address)
 		time.Sleep(refreshWait)
 
 		req := &streamerModel.StartStreamsReq{
