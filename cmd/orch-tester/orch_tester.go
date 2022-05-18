@@ -127,9 +127,11 @@ func main() {
 	start = time.Now()
 
 	whitelistedAddrs := make(map[string]bool)
+	fmt.Printf("ST_WHITELISTED: %s\n", os.Getenv("ST_WHITELISTED"))
 	for _, s := range strings.Split(os.Getenv("ST_WHITELISTED"), ",") {
 		whitelistedAddrs[s] = true
 	}
+	fmt.Printf("ST_WHITELISTED: len: %v, content: %v\n", len(whitelistedAddrs), whitelistedAddrs)
 	for _, o := range orchestrators {
 		fmt.Printf("#### Orchestrator address: %v\n", o.Address)
 		if len(whitelistedAddrs) > 0 && !whitelistedAddrs[o.Address] {
