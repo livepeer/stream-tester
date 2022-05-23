@@ -462,11 +462,11 @@ func (lapi *API) DefaultPresets() []string {
 }
 
 // GetWebhooksForEvent gets webhooks for an event by user id
-func (lapi *API) GetWebhooksForEvent(userId string, event string) ([]UserWebhook, error) {
+func (lapi *API) GetWebhooksForEvent(userId string, streamId string, event string) ([]UserWebhook, error) {
 	if userId == "" || event == "" {
 		return nil, fmt.Errorf("userId and event must be specified")
 	}
-	u := fmt.Sprintf("%s/api/webhook/subscribed/%s?userId=%s", lapi.choosenServer, event, userId)
+	u := fmt.Sprintf("%s/api/webhook/subscribed/%s?userId=%s&streamId=%s", lapi.choosenServer, event, userId, streamId)
 	return lapi.GetWebhooks(u)
 }
 

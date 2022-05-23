@@ -540,7 +540,7 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("false"))
 		return false
-	} 
+	}
 	userId := info.stream.UserID
 	userWebhooks := info.userNewHooks
 
@@ -686,15 +686,15 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			mc.removeInfo(stream.PlaybackID)
 		}
 
-		userNewHooks, err := mc.lapi.GetWebhooksForEvent(stream.UserID, "playback.user.new")
+		userNewHooks, err := mc.lapi.GetWebhooksForEvent(stream.UserID, stream.ID, "playback.user.new")
 
 		mc.pub2info[stream.PlaybackID] = &streamInfo{
-			id:         	stream.ID,
-			stream:     	stream,
-			done:       	make(chan struct{}),
-			pushStatus: 	make(map[string]*pushStatus),
-			startedAt:  	time.Now(),
-			userNewHooks: 	userNewHooks,
+			id:           stream.ID,
+			stream:       stream,
+			done:         make(chan struct{}),
+			pushStatus:   make(map[string]*pushStatus),
+			startedAt:    time.Now(),
+			userNewHooks: userNewHooks,
 		}
 
 		streamKey = stream.PlaybackID
