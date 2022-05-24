@@ -421,7 +421,7 @@ func (s *streamerClient) avgDownloadTime() (float64, error) {
 
 func (s *streamerClient) avgRoundTripTime() (float64, error) {
 	val, err := s.queryVectorMetric(
-		"rate(livepeer_transcode_overall_latency_seconds_sum[1m])/rate(livepeer_transcode_overall_latency_seconds_count[1m])",
+		"sum(rate(livepeer_transcode_overall_latency_seconds_sum[1m]))/sum(rate(livepeer_transcode_overall_latency_seconds_count[1m]))",
 	)
 	if err != nil {
 		return 0, err
