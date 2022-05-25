@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/livepeer/go-livepeer/cmd/livepeer/starter"
+	"github.com/livepeer/stream-tester/internal/server"
 	"io/ioutil"
 	"log"
 	"math"
@@ -46,7 +47,7 @@ var start time.Time
 func main() {
 	flag.Set("logtostderr", "true")
 	region := flag.String("region", "", "Region this service is operating in")
-	streamTester := flag.String("streamtester", "127.0.0.1"+":"+streamTesterPort, "Address for stream-tester server instance")
+	streamTester := flag.String("streamtester", "", "Address for stream-tester server instance")
 	broadcaster := flag.String("broadcaster", "", "Broadcaster address")
 	metrics := flag.String("metrics", "127.0.0.1"+":"+prometheusPort, "Broadcaster metrics port")
 	media := flag.String("media", bcastMediaPort, "Broadcaster HTTP port")
@@ -116,6 +117,15 @@ func main() {
 		cfg.Broadcaster = boolPointer(true)
 		go func() {
 			starter.StartLivepeer(context.TODO(), cfg)
+		}()
+	}
+
+	if *streamTester == "" {
+		// use embedded Streamtester
+		glog.Info("Using embedded broadcaster")
+		s := server.NewStreamerServer(false, "", "", 4242)
+		go func() {
+			s.StartWebServer(context.TODO(), "127.0.0.1:7934")
 		}()
 	}
 
