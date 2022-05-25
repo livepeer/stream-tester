@@ -20,7 +20,7 @@ COPY go.sum go.sum
 
 RUN go mod download
 
-COPY cmd cmd 
+COPY cmd cmd
 COPY internal internal
 COPY model model
 COPY messenger messenger
@@ -39,7 +39,7 @@ RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$vers
 # RUN find / -name libavformat.so.58
 
 
-FROM alpine
+FROM alpine:3.15.4
 RUN apk add --no-cache ca-certificates ffmpeg
 
 WORKDIR /root
