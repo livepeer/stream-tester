@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/livepeer/go-livepeer/cmd/livepeer/starter"
 	"io/ioutil"
 	"log"
 	"math"
@@ -46,7 +47,7 @@ func main() {
 	flag.Set("logtostderr", "true")
 	region := flag.String("region", "", "Region this service is operating in")
 	streamTester := flag.String("streamtester", "127.0.0.1"+":"+streamTesterPort, "Address for stream-tester server instance")
-	broadcaster := flag.String("broadcaster", "127.0.0.1", "Broadcaster address")
+	broadcaster := flag.String("broadcaster", "", "Broadcaster address")
 	metrics := flag.String("metrics", "127.0.0.1"+":"+prometheusPort, "Broadcaster metrics port")
 	media := flag.String("media", bcastMediaPort, "Broadcaster HTTP port")
 	rtmp := flag.String("rtmp", bcastRTMPPort, "broadcaster RTMP port")
@@ -107,6 +108,16 @@ func main() {
 	}
 
 	profiles := strings.Split(*presets, ",")
+
+	if *broadcaster == "" {
+		// use embedded Broadcaster
+		glog.Info("Using embedded broadcaster")
+		cfg := starter.DefaultLivepeerConfig()
+		cfg.Broadcaster = boolPointer(true)
+		go func() {
+			starter.StartLivepeer(context.TODO(), cfg)
+		}()
+	}
 
 	streamer, err := newStreamerClient(streamTesterURL, metricsURL, leaderboardURL, *leaderboardSecret, subgraphURL, broadcasterURL, profiles)
 	if err != nil {
@@ -849,4 +860,8 @@ func (s *statsSummary) log() {
 	if s.sanityCheckSuccessRateCount < minSanityCheckOrchestratorCount || s.sanityCheckRoundTripTimeCount < minSanityCheckOrchestratorCount {
 		glog.Warning("Low number of orchestrators which passed the sanity check, please make sure that the orch-tester job is configured correctly")
 	}
+}
+
+func boolPointer(b bool) *bool {
+	return &b
 }
