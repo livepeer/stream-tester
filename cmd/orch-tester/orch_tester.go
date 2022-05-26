@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"github.com/livepeer/go-livepeer/cmd/livepeer/starter"
 	"github.com/livepeer/stream-tester/internal/server"
+	"go.opencensus.io/stats/view"
 	"io/ioutil"
 	"log"
 	"math"
@@ -43,6 +44,39 @@ const httpTimeout = 8 * time.Second
 const numSegments = 15
 
 var start time.Time
+
+var measuresMetrics = map[string]bool{
+	"source_segment_duration_seconds":   true,
+	"transcode_overall_latency_seconds": true,
+	"upload_time_seconds":               true,
+	"download_time_seconds":             true,
+}
+var avgMeasures = map[string]float64{}
+var measuresCount = map[string]uint{}
+
+type OrchMetricsExporter struct {
+}
+
+func (e OrchMetricsExporter) ExportView(viewData *view.Data) {
+	glog.Info(viewData)
+	n := viewData.View.Name
+	if measuresMetrics[n] && len(viewData.Rows) > 0 {
+		sum := float64(measuresCount[n]) * avgMeasures[n]
+		count := measuresCount
+		for _, r := range viewData.Rows {
+			d, ok := r.Data.(*view.DistributionData)
+			if ok {
+				sum += d.Sum()
+				count[n] += uint(d.Count)
+			}
+		}
+	}
+}
+
+func resetMeasures() {
+	avgMeasures = make(map[string]float64)
+	measuresCount = make(map[string]uint)
+}
 
 func main() {
 	flag.Set("logtostderr", "true")
@@ -110,15 +144,23 @@ func main() {
 
 	profiles := strings.Split(*presets, ",")
 
+	orchMetrics := OrchMetricsExporter{}
+
 	if *broadcaster == "" {
 		// use embedded Broadcaster
 		glog.Info("Using embedded broadcaster")
+		view.RegisterExporter(orchMetrics)
 		cfg := starter.DefaultLivepeerConfig()
 		cfg.Broadcaster = boolPointer(true)
+		cfg.Monitor = boolPointer(true)
+		orchAddr := "127.0.0.1:8936"
+		cfg.OrchAddr = &orchAddr
 		go func() {
 			starter.StartLivepeer(context.TODO(), cfg)
 		}()
 	}
+
+	time.Sleep(5 * time.Minute)
 
 	if *streamTester == "" {
 		// use embedded Streamtester
@@ -148,6 +190,7 @@ func main() {
 
 	for _, o := range orchestrators {
 		time.Sleep(refreshWait)
+		resetMeasures()
 
 		req := &streamerModel.StartStreamsReq{
 			Host:            *broadcaster,
@@ -207,31 +250,12 @@ func main() {
 		// This calculation requires HTTP ingest to be correct
 		apiStats.SuccessRate = (float64(apiStats.SegmentsReceived) / float64(*numProfiles) / float64(apiStats.SegmentsSent))
 
-		avgSegDuration, err := streamer.avgSegDuration()
-		if err != nil {
-			glog.Error(err)
-		}
-		apiStats.SegDuration = avgSegDuration
+		apiStats.SegDuration = avgMeasures["source_segment_duration_seconds"]
+		apiStats.RoundTripTime = avgMeasures["transcode_overall_latency_seconds"]
+		apiStats.UploadTime = avgMeasures["upload_time_seconds"]
+		apiStats.DownloadTime = avgMeasures["download_time_seconds"]
 
-		avgRoundTripTime, err := streamer.avgRoundTripTime()
-		if err != nil {
-			glog.Error(err)
-		}
-		apiStats.RoundTripTime = avgRoundTripTime
-
-		avgUploadTime, err := streamer.avgUploadTime()
-		if err != nil {
-			glog.Error(err)
-		}
-		apiStats.UploadTime = avgUploadTime
-
-		avgDownloadTime, err := streamer.avgDownloadTime()
-		if err != nil {
-			glog.Error(err)
-		}
-		apiStats.DownloadTime = avgDownloadTime
-
-		transcodeTime := avgRoundTripTime - avgUploadTime - avgDownloadTime
+		transcodeTime := apiStats.RoundTripTime - apiStats.UploadTime - apiStats.DownloadTime
 		if transcodeTime > 0 {
 			apiStats.TranscodeTime = transcodeTime
 		}
