@@ -10,12 +10,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/livepeer/stream-tester/internal/server"
 	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/golang/glog"
 	apiModels "github.com/livepeer/leaderboard-serverless/models"
 	"github.com/livepeer/m3u8"
+	streamtesterMetrics "github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/model"
 	streamerModel "github.com/livepeer/stream-tester/model"
@@ -33,6 +36,8 @@ import (
 
 const defaultHost = "127.0.0.1"
 const streamTesterPort = "7934"
+const streamTesterLapiToken = ""
+const streamTesterMistCreds = ""
 const prometheusPort = "9090"
 const bcastMediaPort = "8935"
 const bcastRTMPPort = "1935"
@@ -45,7 +50,7 @@ var start time.Time
 func main() {
 	flag.Set("logtostderr", "true")
 	region := flag.String("region", "", "Region this service is operating in")
-	streamTester := flag.String("streamtester", "127.0.0.1"+":"+streamTesterPort, "Address for stream-tester server instance")
+	streamTester := flag.String("streamtester", "", "Address for stream-tester server instance")
 	broadcaster := flag.String("broadcaster", "127.0.0.1", "Broadcaster address")
 	metrics := flag.String("metrics", "127.0.0.1"+":"+prometheusPort, "Broadcaster metrics port")
 	media := flag.String("media", bcastMediaPort, "Broadcaster HTTP port")
@@ -69,6 +74,20 @@ func main() {
 
 	if *region == "" {
 		log.Fatal("region is required")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if *streamTester == "" {
+		glog.Info("Starting embedded streamtester service")
+		hostName, _ := os.Hostname()
+		streamtesterMetrics.InitCensus(hostName, model.Version, "streamtester")
+		s := server.NewStreamerServer(false, streamTesterLapiToken, streamTesterMistCreds, 4242)
+		go func() {
+			addr := fmt.Sprintf("%s:%s", "0.0.0.0", streamTesterPort)
+			s.StartWebServer(ctx, addr)
+		}()
 	}
 
 	metricsURL := defaultAddr(*metrics, defaultHost, prometheusPort)
