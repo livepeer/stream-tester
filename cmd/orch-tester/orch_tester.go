@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/golang/glog"
 	apiModels "github.com/livepeer/leaderboard-serverless/models"
 	"github.com/livepeer/m3u8"
+	streamtesterMetrics "github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/model"
 	streamerModel "github.com/livepeer/stream-tester/model"
@@ -78,6 +80,8 @@ func main() {
 	if *streamTester == "" {
 		// start streamtester service
 		glog.Info("Using embedded broadcaster")
+		hostName, _ := os.Hostname()
+		streamtesterMetrics.InitCensus(hostName, model.Version, "streamtester")
 		s := server.NewStreamerServer(false, "", "", 4242)
 		go func() {
 			addr := fmt.Sprintf("%s:%s", defaultHost, streamTesterPort)
