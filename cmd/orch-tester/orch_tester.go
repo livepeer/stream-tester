@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/livepeer/stream-tester/internal/server"
 	"io/ioutil"
 	"log"
 	"math"
@@ -45,7 +46,7 @@ var start time.Time
 func main() {
 	flag.Set("logtostderr", "true")
 	region := flag.String("region", "", "Region this service is operating in")
-	streamTester := flag.String("streamtester", "127.0.0.1"+":"+streamTesterPort, "Address for stream-tester server instance")
+	streamTester := flag.String("streamtester", "", "Address for stream-tester server instance")
 	broadcaster := flag.String("broadcaster", "127.0.0.1", "Broadcaster address")
 	metrics := flag.String("metrics", "127.0.0.1"+":"+prometheusPort, "Broadcaster metrics port")
 	media := flag.String("media", bcastMediaPort, "Broadcaster HTTP port")
@@ -69,6 +70,19 @@ func main() {
 
 	if *region == "" {
 		log.Fatal("region is required")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if *streamTester == "" {
+		// start streamtester service
+		glog.Info("Using embedded broadcaster")
+		s := server.NewStreamerServer(false, "", "", 4242)
+		go func() {
+			addr := fmt.Sprintf("%s:%s", defaultHost, streamTesterPort)
+			s.StartWebServer(ctx, addr)
+		}()
 	}
 
 	metricsURL := defaultAddr(*metrics, defaultHost, prometheusPort)
@@ -101,13 +115,13 @@ func main() {
 	testers.Bucket = *gsBucket
 	testers.CredsJSON = *gsKey
 
-	refreshWait := 70 * time.Second
+	//refreshWait := 70 * time.Second
 
 	var summary statsSummary
 	start = time.Now()
 
 	for _, o := range orchestrators {
-		time.Sleep(refreshWait)
+		//time.Sleep(refreshWait)
 
 		req := &streamerModel.StartStreamsReq{
 			Host:            *broadcaster,
