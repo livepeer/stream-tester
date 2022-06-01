@@ -65,7 +65,7 @@ func (ss *StreamerServer) StartWebServer(ctx context.Context, bindAddr string) {
 	go func() {
 		<-ctx.Done()
 		c, _ := context.WithTimeout(context.Background(), time.Second)
-		glog.Infof("Shuttind down web server")
+		glog.Infof("Shutting down web server")
 		srv.Shutdown(c)
 	}()
 
