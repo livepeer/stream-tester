@@ -84,7 +84,7 @@ func main() {
 		streamtesterMetrics.InitCensus(hostName, model.Version, "streamtester")
 		s := server.NewStreamerServer(false, "", "", 4242)
 		go func() {
-			addr := fmt.Sprintf("%s:%s", defaultHost, streamTesterPort)
+			addr := fmt.Sprintf("%s:%s", "0.0.0.0", streamTesterPort)
 			s.StartWebServer(ctx, addr)
 		}()
 	}
