@@ -31,11 +31,11 @@ import (
 	promModels "github.com/prometheus/common/model"
 )
 
+const defaultHost = "127.0.0.1"
 const streamTesterPort = "7934"
 const prometheusPort = "9090"
 const bcastMediaPort = "8935"
 const bcastRTMPPort = "1935"
-const defaultBcast = "127.0.0.1"
 const httpTimeout = 8 * time.Second
 
 const numSegments = 15
@@ -71,30 +71,11 @@ func main() {
 		log.Fatal("region is required")
 	}
 
-	metricsURL, err := defaultAddr(*metrics, "127.0.0.1", prometheusPort)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	streamTesterURL, err := defaultAddr(*streamTester, "127.0.0.1", streamTesterPort)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	leaderboardURL, err := defaultAddr(*leaderboard, "127.0.0.1", "3001")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	subgraphURL, err := defaultAddr(*subgraph, "127.0.0.1", "8080")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	broadcasterURL, err := defaultAddr(fmt.Sprintf("%v:%v", *broadcaster, *media), "127.0.0.1", "8935")
-	if err != nil {
-		log.Fatal(err)
-	}
+	metricsURL := defaultAddr(*metrics, defaultHost, prometheusPort)
+	streamTesterURL := defaultAddr(*streamTester, defaultHost, streamTesterPort)
+	leaderboardURL := defaultAddr(*leaderboard, defaultHost, "3001")
+	subgraphURL := defaultAddr(*subgraph, defaultHost, "8080")
+	broadcasterURL := defaultAddr(fmt.Sprintf("%v:%v", *broadcaster, *media), defaultHost, "8935")
 
 	rtmpUint, err := strconv.ParseUint(*rtmp, 10, 16)
 	if err != nil {
@@ -248,7 +229,7 @@ func validateURL(addr string) (string, error) {
 	return url.String(), nil
 }
 
-func defaultAddr(addr, defaultHost, defaultPort string) (string, error) {
+func defaultAddr(addr, defaultHost, defaultPort string) string {
 	if addr == "" {
 		addr = defaultHost + ":" + defaultPort
 	}
@@ -263,7 +244,7 @@ func defaultAddr(addr, defaultHost, defaultPort string) (string, error) {
 		addr = "http://" + addr
 	}
 
-	return addr, nil
+	return addr
 }
 
 type streamerClient struct {
