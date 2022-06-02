@@ -78,8 +78,7 @@ func main() {
 	defer cancel()
 
 	if *streamTester == "" {
-		// start streamtester service
-		glog.Info("Using embedded broadcaster")
+		glog.Info("Starting embedded streamtester service")
 		hostName, _ := os.Hostname()
 		streamtesterMetrics.InitCensus(hostName, model.Version, "streamtester")
 		s := server.NewStreamerServer(false, "", "", 4242)
