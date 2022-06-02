@@ -36,6 +36,8 @@ import (
 
 const defaultHost = "127.0.0.1"
 const streamTesterPort = "7934"
+const streamTesterLapiToken = ""
+const streamTesterMistCreds = ""
 const prometheusPort = "9090"
 const bcastMediaPort = "8935"
 const bcastRTMPPort = "1935"
@@ -81,7 +83,7 @@ func main() {
 		glog.Info("Starting embedded streamtester service")
 		hostName, _ := os.Hostname()
 		streamtesterMetrics.InitCensus(hostName, model.Version, "streamtester")
-		s := server.NewStreamerServer(false, "", "", 4242)
+		s := server.NewStreamerServer(false, streamTesterLapiToken, streamTesterMistCreds, 4242)
 		go func() {
 			addr := fmt.Sprintf("%s:%s", "0.0.0.0", streamTesterPort)
 			s.StartWebServer(ctx, addr)
