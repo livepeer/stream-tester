@@ -10,6 +10,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/livepeer/go-livepeer/cmd/livepeer/starter"
+	"github.com/livepeer/go-livepeer/common"
+	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/stream-tester/internal/server"
 	"io/ioutil"
 	"log"
@@ -47,17 +50,29 @@ const numSegments = 15
 
 var start time.Time
 
+func init() {
+	format.RegisterAll()
+}
+
 func main() {
 	flag.Set("logtostderr", "true")
 	region := flag.String("region", "", "Region this service is operating in")
 	streamTester := flag.String("streamtester", "", "Address for stream-tester server instance")
-	broadcaster := flag.String("broadcaster", "127.0.0.1", "Broadcaster address")
+	broadcaster := flag.String("broadcaster", "", "Broadcaster address")
 	metrics := flag.String("metrics", "127.0.0.1"+":"+prometheusPort, "Broadcaster metrics port")
 	media := flag.String("media", bcastMediaPort, "Broadcaster HTTP port")
 	rtmp := flag.String("rtmp", bcastRTMPPort, "broadcaster RTMP port")
 	leaderboard := flag.String("leaderboard", "127.0.0.1:3001", "HTTP Address of the serverless leadearboard API")
 	leaderboardSecret := flag.String("leaderboard-secret", "", "Secret for the Leaderboard API")
+
 	subgraph := flag.String("subgraph", "https://api.thegraph.com/subgraphs/name/livepeer/livepeer-canary", "Livepeer subgraph URL")
+	network := flag.String("network", "arbitrum-one-rinkeby", "Network to connect to")
+	ethUrl := flag.String("ethUrl", "https://rinkeby.arbitrum.io/rpc", "Ethereum node JSON-RPC URL")
+	datadir := flag.String("datadir", "", "Directory that data is stored in")
+	ethPassword := flag.String("ethPassword", "", "Password for existing Eth account address")
+	maxTicketEV := flag.String("maxTicketEV", "3000000000000", "The maximum acceptable expected value for PM tickets")
+	maxPricePerUnit := flag.Int("maxPricePerUnit", 0, "The maximum transcoding price (in wei) per 'pixelsPerUnit' a broadcaster is willing to accept. If not set explicitly, broadcaster is willing to accept ANY price")
+
 	// Video config
 	videoFile := flag.String("video", "official_test_source_2s_keys_24pfs_30s.mp4", "video file to use, has to be present in stream-tester root")
 	numProfiles := flag.Int("profiles", 3, "number of video profiles to use on the broadcaster")
@@ -87,6 +102,55 @@ func main() {
 		go func() {
 			addr := fmt.Sprintf("%s:%s", "0.0.0.0", streamTesterPort)
 			s.StartWebServer(ctx, addr)
+		}()
+	}
+
+	host := *broadcaster
+	broadcasterReady := make(chan struct{})
+	if *broadcaster == "" {
+		glog.Info("Starting embedded broadcaster service")
+		common.SegUploadTimeoutMultiplier = 4.0
+		common.SegmentUploadTimeout = 8 * time.Second
+		common.HTTPDialTimeout = 8 * time.Second
+		common.SegHttpPushTimeoutMultiplier = 4.0
+
+		// Disable caching for Orchestrator Discovery Webhook
+		common.WebhookDiscoveryRefreshInterval = 0
+
+		host = defaultHost
+		cfg := starter.DefaultLivepeerConfig()
+		cfg.Network = network
+		cfg.MaxSessions = intPointer(200)
+		cfg.OrchWebhookURL = stringPointer("http://127.0.0.1:7934/orchestrators")
+		cfg.EthUrl = ethUrl
+		cfg.Datadir = datadir
+		cfg.Monitor = boolPointer(true)
+		cfg.EthPassword = ethPassword
+		cfg.LocalVerify = boolPointer(false)
+		cfg.HttpIngest = boolPointer(true)
+		cfg.TranscodingOptions = presets
+		cfg.MaxTicketEV = maxTicketEV
+		cfg.MaxPricePerUnit = maxPricePerUnit
+		cfg.CliAddr = stringPointer("0.0.0.0:7935")
+		cfg.Broadcaster = boolPointer(true)
+		go func() {
+			starter.StartLivepeer(ctx, cfg)
+		}()
+		go func() {
+			statusEndpoint := fmt.Sprintf("http://%s/status", *cfg.CliAddr)
+			var statusCode int
+			for statusCode != 200 {
+				time.Sleep(200 * time.Millisecond)
+				resp, err := http.Get(statusEndpoint)
+				if err == nil {
+					statusCode = resp.StatusCode
+				}
+			}
+			broadcasterReady <- struct{}{}
+		}()
+	} else {
+		go func() {
+			broadcasterReady <- struct{}{}
 		}()
 	}
 
@@ -125,11 +189,15 @@ func main() {
 	var summary statsSummary
 	start = time.Now()
 
+	glog.Infof("Waiting for broadcaster to be ready")
+	<-broadcasterReady
+	glog.Infof("Broadcaster is ready, starting to test orchestrators")
+
 	for _, o := range orchestrators {
 		time.Sleep(refreshWait)
 
 		req := &streamerModel.StartStreamsReq{
-			Host:            *broadcaster,
+			Host:            host,
 			RTMP:            uint16(rtmpUint),
 			Media:           uint16(mediaUint),
 			Repeat:          uint(*repeat),
@@ -849,4 +917,16 @@ func (s *statsSummary) log() {
 	if s.sanityCheckSuccessRateCount < minSanityCheckOrchestratorCount || s.sanityCheckRoundTripTimeCount < minSanityCheckOrchestratorCount {
 		glog.Warning("Low number of orchestrators which passed the sanity check, please make sure that the orch-tester job is configured correctly")
 	}
+}
+
+func boolPointer(b bool) *bool {
+	return &b
+}
+
+func intPointer(i int) *int {
+	return &i
+}
+
+func stringPointer(s string) *string {
+	return &s
 }
