@@ -28,8 +28,13 @@ RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$vers
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/orch-tester/orch_tester.go
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/recordtester/recordtester.go
 
-FROM alpine:3.15.4
-RUN apk add --no-cache ca-certificates ffmpeg
+FROM debian:stretch-slim
+
+RUN apt update \
+  && apt install -y ffmpeg ca-certificates \
+  && apt clean && apt autoclean
+RUN ffmpeg -version
+RUN update-ca-certificates
 
 WORKDIR /root
 ENV PKG_CONFIG_PATH /root/compiled/lib/pkgconfig
