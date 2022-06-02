@@ -26,6 +26,10 @@ FROM alpine:3.15.4
 RUN apk add --no-cache ca-certificates ffmpeg
 
 WORKDIR /root
+ENV PKG_CONFIG_PATH /root/compiled/lib/pkgconfig
+
+COPY --from=builder /root/compiled /root/compiled/
+
 COPY --from=builder /root/official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs.mp4
 COPY --from=builder /root/official_test_source_2s_keys_24pfs_3min.mp4 official_test_source_2s_keys_24pfs_3min.mp4
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4
