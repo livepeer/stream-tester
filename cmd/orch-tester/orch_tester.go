@@ -112,6 +112,7 @@ func main() {
 		cfg.TranscodingOptions = presets
 		cfg.MaxTicketEV = maxTicketEV
 		cfg.MaxPricePerUnit = maxPricePerUnit
+		cfg.CliAddr = stringPointer("0.0.0.0:7935")
 		cfg.Broadcaster = boolPointer(true)
 		go func() {
 			starter.StartLivepeer(ctx, cfg)
