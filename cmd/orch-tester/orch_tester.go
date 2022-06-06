@@ -13,6 +13,7 @@ import (
 	"github.com/livepeer/go-livepeer/cmd/livepeer/starter"
 	"github.com/livepeer/go-livepeer/common"
 	"github.com/livepeer/joy4/format"
+	streamtesterMetrics "github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/peterbourgon/ff"
 	"io/ioutil"
@@ -29,7 +30,6 @@ import (
 	"github.com/golang/glog"
 	apiModels "github.com/livepeer/leaderboard-serverless/models"
 	"github.com/livepeer/m3u8"
-	streamtesterMetrics "github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/model"
 	streamerModel "github.com/livepeer/stream-tester/model"
@@ -45,7 +45,11 @@ const streamTesterMistCreds = ""
 const prometheusPort = "9090"
 const bcastMediaPort = "8935"
 const bcastRTMPPort = "1935"
+const bcastCliPort = "7935"
+
+const refreshWait = 70 * time.Second
 const httpTimeout = 8 * time.Second
+const bcastReadyTimeout = 10 * time.Minute
 
 const numSegments = 15
 
@@ -53,6 +57,15 @@ var start time.Time
 
 func init() {
 	format.RegisterAll()
+}
+
+type broadcasterConfig struct {
+	network         *string
+	ethUrl          *string
+	datadir         *string
+	ethPassword     *string
+	maxTicketEV     *string
+	maxPricePerUnit *int
 }
 
 func main() {
@@ -67,12 +80,6 @@ func main() {
 	leaderboardSecret := flag.String("leaderboard-secret", "", "Secret for the Leaderboard API")
 
 	subgraph := flag.String("subgraph", "https://api.thegraph.com/subgraphs/name/livepeer/livepeer-canary", "Livepeer subgraph URL")
-	network := flag.String("network", "arbitrum-one-rinkeby", "Network to connect to")
-	ethUrl := flag.String("ethUrl", "https://rinkeby.arbitrum.io/rpc", "Ethereum node JSON-RPC URL")
-	datadir := flag.String("datadir", "", "Directory that data is stored in")
-	ethPassword := flag.String("ethPassword", "", "Password for existing Eth account address")
-	maxTicketEV := flag.String("maxTicketEV", "3000000000000", "The maximum acceptable expected value for PM tickets")
-	maxPricePerUnit := flag.Int("maxPricePerUnit", 0, "The maximum transcoding price (in wei) per 'pixelsPerUnit' a broadcaster is willing to accept. If not set explicitly, broadcaster is willing to accept ANY price")
 
 	// Video config
 	videoFile := flag.String("video", "official_test_source_2s_keys_24pfs_30s.mp4", "video file to use, has to be present in stream-tester root")
@@ -85,6 +92,15 @@ func main() {
 	randomSample := flag.Bool("randomsample", false, "randomly sample a source and transcoded segment per stream")
 	gsBucket := flag.String("gsbucket", "", "Google storage bucket to store segments")
 	gsKey := flag.String("gskey", "", "Google Storage private key (in json format)")
+
+	// Embedded Broadcaster config
+	var bCfg broadcasterConfig
+	bCfg.network = flag.String("network", "arbitrum-one-rinkeby", "Network to connect to")
+	bCfg.ethUrl = flag.String("ethUrl", "https://rinkeby.arbitrum.io/rpc", "Ethereum node JSON-RPC URL")
+	bCfg.datadir = flag.String("datadir", "", "Directory that data is stored in")
+	bCfg.ethPassword = flag.String("ethPassword", "", "Password for existing Eth account address")
+	bCfg.maxTicketEV = flag.String("maxTicketEV", "3000000000000", "The maximum acceptable expected value for PM tickets")
+	bCfg.maxPricePerUnit = flag.Int("maxPricePerUnit", 0, "The maximum transcoding price (in wei) per 'pixelsPerUnit' a broadcaster is willing to accept. If not set explicitly, broadcaster is willing to accept ANY price")
 
 	// Config file
 	_ = flag.String("config", "", "Config file in the format 'key value', flags and env vars take precedence over the config file")
@@ -102,63 +118,15 @@ func main() {
 	defer cancel()
 
 	if *streamTester == "" {
-		glog.Info("Starting embedded streamtester service")
-		hostName, _ := os.Hostname()
-		streamtesterMetrics.InitCensus(hostName, model.Version, "streamtester")
-		s := server.NewStreamerServer(false, streamTesterLapiToken, streamTesterMistCreds, 4242)
-		go func() {
-			addr := fmt.Sprintf("%s:%s", "0.0.0.0", streamTesterPort)
-			s.StartWebServer(ctx, addr)
-		}()
+		startEmbeddedStreamTester(ctx)
 	}
 
-	host := *broadcaster
-	broadcasterReady := make(chan struct{})
+	var bcastHost string
 	if *broadcaster == "" {
-		glog.Info("Starting embedded broadcaster service")
-		common.SegUploadTimeoutMultiplier = 4.0
-		common.SegmentUploadTimeout = 8 * time.Second
-		common.HTTPDialTimeout = 8 * time.Second
-		common.SegHttpPushTimeoutMultiplier = 4.0
-
-		// Disable caching for Orchestrator Discovery Webhook
-		common.WebhookDiscoveryRefreshInterval = 0
-
-		host = defaultHost
-		cfg := starter.DefaultLivepeerConfig()
-		cfg.Network = network
-		cfg.MaxSessions = intPointer(200)
-		cfg.OrchWebhookURL = stringPointer("http://127.0.0.1:7934/orchestrators")
-		cfg.EthUrl = ethUrl
-		cfg.Datadir = datadir
-		cfg.Monitor = boolPointer(true)
-		cfg.EthPassword = ethPassword
-		cfg.LocalVerify = boolPointer(false)
-		cfg.HttpIngest = boolPointer(true)
-		cfg.TranscodingOptions = presets
-		cfg.MaxTicketEV = maxTicketEV
-		cfg.MaxPricePerUnit = maxPricePerUnit
-		cfg.CliAddr = stringPointer("0.0.0.0:7935")
-		cfg.Broadcaster = boolPointer(true)
-		go func() {
-			starter.StartLivepeer(ctx, cfg)
-		}()
-		go func() {
-			statusEndpoint := fmt.Sprintf("http://%s/status", *cfg.CliAddr)
-			var statusCode int
-			for statusCode != 200 {
-				time.Sleep(200 * time.Millisecond)
-				resp, err := http.Get(statusEndpoint)
-				if err == nil {
-					statusCode = resp.StatusCode
-				}
-			}
-			broadcasterReady <- struct{}{}
-		}()
+		bcastHost = defaultHost
+		startEmbeddedBroadcaster(ctx, bCfg, *presets)
 	} else {
-		go func() {
-			broadcasterReady <- struct{}{}
-		}()
+		bcastHost = *broadcaster
 	}
 
 	metricsURL := defaultAddr(*metrics, defaultHost, prometheusPort)
@@ -191,20 +159,18 @@ func main() {
 	testers.Bucket = *gsBucket
 	testers.CredsJSON = *gsKey
 
-	refreshWait := 70 * time.Second
-
 	var summary statsSummary
 	start = time.Now()
 
 	glog.Infof("Waiting for broadcaster to be ready")
-	<-broadcasterReady
-	glog.Infof("Broadcaster is ready, starting to test orchestrators")
+	waitUntilBroadcasterIsReady(ctx, bcastHost)
 
+	glog.Infof("Starting to test orchestrators")
 	for _, o := range orchestrators {
 		time.Sleep(refreshWait)
 
 		req := &streamerModel.StartStreamsReq{
-			Host:            host,
+			Host:            bcastHost,
 			RTMP:            uint16(rtmpUint),
 			Media:           uint16(mediaUint),
 			Repeat:          uint(*repeat),
@@ -315,14 +281,6 @@ func main() {
 	summary.log()
 }
 
-func validateURL(addr string) (string, error) {
-	url, err := url.ParseRequestURI(addr)
-	if err != nil {
-		return "", err
-	}
-	return url.String(), nil
-}
-
 func defaultAddr(addr, defaultHost, defaultPort string) string {
 	if addr == "" {
 		addr = defaultHost + ":" + defaultPort
@@ -339,6 +297,68 @@ func defaultAddr(addr, defaultHost, defaultPort string) string {
 	}
 
 	return addr
+}
+
+func startEmbeddedStreamTester(ctx context.Context) {
+	glog.Info("Starting embedded streamtester service")
+	hostName, _ := os.Hostname()
+	streamtesterMetrics.InitCensus(hostName, model.Version, "streamtester")
+	s := server.NewStreamerServer(false, streamTesterLapiToken, streamTesterMistCreds, 4242)
+	go func() {
+		addr := fmt.Sprintf("%s:%s", "0.0.0.0", streamTesterPort)
+		s.StartWebServer(ctx, addr)
+	}()
+}
+
+func startEmbeddedBroadcaster(ctx context.Context, bCfg broadcasterConfig, presets string) {
+	glog.Info("Starting embedded broadcaster service")
+
+	// Increase Broadcaster timeouts
+	common.SegUploadTimeoutMultiplier = 4.0
+	common.SegmentUploadTimeout = 8 * time.Second
+	common.HTTPDialTimeout = 8 * time.Second
+	common.SegHttpPushTimeoutMultiplier = 4.0
+
+	// Disable caching for Orchestrator Discovery Webhook
+	common.WebhookDiscoveryRefreshInterval = 0
+
+	// Start broadcaster
+	cfg := starter.DefaultLivepeerConfig()
+	cfg.Network = bCfg.network
+	cfg.MaxSessions = intPointer(200)
+	cfg.OrchWebhookURL = stringPointer(fmt.Sprintf("http://%s:%s/orchestrators", defaultHost, streamTesterPort))
+	cfg.EthUrl = bCfg.ethUrl
+	cfg.Datadir = bCfg.datadir
+	cfg.Monitor = boolPointer(true)
+	cfg.EthPassword = bCfg.ethPassword
+	cfg.LocalVerify = boolPointer(false)
+	cfg.HttpIngest = boolPointer(true)
+	cfg.TranscodingOptions = &presets
+	cfg.MaxTicketEV = bCfg.maxTicketEV
+	cfg.MaxPricePerUnit = bCfg.maxPricePerUnit
+	cfg.CliAddr = stringPointer(fmt.Sprintf("0.0.0.0:%s", bcastCliPort))
+	cfg.Broadcaster = boolPointer(true)
+	go func() {
+		starter.StartLivepeer(ctx, cfg)
+	}()
+}
+
+func waitUntilBroadcasterIsReady(ctx context.Context, bcastHost string) {
+	rCtx, _ := context.WithTimeout(ctx, bcastReadyTimeout)
+	statusEndpoint := fmt.Sprintf("http://%s:%s/status", bcastHost, bcastCliPort)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	for {
+		select {
+		case <-rCtx.Done():
+			glog.Error("Waiting for broadcaster timed out")
+			return
+		case <-ticker.C:
+			resp, err := http.Get(statusEndpoint)
+			if err == nil && resp.StatusCode == 200 {
+				return
+			}
+		}
+	}
 }
 
 type streamerClient struct {
