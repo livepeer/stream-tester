@@ -14,6 +14,7 @@ import (
 	"github.com/livepeer/go-livepeer/common"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/stream-tester/internal/server"
+	"github.com/peterbourgon/ff"
 	"io/ioutil"
 	"log"
 	"math"
@@ -85,7 +86,13 @@ func main() {
 	gsBucket := flag.String("gsbucket", "", "Google storage bucket to store segments")
 	gsKey := flag.String("gskey", "", "Google Storage private key (in json format)")
 
-	flag.Parse()
+	// Config file
+	_ = flag.String("config", "", "Config file in the format 'key value', flags and env vars take precedence over the config file")
+	err := ff.Parse(flag.CommandLine, os.Args[1:],
+		ff.WithConfigFileFlag("config"),
+		ff.WithEnvVarPrefix("OT"),
+		ff.WithConfigFileParser(ff.PlainParser),
+	)
 
 	if *region == "" {
 		log.Fatal("region is required")
