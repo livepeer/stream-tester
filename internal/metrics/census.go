@@ -118,7 +118,7 @@ func InitCensus(nodeID, version, namespace string) {
 	baseTags := []tag.Key{Census.kNodeID}
 	views := []*view.View{
 		{
-			Name:        "versions",
+			Name:        "streamtester_versions",
 			Measure:     mVersions,
 			Description: "Versions used by StreamTester.",
 			TagKeys:     []tag.Key{compiler, goos, goversion, streamtesterVersion},
