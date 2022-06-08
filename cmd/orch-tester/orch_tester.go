@@ -350,7 +350,7 @@ func startEmbeddedBroadcaster(ctx context.Context, bCfg broadcasterConfig, prese
 func waitUntilBroadcasterIsReady(ctx context.Context, bcastHost string) {
 	rCtx, _ := context.WithTimeout(ctx, bcastReadyTimeout)
 	statusEndpoint := fmt.Sprintf("http://%s:%s/status", bcastHost, bcastCliPort)
-	ticker := time.NewTicker(200 * time.Millisecond)
+	ticker := time.NewTicker(1 * time.Second)
 	for {
 		select {
 		case <-rCtx.Done():
