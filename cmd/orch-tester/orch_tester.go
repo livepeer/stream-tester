@@ -128,7 +128,7 @@ func main() {
 	}
 
 	var bcastHost string
-	if *broadcaster == "" {
+	if *streamTester == "" && *broadcaster == "" {
 		bcastHost = defaultHost
 		startEmbeddedBroadcaster(ctx, bCfg, *presets)
 	} else {
