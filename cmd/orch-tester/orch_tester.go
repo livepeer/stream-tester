@@ -344,9 +344,7 @@ func startEmbeddedBroadcaster(ctx context.Context, bCfg broadcasterConfig, prese
 	cfg.MaxPricePerUnit = bCfg.maxPricePerUnit
 	cfg.CliAddr = stringPointer(fmt.Sprintf("0.0.0.0:%s", bcastCliPort))
 	cfg.Broadcaster = boolPointer(true)
-	go func() {
-		starter.StartLivepeer(ctx, cfg)
-	}()
+	go starter.StartLivepeer(ctx, cfg)
 }
 
 func waitUntilBroadcasterIsReady(ctx context.Context, bcastHost string) {
