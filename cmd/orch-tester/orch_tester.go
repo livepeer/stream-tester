@@ -358,8 +358,11 @@ func waitUntilBroadcasterIsReady(ctx context.Context, bcastHost string) {
 			return
 		case <-ticker.C:
 			resp, err := http.Get(statusEndpoint)
-			if err == nil && resp.StatusCode == 200 {
-				return
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode == 200 {
+					return
+				}
 			}
 		}
 	}
