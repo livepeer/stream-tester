@@ -29,4 +29,4 @@ WORKDIR /root
 COPY --from=builder /root/official_test_source_2s_keys_24pfs_30s_hls official_test_source_2s_keys_24pfs_30s_hls
 COPY --from=builder /root/orch_tester orch_tester
 
-CMD /root/orch_tester -v 6
+CMD /root/orch_tester

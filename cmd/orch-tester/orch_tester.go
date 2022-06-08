@@ -70,6 +70,11 @@ type broadcasterConfig struct {
 
 func main() {
 	flag.Set("logtostderr", "true")
+
+	vFlag := flag.Lookup("v")
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	verbosity := flag.String("v", "6", "Log verbosity.  {4|5|6}")
+
 	region := flag.String("region", "", "Region this service is operating in")
 	streamTester := flag.String("streamtester", "", "Address for stream-tester server instance")
 	broadcaster := flag.String("broadcaster", "", "Broadcaster address")
@@ -109,6 +114,7 @@ func main() {
 		ff.WithEnvVarPrefix("OT"),
 		ff.WithConfigFileParser(ff.PlainParser),
 	)
+	vFlag.Value.Set(*verbosity)
 
 	if *region == "" {
 		log.Fatal("region is required")
