@@ -16,6 +16,8 @@ jobs:
     - name: Tags
       id: tags
       uses: livepeer/action-gh-release-tags@v0
+      with:
+        always-latest-on-branch: master
 
     - name: Build the Docker image
       run: |
