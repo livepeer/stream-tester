@@ -27,22 +27,26 @@ import (
 // 		stopAtFileEnd: stopAtFileEnd,
 // 	}
 // }
+func StartSegmentingR(ctx context.Context, reader io.ReadSeekCloser, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
+	useWallTime bool, out chan<- *model.HlsSegment) error {
+	inFile, err := avutil.OpenRC(reader)
+	if err != nil {
+		glog.Errorf("avutil.OpenRC err=%v", err)
+		return err
+	}
+	go segmentingLoop(ctx, "", inFile, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
 
-type hlsSegment struct {
-	err      error
-	seqNo    int
-	pts      time.Duration
-	duration time.Duration
-	data     []byte
+	return err
 }
 
-func startSegmenting(ctx context.Context, fileName string, stopAtFileEnd bool, stopAfter, skipFirst time.Duration, out chan<- *hlsSegment) error {
+func StartSegmenting(ctx context.Context, fileName string, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
+	useWallTime bool, out chan<- *model.HlsSegment) error {
 	glog.Infof("Starting segmenting file %s", fileName)
 	inFile, err := avutil.Open(fileName)
 	if err != nil {
 		glog.Fatal(err)
 	}
-	go segmentingLoop(ctx, fileName, inFile, stopAtFileEnd, stopAfter, skipFirst, out)
+	go segmentingLoop(ctx, fileName, inFile, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
 
 	return err
 }
@@ -83,7 +87,7 @@ func (wt *Walltime) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoid
 			}
 		}
 		pkttime := wt.firsttime.Add(pkt.Time)
-		delta := pkttime.Sub(time.Now())
+		delta := time.Until(pkttime)
 		if delta > 0 {
 			if wt.skipFirst == 0 || wt.skipFirst <= pkt.Time {
 				time.Sleep(delta)
@@ -93,13 +97,18 @@ func (wt *Walltime) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoid
 	return
 }
 
-func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bool, stopAfter, skipFirst time.Duration, out chan<- *hlsSegment) {
+func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
+	useWallTime bool, out chan<- *model.HlsSegment) {
+
 	var err error
 	var streams []av.CodecData
 	var videoidx, audioidx int8
 
 	ts := &timeShifter{}
-	filters := pktque.Filters{ts, &pktque.FixTime{MakeIncrement: true}, &Walltime{skipFirst: skipFirst}}
+	filters := pktque.Filters{ts, &pktque.FixTime{MakeIncrement: true}}
+	if useWallTime {
+		filters = append(filters, &Walltime{skipFirst: skipFirst})
+	}
 	inFile := &pktque.FilterDemuxer{Demuxer: inFileReal, Filter: filters}
 	if streams, err = inFile.Streams(); err != nil {
 		msg := fmt.Sprintf("Can't get info about file: '%+v', isNoAudio %v isNoVideo %v", err, errors.Is(err, jerrors.ErrNoAudioInfoFound), errors.Is(err, jerrors.ErrNoVideoInfoFound))
@@ -188,7 +197,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 		if err != nil {
 			glog.Fatal(err)
 		}
-		if rerr == io.EOF && stopAfter > 0 && (prevPTS+curDur) < stopAfter {
+		if rerr == io.EOF && stopAfter > 0 && (prevPTS+curDur) < stopAfter && len(fileName) > 0 {
 			// re-open same file and stream it again
 			firstFramePacket = nil
 			ts.timeShift = lastPacket.Time + 30*time.Millisecond
@@ -205,12 +214,12 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			}
 			glog.V(model.VVERBOSE).Infof("Wrapping segments seqNo=%d pts=%s dur=%s sending=%v", seqNo, prevPTS, curDur, send)
 			if send {
-				hlsSeg := &hlsSegment{
+				hlsSeg := &model.HlsSegment{
 					// err:      rerr,
-					seqNo:    seqNo,
-					pts:      prevPTS,
-					duration: curDur,
-					data:     buf.Bytes(),
+					SeqNo:    seqNo,
+					Pts:      prevPTS,
+					Duration: curDur,
+					Data:     buf.Bytes(),
 				}
 				out <- hlsSeg
 				prevPTS = lastPacket.Time
@@ -219,17 +228,18 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			}
 		} else {
 			sent := -1
-			if rerr == nil || rerr == io.EOF && curDur > 250*time.Millisecond {
-				// Do not send last segment if it is too small.
-				// Currently transcoding on Nvidia returns bad segment
-				// if source segment is too short
+			// if rerr == nil || rerr == io.EOF && curDur > 250*time.Millisecond {
+			// Do not send last segment if it is too small.
+			// Currently transcoding on Nvidia returns bad segment
+			// if source segment is too short
+			if rerr == nil || rerr == io.EOF {
 				if skipFirst == 0 || skipFirst < prevPTS {
-					hlsSeg := &hlsSegment{
+					hlsSeg := &model.HlsSegment{
 						// err:      rerr,
-						seqNo:    seqNo,
-						pts:      prevPTS,
-						duration: curDur,
-						data:     buf.Bytes(),
+						SeqNo:    seqNo,
+						Pts:      prevPTS,
+						Duration: curDur,
+						Data:     buf.Bytes(),
 					}
 					out <- hlsSeg
 					sent = 0
@@ -242,20 +252,20 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 				// 	seqNo: seqNo,
 				// }
 				// out <- hlsSeg
-				hlsSeg := &hlsSegment{
-					err:   io.EOF,
-					seqNo: seqNo + 1 + sent,
-					pts:   prevPTS + curDur,
+				hlsSeg := &model.HlsSegment{
+					Err:   io.EOF,
+					SeqNo: seqNo + 1 + sent,
+					Pts:   prevPTS + curDur,
 				}
 				out <- hlsSeg
 				break
 			}
 		}
 		if stopAfter > 0 && (prevPTS+curDur) > stopAfter {
-			hlsSeg := &hlsSegment{
-				err:   io.EOF,
-				seqNo: seqNo + 1,
-				pts:   prevPTS + curDur,
+			hlsSeg := &model.HlsSegment{
+				Err:   io.EOF,
+				SeqNo: seqNo + 1,
+				Pts:   prevPTS + curDur,
 			}
 			out <- hlsSeg
 			break

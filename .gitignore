@@ -131,3 +131,10 @@ tags
 # Support for Project snippet scope
 
 # End of https://www.toptal.com/developers/gitignore/api/emacs,vim,go,visualstudiocode
+/lapi
+/loadtester
+/mapi
+/mist-api-connector
+/testdriver
+/recordtester
+/api-transcoder
