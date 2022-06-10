@@ -15,7 +15,7 @@ RUN echo $version
 
 COPY . .
 
-RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" -tags mainnet cmd/orch-tester/orch_tester.go
+RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" -tags mainnet cmd/orch-tester/orch_tester.go cmd/orch-tester/broadcaster_metrics.go
 
 FROM debian:stretch-slim
 
