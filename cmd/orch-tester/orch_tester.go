@@ -139,7 +139,7 @@ func main() {
 	var embeddedBcastMetrics *broadcasterMetrics
 	if *streamTester == "" && *broadcaster == "" && *metrics == "" {
 		glog.Infof("Using embedded broadcaster metrics")
-		embeddedBcastMetrics = &broadcasterMetrics{}
+		embeddedBcastMetrics = newBroadcasterMetrics()
 		view.RegisterExporter(embeddedBcastMetrics)
 	}
 

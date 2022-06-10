@@ -19,6 +19,18 @@ type broadcasterMetrics struct {
 	mu sync.Mutex
 }
 
+func newBroadcasterMetrics() *broadcasterMetrics {
+	return &broadcasterMetrics{
+		lastSum:   map[string]float64{},
+		lastCount: map[string]int{},
+		rateSum:   map[string]float64{},
+		rateCount: map[string]int{},
+		lastErrs:  map[string]int{},
+		incErrs:   map[string]int{},
+		mu:        sync.Mutex{},
+	}
+}
+
 func (bm *broadcasterMetrics) reset() {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
