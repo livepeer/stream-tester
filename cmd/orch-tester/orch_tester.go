@@ -483,7 +483,7 @@ func avgMetric(streamer *streamerClient, embedded *broadcasterMetrics, metric st
 func errorCount(s *streamerClient, metrics *broadcasterMetrics) []apiModels.Error {
 	var errors map[string]int
 	if metrics != nil {
-		errors = metrics.incErrorCount()
+		errors = metrics.errorCount()
 	} else {
 		res, err := s.queryErrorCounts()
 		if err != nil {

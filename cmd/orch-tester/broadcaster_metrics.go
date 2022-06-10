@@ -114,7 +114,7 @@ func (bm *broadcasterMetrics) avg(m string) float64 {
 	return bm.rateSum[m] / float64(bm.rateCount[m])
 }
 
-func (bm *broadcasterMetrics) incErrorCount() map[string]int {
+func (bm *broadcasterMetrics) errorCount() map[string]int {
 	bm.mu.Lock()
 	bm.mu.Unlock()
 
