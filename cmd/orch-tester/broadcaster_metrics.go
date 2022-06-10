@@ -118,5 +118,9 @@ func (bm *broadcasterMetrics) incErrorCount() map[string]int {
 	bm.mu.Lock()
 	bm.mu.Unlock()
 
-	return bm.incErrs
+	res := map[string]int{}
+	for key, value := range bm.incErrs {
+		res[key] = value
+	}
+	return res
 }
