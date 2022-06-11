@@ -33,7 +33,7 @@ func StartSegmentingR(ctx context.Context, reader io.ReadSeekCloser, stopAtFileE
 		glog.Errorf("avutil.OpenRC err=%v", err)
 		return err
 	}
-	go segmentingLoop(ctx, "", inFile, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
+	startSegmentingLoop(ctx, "", inFile, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
 	return nil
 }
 
@@ -45,7 +45,7 @@ func StartSegmenting(ctx context.Context, fileName string, stopAtFileEnd bool, s
 		glog.Errorf("avutil.OpenRC err=%v", err)
 		return err
 	}
-	go segmentingLoop(ctx, fileName, inFile, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
+	startSegmentingLoop(ctx, fileName, inFile, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
 	return nil
 }
 
@@ -95,9 +95,21 @@ func (wt *Walltime) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoid
 	return
 }
 
-func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
+func startSegmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
 	useWallTime bool, out chan<- *model.HlsSegment) {
-	defer close(out)
+	go func() {
+		defer close(out)
+		err := segmentingLoop(ctx, fileName, inFileReal, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
+		if err != nil {
+			glog.Errorf("Error in segmenting loop. err=%+v", err)
+			out <- &model.HlsSegment{Err: err}
+		}
+	}()
+}
+
+func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxCloser,
+	stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
+	useWallTime bool, out chan<- *model.HlsSegment) error {
 
 	var err error
 	var streams []av.CodecData
@@ -111,8 +123,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 	inFile := &pktque.FilterDemuxer{Demuxer: inFileReal, Filter: filters}
 	if streams, err = inFile.Streams(); err != nil {
 		glog.Errorf("Can't get info about file err=%q, isNoAudio=%v isNoVideo=%v stack=%+v", err, errors.Is(err, jerrors.ErrNoAudioInfoFound), errors.Is(err, jerrors.ErrNoVideoInfoFound), err)
-		out <- &model.HlsSegment{Err: err}
-		return
+		return err
 	}
 	for i, st := range streams {
 		if st.Type().IsAudio() {
@@ -138,12 +149,12 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 		segFile, buf := createInMemoryTSMuxer()
 		err = segFile.WriteHeader(streams)
 		if err != nil {
-			glog.Fatal(err)
+			return err
 		}
 		if firstFramePacket != nil {
 			err = segFile.WritePacket(*firstFramePacket)
 			if err != nil {
-				glog.Fatal(err)
+				return err
 			}
 			prevPTS = firstFramePacket.Time
 			firstFramePacket = nil
@@ -154,7 +165,8 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 		for {
 			select {
 			case <-ctx.Done():
-				return
+				// don't return ctx.Err() as that would send the error in the out channel
+				return nil
 			default:
 			}
 			pkt, rerr = inFile.ReadPacket()
@@ -165,7 +177,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 					}
 					break
 				}
-				glog.Fatal(rerr)
+				return rerr
 			}
 			lastPacket = pkt
 
@@ -186,12 +198,12 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			}
 			err = segFile.WritePacket(pkt)
 			if err != nil {
-				glog.Fatal(err)
+				return err
 			}
 		}
 		err = segFile.WriteTrailer()
 		if err != nil {
-			glog.Fatal(err)
+			return err
 		}
 		if rerr == io.EOF && stopAfter > 0 && (prevPTS+curDur) < stopAfter && len(fileName) > 0 {
 			// re-open same file and stream it again
@@ -199,7 +211,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			ts.timeShift = lastPacket.Time + 30*time.Millisecond
 			inf, err := avutil.Open(fileName)
 			if err != nil {
-				glog.Fatal(err)
+				return err
 			}
 			inFile.Demuxer = inf
 			// rs.counter.currentSegments = 0
@@ -268,5 +280,5 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 		}
 		seqNo++
 	}
-	return
+	return nil
 }
