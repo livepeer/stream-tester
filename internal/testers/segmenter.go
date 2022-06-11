@@ -35,8 +35,7 @@ func StartSegmentingR(ctx context.Context, reader io.ReadSeekCloser, stopAtFileE
 		return err
 	}
 	go segmentingLoop(ctx, "", inFile, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
-
-	return err
+	return nil
 }
 
 func StartSegmenting(ctx context.Context, fileName string, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
@@ -44,11 +43,11 @@ func StartSegmenting(ctx context.Context, fileName string, stopAtFileEnd bool, s
 	glog.Infof("Starting segmenting file %s", fileName)
 	inFile, err := avutil.Open(fileName)
 	if err != nil {
-		glog.Fatal(err)
+		glog.Errorf("avutil.OpenRC err=%v", err)
+		return err
 	}
 	go segmentingLoop(ctx, fileName, inFile, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
-
-	return err
+	return nil
 }
 
 func createInMemoryTSMuxer() (av.Muxer, *bytes.Buffer) {
