@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"time"
 
@@ -98,6 +97,7 @@ func (wt *Walltime) ModifyPacket(pkt *av.Packet, streams []av.CodecData, videoid
 
 func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxCloser, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
 	useWallTime bool, out chan<- *model.HlsSegment) {
+	defer close(out)
 
 	var err error
 	var streams []av.CodecData
@@ -110,12 +110,9 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 	}
 	inFile := &pktque.FilterDemuxer{Demuxer: inFileReal, Filter: filters}
 	if streams, err = inFile.Streams(); err != nil {
-		msg := fmt.Sprintf("Can't get info about file: '%+v', isNoAudio %v isNoVideo %v", err, errors.Is(err, jerrors.ErrNoAudioInfoFound), errors.Is(err, jerrors.ErrNoVideoInfoFound))
-		if !(errors.Is(err, jerrors.ErrNoAudioInfoFound) || errors.Is(err, jerrors.ErrNoVideoInfoFound)) {
-			glog.Fatal(msg)
-		}
-		fmt.Println(msg)
-		panic(msg)
+		glog.Errorf("Can't get info about file err=%q, isNoAudio=%v isNoVideo=%v stack=%+v", err, errors.Is(err, jerrors.ErrNoAudioInfoFound), errors.Is(err, jerrors.ErrNoVideoInfoFound), err)
+		out <- &model.HlsSegment{Err: err}
+		return
 	}
 	for i, st := range streams {
 		if st.Type().IsAudio() {
