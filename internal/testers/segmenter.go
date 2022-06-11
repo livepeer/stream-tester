@@ -102,7 +102,10 @@ func startSegmentingLoop(ctx context.Context, fileName string, inFileReal av.Dem
 		err := segmentingLoop(ctx, fileName, inFileReal, stopAtFileEnd, stopAfter, skipFirst, segLen, useWallTime, out)
 		if err != nil {
 			glog.Errorf("Error in segmenting loop. err=%+v", err)
-			out <- &model.HlsSegment{Err: err}
+			select {
+			case out <- &model.HlsSegment{Err: err}:
+			case <-ctx.Done():
+			}
 		}
 	}()
 }
@@ -136,6 +139,15 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 		streamTypes[int8(i)] = ctype
 	}
 	glog.V(model.VERBOSE).Infof("Stream types=%+v", streamTypes)
+
+	sendSegment := func(seg *model.HlsSegment) bool {
+		select {
+		case out <- &model.HlsSegment{Err: err}:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
 
 	seqNo := 0
 	// var curPTS time.Duration
@@ -232,7 +244,9 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 					Duration: curDur,
 					Data:     buf.Bytes(),
 				}
-				out <- hlsSeg
+				if !sendSegment(hlsSeg) {
+					return nil
+				}
 				prevPTS = lastPacket.Time
 			} else {
 				seqNo--
@@ -252,7 +266,9 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 						Duration: curDur,
 						Data:     buf.Bytes(),
 					}
-					out <- hlsSeg
+					if !sendSegment(hlsSeg) {
+						return nil
+					}
 					sent = 0
 				}
 			}
@@ -268,7 +284,9 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 					SeqNo: seqNo + 1 + sent,
 					Pts:   prevPTS + curDur,
 				}
-				out <- hlsSeg
+				if !sendSegment(hlsSeg) {
+					return nil
+				}
 				break
 			}
 		}
@@ -278,7 +296,9 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 				SeqNo: seqNo + 1,
 				Pts:   prevPTS + curDur,
 			}
-			out <- hlsSeg
+			if !sendSegment(hlsSeg) {
+				return nil
+			}
 			break
 		}
 		seqNo++
