@@ -113,7 +113,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 
 	var err error
 	var streams []av.CodecData
-	var videoidx, audioidx int8
+	streamTypes := map[int8]string{}
 
 	ts := &timeShifter{}
 	filters := pktque.Filters{ts, &pktque.FixTime{MakeIncrement: true}}
@@ -126,14 +126,16 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 		return err
 	}
 	for i, st := range streams {
-		if st.Type().IsAudio() {
-			audioidx = int8(i)
+		codec := st.Type()
+		ctype := "unknown"
+		if codec.IsAudio() {
+			ctype = "audio"
+		} else if codec.IsVideo() {
+			ctype = "video"
 		}
-		if st.Type().IsVideo() {
-			videoidx = int8(i)
-		}
+		streamTypes[int8(i)] = ctype
 	}
-	glog.V(model.VERBOSE).Infof("Video stream index %d, audio stream index %d\n", videoidx, audioidx)
+	glog.V(model.VERBOSE).Infof("Stream types=%+v", streamTypes)
 
 	seqNo := 0
 	// var curPTS time.Duration
@@ -190,7 +192,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			// This matches segmenter algorithm used in ffmpeg
 			if pkt.IsKeyFrame && pkt.Time >= time.Duration(seqNo+1)*segLen {
 				firstFramePacket = &pkt
-				glog.V(model.VERBOSE).Infof("Packet Is Keyframe %v Is Audio %v Is Video %v PTS %s sinc prev %s seqNo %d\n", pkt.IsKeyFrame, pkt.Idx == audioidx, pkt.Idx == videoidx, pkt.Time,
+				glog.V(model.VERBOSE).Infof("Packet isKeyframe=%v codecType=%v PTS=%s sincPrev=%s seqNo=%d", pkt.IsKeyFrame, streamTypes[pkt.Idx], pkt.Time,
 					pkt.Time-prevPTS, seqNo+1)
 				// prevPTS = pkt.Time
 				curDur = pkt.Time - prevPTS
