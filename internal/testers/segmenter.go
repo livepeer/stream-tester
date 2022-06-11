@@ -215,6 +215,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 			if err != nil {
 				return err
 			}
+			defer inf.Close()
 			inFile.Demuxer = inf
 			// rs.counter.currentSegments = 0
 			inFile.Streams()
