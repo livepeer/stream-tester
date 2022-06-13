@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	livepeerAPI "github.com/livepeer/go-api-client"
+	api "github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format/mp4"
 	"github.com/livepeer/joy4/format/mp4/mp4io"
 	"github.com/livepeer/stream-tester/apis/livepeer"
@@ -30,13 +30,13 @@ type (
 		VODStats() model.VODStats
 		Clean()
 		StreamID() string
-		Stream() *livepeerAPI.CreateStreamResp
+		Stream() *api.CreateStreamResp
 	}
 
 	RecordTesterOptions struct {
-		*livepeerAPI.Client
+		API                 *api.Client
 		Analyzers           testers.AnalyzerByRegion
-		Ingest              *livepeerAPI.Ingest
+		Ingest              *api.Ingest
 		RecordObjectStoreId string
 		UseForceURL         bool
 		UseHTTP             bool
@@ -47,9 +47,9 @@ type (
 	recordTester struct {
 		ctx                 context.Context
 		cancel              context.CancelFunc
-		lapi                *livepeerAPI.Client
+		lapi                *api.Client
 		lanalyzers          testers.AnalyzerByRegion
-		ingest              *livepeerAPI.Ingest
+		ingest              *api.Ingest
 		recordObjectStoreId string
 		useForceURL         bool
 		useHTTP             bool
@@ -58,7 +58,7 @@ type (
 
 		// mutable fields
 		streamID string
-		stream   *livepeerAPI.CreateStreamResp
+		stream   *api.CreateStreamResp
 		vodStats model.VODStats
 	}
 )
@@ -67,7 +67,7 @@ type (
 func NewRecordTester(gctx context.Context, opts RecordTesterOptions) IRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	rt := &recordTester{
-		lapi:                opts.Client,
+		lapi:                opts.API,
 		lanalyzers:          opts.Analyzers,
 		ingest:              opts.Ingest,
 		ctx:                 ctx,
@@ -121,9 +121,9 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	// glog.Infof("All cool!")
 	hostName, _ := os.Hostname()
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	var stream *livepeerAPI.CreateStreamResp
+	var stream *api.CreateStreamResp
 	for {
-		stream, err = rt.lapi.CreateStreamEx2(streamName, true, rt.recordObjectStoreId, "", nil, livepeerAPI.StandardProfiles...)
+		stream, err = rt.lapi.CreateStreamEx2(streamName, true, rt.recordObjectStoreId, "", nil, api.StandardProfiles...)
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -308,14 +308,15 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 0, err
 	}
 
-	assetId := ""
-	wait_interval := 30 * time.Second
-	elapsed_time := 0 * time.Second
-asset:
+	var (
+		assetId      string
+		waitInterval = 30 * time.Second
+		startTime    = time.Now()
+	)
+outer:
 	for {
-		glog.Infof("Waiting %s for asset, elapsed=%s", wait_interval, elapsed_time)
-		time.Sleep(wait_interval)
-		elapsed_time = elapsed_time + wait_interval
+		glog.Infof("Waiting %s for asset, elapsed=%s", waitInterval, time.Since(startTime))
+		time.Sleep(waitInterval)
 		if err = rt.isCancelled(); err != nil {
 			return 0, err
 		}
@@ -329,30 +330,27 @@ asset:
 		for _, asset := range *assets { // TODO: only need to check first n assets due to ordering
 			if asset.Name == fmt.Sprintf("live-to-vod-%s", sess.ID) {
 				assetId = asset.ID
-				break asset
+				break outer
 			}
 		}
 
 		// TODO: timeout required here?
 	}
 
-	task_name := fmt.Sprintf("live-to-vod-transcode-%s", sess.ID)
-	createTranscodeTaskResp, _ := rt.lapi.CreateTranscodeTask(assetId, task_name, livepeerAPI.StandardProfiles[0])
+	assetName := fmt.Sprintf("live-to-vod-transcode-%s", sess.ID)
+	transcodeAsset, transcodeTask, err := rt.lapi.TranscodeAsset(assetId, assetName, api.StandardProfiles[0])
 	if err != nil {
 		glog.Errorf("Error creating transcode task err=%v", err)
 		return 242, err
 		// exit(242, fileName, *fileArg, err)
 	}
-	transcodeTask := createTranscodeTaskResp.Task
-	transcodeAsset := createTranscodeTaskResp.Asset
 	glog.Infof("Asset is available id=%s, transcoding taskId=%s outputAssetId=%s", assetId, transcodeTask.ID, transcodeAsset.ID)
 
-	wait_interval = 15 * time.Second
-	elapsed_time = 0 * time.Second
+	waitInterval = 15 * time.Second
+	startTime = time.Now()
 	for {
-		glog.Infof("Waiting %s for transcode output asset id=%s, elapsed=%s", wait_interval, transcodeAsset.ID, elapsed_time)
-		time.Sleep(wait_interval)
-		elapsed_time = elapsed_time + wait_interval
+		glog.Infof("Waiting %s for transcode output asset id=%s, elapsed=%s", waitInterval, transcodeAsset.ID, time.Since(startTime))
+		time.Sleep(waitInterval)
 		if err = rt.isCancelled(); err != nil {
 			return 0, err
 		}
@@ -363,10 +361,10 @@ asset:
 			return 243, err
 			// exit(243, fileName, *fileArg, err)
 		}
-		if asset.Status == "ready" {
+		if asset.Status.Phase == "ready" {
 			break
 		}
-		if asset.Status != "waiting" {
+		if asset.Status.Phase != "waiting" {
 			glog.Errorf("Error transcoding asset id=%s, task id=%s outputAssetId=%s err=%v", assetId, transcodeTask.ID, transcodeAsset.ID, err)
 			return 244, err
 			// exit(244, fileName, *fileArg, err)
@@ -375,21 +373,19 @@ asset:
 		// TODO: timeout required here?
 	}
 
-	createExportTaskResp, _ := rt.lapi.CreateExportTask(transcodeAsset.ID)
+	exportTask, err := rt.lapi.ExportAsset(transcodeAsset.ID)
 	if err != nil {
 		glog.Errorf("Error creating export task err=%v", err)
 		return 245, err
 		// exit(245, fileName, *fileArg, err)
 	}
-	exportTask := createExportTaskResp.Task
 	glog.Infof("Transcode output asset id=%s ready, exporting, taskId=%s", transcodeAsset.ID, exportTask.ID)
 
-	wait_interval = 5 * time.Second
-	elapsed_time = 0 * time.Second
+	waitInterval = 5 * time.Second
+	startTime = time.Now()
 	for {
-		glog.Infof("Waiting %s for asset id=%s to be exported, elapsed=%s", wait_interval, transcodeAsset.ID, elapsed_time)
-		time.Sleep(wait_interval)
-		elapsed_time = elapsed_time + wait_interval
+		glog.Infof("Waiting %s for asset id=%s to be exported, elapsed=%s", waitInterval, transcodeAsset.ID, time.Since(startTime))
+		time.Sleep(waitInterval)
 		if err = rt.isCancelled(); err != nil {
 			return 0, err
 		}
@@ -431,11 +427,11 @@ asset:
 	return es, err
 }
 
-func (rt *recordTester) getIngestInfo() (*livepeerAPI.Ingest, error) {
+func (rt *recordTester) getIngestInfo() (*api.Ingest, error) {
 	if rt.ingest != nil {
 		return rt.ingest, nil
 	}
-	var ingests []livepeerAPI.Ingest
+	var ingests []api.Ingest
 	apiTry := 0
 	for {
 		var err error
@@ -456,12 +452,12 @@ func (rt *recordTester) getIngestInfo() (*livepeerAPI.Ingest, error) {
 	return &ingests[0], nil
 }
 
-func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL string, testDuration time.Duration, stream *livepeerAPI.CreateStreamResp) error {
-	var session *livepeerAPI.CreateStreamResp
+func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL string, testDuration time.Duration, stream *api.CreateStreamResp) error {
+	var session *api.CreateStreamResp
 	var err error
 	apiTry := 0
 	for {
-		session, err = rt.lapi.CreateStreamEx2(streamName, true, rt.recordObjectStoreId, stream.ID, nil, livepeerAPI.StandardProfiles...)
+		session, err = rt.lapi.CreateStreamEx2(streamName, true, rt.recordObjectStoreId, stream.ID, nil, api.StandardProfiles...)
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -493,7 +489,7 @@ func (rt *recordTester) isCancelled() error {
 	return nil
 }
 
-func (rt *recordTester) checkDownMp4(stream *livepeerAPI.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
+func (rt *recordTester) checkDownMp4(stream *api.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
 	es := 0
 	started := time.Now()
 	glog.V(model.VERBOSE).Infof("Downloading mp4 url=%s stream id=%s", url, stream.ID)
@@ -543,7 +539,7 @@ func (rt *recordTester) checkDownMp4(stream *livepeerAPI.CreateStreamResp, url s
 	return es, nil
 }
 
-func (rt *recordTester) checkDown(stream *livepeerAPI.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
+func (rt *recordTester) checkDown(stream *api.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
 	es := 0
 	started := time.Now()
 	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil, false)
@@ -554,8 +550,8 @@ func (rt *recordTester) checkDown(stream *livepeerAPI.CreateStreamResp, url stri
 	}
 	vs := downloader.VODStats()
 	rt.vodStats = vs
-	if len(vs.SegmentsNum) != len(livepeerAPI.StandardProfiles)+1 {
-		glog.Warningf("Number of renditions doesn't match! Has %d should %d", len(vs.SegmentsNum), len(livepeerAPI.StandardProfiles)+1)
+	if len(vs.SegmentsNum) != len(api.StandardProfiles)+1 {
+		glog.Warningf("Number of renditions doesn't match! Has %d should %d", len(vs.SegmentsNum), len(api.StandardProfiles)+1)
 		es = 35
 	}
 	glog.Infof("Stats for %s: %s", stream.ID, vs.String())
@@ -592,7 +588,7 @@ func (rt *recordTester) StreamID() string {
 	return rt.streamID
 }
 
-func (rt *recordTester) Stream() *livepeerAPI.CreateStreamResp {
+func (rt *recordTester) Stream() *api.CreateStreamResp {
 	return rt.stream
 }
 

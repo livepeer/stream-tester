@@ -50,7 +50,7 @@ type (
 // NewContinuousRecordTester returns new object
 func NewContinuousRecordTester(gctx context.Context, opts ContinuousRecordTesterOptions) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
-	server := opts.Client.GetServer()
+	server := opts.API.GetServer()
 	u, _ := url.Parse(server)
 	crt := &continuousRecordTester{
 		ctx:                     ctx,

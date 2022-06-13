@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	livepeerAPI "github.com/livepeer/go-api-client"
+	api "github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/livepeer-data/pkg/client"
 	"github.com/livepeer/stream-tester/internal/app/recordtester"
@@ -133,14 +133,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	var ingest *livepeerAPI.Ingest
+	var ingest *api.Ingest
 	if *ingestStr != "" {
 		if err := json.Unmarshal([]byte(*ingestStr), &ingest); err != nil {
 			glog.Fatalf("Error parsing -ingest argument: %v", err)
 		}
 	}
 
-	var lapi *livepeerAPI.Client
+	var lapi *api.Client
 	var createdAPIStreams []string
 	cleanup := func(fn, fa string) {
 		if fn != fa {
@@ -167,12 +167,12 @@ func main() {
 		os.Exit(exitCode)
 	}
 
-	lApiOpts := livepeerAPI.ClientOptions{
+	lApiOpts := api.ClientOptions{
 		Server:      *apiServer,
 		AccessToken: *apiToken,
 		Timeout:     8 * time.Second,
 	}
-	lapi, _ = livepeerAPI.NewAPIClientGeolocated(lApiOpts)
+	lapi, _ = api.NewAPIClientGeolocated(lApiOpts)
 	glog.Infof("Choosen server: %s", lapi.GetServer())
 
 	userAgent := model.AppName + "/" + model.Version
@@ -203,7 +203,7 @@ func main() {
 	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, "", "", "")
 
 	rtOpts := recordtester.RecordTesterOptions{
-		Client:              lapi,
+		API:                 lapi,
 		Analyzers:           lanalyzers,
 		Ingest:              ingest,
 		RecordObjectStoreId: *recordObjectStoreId,

@@ -34,7 +34,7 @@ require (
 	google.golang.org/grpc v1.38.0
 )
 
-require github.com/livepeer/go-api-client v0.1.6-0.20220613070446-aca819d4ad0b
+require github.com/livepeer/go-api-client v0.1.6-0.20220613100107-b8ace0aeee99
 
 require (
 	cloud.google.com/go v0.81.0 // indirect
