@@ -205,7 +205,7 @@ func transcode(apiKey, apiHost, src, dst string, presets []string, lprofile *liv
 		}
 	}
 	for _, outFile := range outFiles {
-		if err = outFile.Close(); err != nil {
+		if err := outFile.Close(); err != nil {
 			return err
 		}
 	}
