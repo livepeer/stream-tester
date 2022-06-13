@@ -129,14 +129,13 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 		return err
 	}
 	for i, st := range streams {
-		codec := st.Type()
-		ctype := "unknown"
-		if codec.IsAudio() {
-			ctype = "audio"
+		codecType := "unknown"
+		if codec := st.Type(); codec.IsAudio() {
+			codecType = "audio"
 		} else if codec.IsVideo() {
-			ctype = "video"
+			codecType = "video"
 		}
-		streamTypes[int8(i)] = ctype
+		streamTypes[int8(i)] = codecType
 	}
 	glog.V(model.VERBOSE).Infof("Stream types=%+v", streamTypes)
 
