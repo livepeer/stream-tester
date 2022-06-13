@@ -114,6 +114,7 @@ func main() {
 		ff.WithConfigFileFlag("config"),
 		ff.WithEnvVarPrefix("OT"),
 		ff.WithConfigFileParser(ff.PlainParser),
+		ff.WithEnvVarIgnoreCommas(true),
 	)
 	vFlag.Value.Set(*verbosity)
 
