@@ -114,6 +114,7 @@ func main() {
 		ff.WithConfigFileFlag("config"),
 		ff.WithEnvVarPrefix("OT"),
 		ff.WithConfigFileParser(ff.PlainParser),
+		ff.WithEnvVarIgnoreCommas(true),
 	)
 	vFlag.Value.Set(*verbosity)
 
@@ -342,7 +343,7 @@ func waitUntilBroadcasterIsReady(ctx context.Context, bcastHost string) {
 	for {
 		select {
 		case <-rCtx.Done():
-			glog.Error("Waiting for broadcaster timed out")
+			glog.Fatal("Waiting for broadcaster timed out")
 			return
 		case <-ticker.C:
 			resp, err := http.Get(statusEndpoint)
