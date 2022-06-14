@@ -141,7 +141,7 @@ func segmentingLoop(ctx context.Context, fileName string, inFileReal av.DemuxClo
 
 	sendSegment := func(seg *model.HlsSegment) bool {
 		select {
-		case out <- &model.HlsSegment{Err: err}:
+		case out <- seg:
 			return true
 		case <-ctx.Done():
 			return false
