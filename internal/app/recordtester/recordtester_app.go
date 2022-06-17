@@ -30,7 +30,7 @@ type (
 		VODStats() model.VODStats
 		Clean()
 		StreamID() string
-		Stream() *api.CreateStreamResp
+		Stream() *api.Stream
 	}
 
 	RecordTesterOptions struct {
@@ -58,7 +58,7 @@ type (
 
 		// mutable fields
 		streamID string
-		stream   *api.CreateStreamResp
+		stream   *api.Stream
 		vodStats model.VODStats
 	}
 )
@@ -121,9 +121,9 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	// glog.Infof("All cool!")
 	hostName, _ := os.Hostname()
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	var stream *api.CreateStreamResp
+	var stream *api.Stream
 	for {
-		stream, err = rt.lapi.CreateStreamEx2(streamName, true, rt.recordObjectStoreId, "", nil, api.StandardProfiles...)
+		stream, err = rt.lapi.CreateStream(api.CreateStreamReq{Name: streamName, Record: true, RecordObjectStoreId: rt.recordObjectStoreId})
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -452,12 +452,12 @@ func (rt *recordTester) getIngestInfo() (*api.Ingest, error) {
 	return &ingests[0], nil
 }
 
-func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL string, testDuration time.Duration, stream *api.CreateStreamResp) error {
-	var session *api.CreateStreamResp
+func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL string, testDuration time.Duration, stream *api.Stream) error {
+	var session *api.Stream
 	var err error
 	apiTry := 0
 	for {
-		session, err = rt.lapi.CreateStreamEx2(streamName, true, rt.recordObjectStoreId, stream.ID, nil, api.StandardProfiles...)
+		session, err = rt.lapi.CreateStream(api.CreateStreamReq{Name: streamName, Record: true, RecordObjectStoreId: rt.recordObjectStoreId, ParentID: stream.ID})
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -489,7 +489,7 @@ func (rt *recordTester) isCancelled() error {
 	return nil
 }
 
-func (rt *recordTester) checkDownMp4(stream *api.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
+func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDuration time.Duration, doubled bool) (int, error) {
 	es := 0
 	started := time.Now()
 	glog.V(model.VERBOSE).Infof("Downloading mp4 url=%s stream id=%s", url, stream.ID)
@@ -539,7 +539,7 @@ func (rt *recordTester) checkDownMp4(stream *api.CreateStreamResp, url string, s
 	return es, nil
 }
 
-func (rt *recordTester) checkDown(stream *api.CreateStreamResp, url string, streamDuration time.Duration, doubled bool) (int, error) {
+func (rt *recordTester) checkDown(stream *api.Stream, url string, streamDuration time.Duration, doubled bool) (int, error) {
 	es := 0
 	started := time.Now()
 	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil, false)
@@ -588,7 +588,7 @@ func (rt *recordTester) StreamID() string {
 	return rt.streamID
 }
 
-func (rt *recordTester) Stream() *api.CreateStreamResp {
+func (rt *recordTester) Stream() *api.Stream {
 	return rt.stream
 }
 

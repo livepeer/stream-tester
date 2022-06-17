@@ -703,10 +703,8 @@ github.com/labstack/gommon v0.3.0/go.mod h1:MULnywXg0yavhxWKc+lOruYdAhDwPK9wf0OL
 github.com/leanovate/gopter v0.2.9/go.mod h1:U2L/78B+KVFIx2VmW6onHJQzXtFb+p5y3y2Sh+Jxxv8=
 github.com/lib/pq v1.0.0/go.mod h1:5WUZQaWbwv1U+lTReE5YruASi9Al49XbQIvNi/34Woo=
 github.com/lib/pq v1.8.0/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
-github.com/livepeer/go-api-client v0.1.6-0.20220613094436-b171e82ce3c6 h1:RUQPE81QMi3touD5YS5053Pc+qzK2g36H1oBU+kuTUs=
-github.com/livepeer/go-api-client v0.1.6-0.20220613094436-b171e82ce3c6/go.mod h1:FPgo6hPAEQkWS/Bmepdm+O/LWfurbmym93ghzLueTUo=
-github.com/livepeer/go-api-client v0.1.6-0.20220613100107-b8ace0aeee99 h1:e+R5pAtajSM8e0mIKrY+J6OEUKA5JFhNc0dpqo3etnw=
-github.com/livepeer/go-api-client v0.1.6-0.20220613100107-b8ace0aeee99/go.mod h1:FPgo6hPAEQkWS/Bmepdm+O/LWfurbmym93ghzLueTUo=
+github.com/livepeer/go-api-client v0.2.3-0.20220617022037-783187caed97 h1:8rDk4Q8Oz2fea1ubbd9ilH36oLB1wFFc9JSUdDUv8GI=
+github.com/livepeer/go-api-client v0.2.3-0.20220617022037-783187caed97/go.mod h1:FPgo6hPAEQkWS/Bmepdm+O/LWfurbmym93ghzLueTUo=
 github.com/livepeer/go-livepeer v0.5.31 h1:LcN+qDnqWRws7fdVYc4ucZPVcLQRs2tehUYCQVnlnRw=
 github.com/livepeer/go-livepeer v0.5.31/go.mod h1:cpBikcGWApkx0cyR0Ht+uAym7j3uAwXGpPbvaOA8XUU=
 github.com/livepeer/joy4 v0.1.2-0.20191121080656-b2fea45cbded/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
