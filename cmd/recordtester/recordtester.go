@@ -20,6 +20,7 @@ import (
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/livepeer-data/pkg/client"
 	"github.com/livepeer/stream-tester/internal/app/recordtester"
+	"github.com/livepeer/stream-tester/internal/app/vodtester"
 	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"
@@ -27,6 +28,7 @@ import (
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/peterbourgon/ff/v2"
+	"golang.org/x/sync/errgroup"
 )
 
 func init() {
@@ -46,15 +48,18 @@ func main() {
 	sim := fs.Int("sim", 0, "Load test using <sim> streams")
 	testDuration := fs.Duration("test-dur", 0, "How long to run overall test")
 	pauseDuration := fs.Duration("pause-dur", 0, "How long to wait between two consecutive RTMP streams that will comprise one user session")
+	taskPollDuration := fs.Duration("task-poll-dur", 15*time.Second, "How long to wait between polling for task status")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
 	ingestStr := fs.String("ingest", "", "Ingest server info in JSON format including ingest and playback URLs. Should follow Livepeer API schema")
 	analyzerServers := fs.String("analyzer-servers", "", "Comma-separated list of base URLs to connect for the Stream Health Analyzer API (defaults to --api-server)")
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
+	vodImportUrl := fs.String("vod-import-url", "https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_2min.mp4", "URL for VOD import")
 	continuousTest := fs.Duration("continuous-test", 0, "Do continuous testing")
 	useHttp := fs.Bool("http", false, "Do HTTP tests instead of RTMP")
 	testMP4 := fs.Bool("mp4", false, "Download MP4 of recording")
 	testStreamHealth := fs.Bool("stream-health", false, "Check stream health during test")
+	testVod := fs.Bool("vod", false, "Check VOD workflow")
 	recordObjectStoreId := fs.String("record-object-store-id", "", "ID for the Object Store to use for recording storage. Forwarded to the streams created in the API")
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
@@ -212,6 +217,9 @@ func main() {
 		TestMP4:             *testMP4,
 		TestStreamHealth:    *testStreamHealth,
 	}
+	vtOpts := vodtester.VodTesterOptions{
+		API: lapi,
+	}
 	if *sim > 1 {
 		var testers []recordtester.IRecordTester
 		var eses []int
@@ -255,15 +263,30 @@ func main() {
 	} else if *continuousTest > 0 {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
-		crtOpts := recordtester.ContinuousRecordTesterOptions{
-			PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
-			PagerDutyComponent:      *pagerDutyComponent,
-			PagerDutyLowUrgency:     *pagerDutyLowUrgency,
-			RecordTesterOptions:     rtOpts,
+		eg, egCtx := errgroup.WithContext(gctx)
+		eg.Go(func() error {
+			crtOpts := recordtester.ContinuousRecordTesterOptions{
+				PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
+				PagerDutyComponent:      *pagerDutyComponent,
+				PagerDutyLowUrgency:     *pagerDutyLowUrgency,
+				RecordTesterOptions:     rtOpts,
+			}
+			crt := recordtester.NewContinuousRecordTester(egCtx, crtOpts)
+			return crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
+		})
+		if *testVod {
+			eg.Go(func() error {
+				cvtOpts := vodtester.ContinuousVodTesterOptions{
+					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
+					PagerDutyComponent:      *pagerDutyComponent,
+					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
+					VodTesterOptions:        vtOpts,
+				}
+				cvt := vodtester.NewContinuousVodTester(egCtx, cvtOpts)
+				return cvt.Start(*vodImportUrl, *testDuration, *taskPollDuration, *continuousTest)
+			})
 		}
-		crt := recordtester.NewContinuousRecordTester(gctx, crtOpts)
-		err := crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
-		if err != nil {
+		if err := eg.Wait(); err != nil {
 			glog.Warningf("Continuous test ended with err=%v", err)
 		}
 		exit(0, fileName, *fileArg, err)

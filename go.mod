@@ -12,7 +12,7 @@ require (
 	github.com/golang/glog v1.0.0
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
-	github.com/livepeer/go-api-client v0.2.3-0.20220617022037-783187caed97
+	github.com/livepeer/go-api-client v0.2.3-0.20220617194306-4c4a952e7805
 	github.com/livepeer/go-livepeer v0.5.31
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
@@ -96,6 +96,7 @@ require (
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/mod v0.5.1 // indirect
 	golang.org/x/oauth2 v0.0.0-20210427180440-81ed05c6b58c // indirect
+	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 	golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8 // indirect
 	golang.org/x/tools v0.1.9 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
