@@ -12,6 +12,7 @@ require (
 	github.com/golang/glog v1.0.0
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
+	github.com/livepeer/go-api-client v0.2.3-0.20220617022037-783187caed97
 	github.com/livepeer/go-livepeer v0.5.31
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
@@ -33,8 +34,6 @@ require (
 	google.golang.org/api v0.46.0
 	google.golang.org/grpc v1.38.0
 )
-
-require github.com/livepeer/go-api-client v0.2.3-0.20220617022037-783187caed97
 
 require (
 	cloud.google.com/go v0.81.0 // indirect
