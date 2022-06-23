@@ -152,7 +152,7 @@ func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err erro
 		Source:    crt.host,
 		Component: crt.pagerDutyComponent,
 		Severity:  severity,
-		Summary:   fmt.Sprintf("%s:movie_camera: %s for `%s` error: %v", lopriPrefix, crt.pagerDutyComponent, crt.host, err),
+		Summary:   fmt.Sprintf("%s:movie_camera: RECORD %s for `%s` error: %v", lopriPrefix, crt.pagerDutyComponent, crt.host, err),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 	sid := rt.StreamID()
