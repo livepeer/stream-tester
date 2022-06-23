@@ -302,8 +302,8 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	// <-downloader.Done()
 	// glog.Infof(`Pulling stopped after %s`, time.Since(started))
 	// exit(55, fileName, *fileArg, err)
-
 	glog.Info("Done Record Test")
+
 	// lapi.DeleteStream(stream.ID)
 	// exit(0, fileName, *fileArg, err)
 	if err = rt.isCancelled(); err != nil {

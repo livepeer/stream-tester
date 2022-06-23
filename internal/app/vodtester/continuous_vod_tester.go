@@ -2,7 +2,6 @@ package vodtester
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -11,7 +10,6 @@ import (
 	"github.com/PagerDuty/go-pagerduty"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/messenger"
 )
 
@@ -19,7 +17,7 @@ type (
 	// IContinuousVodTester ...
 	IContinuousVodTester interface {
 		// Start start test. Blocks until error.
-		Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error
+		Start(fileName string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error
 		Cancel()
 		Done() <-chan struct{}
 	}
@@ -59,62 +57,41 @@ func NewContinuousVodTester(gctx context.Context, opts ContinuousVodTesterOption
 	return cvt
 }
 
-func (cvt *continuousVodTester) Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error {
+func (cvt *continuousVodTester) Start(fileName string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error {
 	messenger.SendMessage(fmt.Sprintf("Starting continuous vod test of %s", cvt.host))
-	try := 0
-	notRtmpTry := 0
-	maxTestDuration := 4*testDuration + pauseDuration + 15*time.Minute
-	for {
-		msg := fmt.Sprintf(":arrow_right: Starting %s vod test to %s", 2*testDuration, cvt.host)
+	ticker := time.NewTicker(testDuration)
+	defer ticker.Stop()
+	for range ticker.C {
+		msg := fmt.Sprintf(":arrow_right: Starting %s vod test to %s", testDuration, cvt.host)
 		messenger.SendMessage(msg)
 
-		ctx, cancel := context.WithTimeout(cvt.ctx, maxTestDuration)
+		ctx, cancel := context.WithTimeout(cvt.ctx, testDuration)
 		vt := NewVodTester(ctx, cvt.vtOpts)
-		es, err := vt.Start(fileName, testDuration, pauseDuration)
-		vt.Clean()
+		es, err := vt.Start(fileName, taskPollDuration)
 		ctxErr := ctx.Err()
 		cancel()
 
 		if cvt.ctx.Err() != nil {
-			messenger.SendMessage(fmt.Sprintf("Continuous vod test of %s cancelled", cvt.host))
+			messenger.SendMessage(fmt.Sprintf("Continuous test of VOD on %s cancelled", cvt.host))
 			return cvt.ctx.Err()
 		} else if ctxErr != nil {
-			msg := fmt.Sprintf("Vod test of %s timed out, potential deadlock! ctxErr=%q err=%q", cvt.host, ctxErr, err)
+			msg := fmt.Sprintf("Test of VOD on %s timed out, potential deadlock! ctxErr=%q err=%q", cvt.host, ctxErr, err)
 			messenger.SendFatalMessage(msg)
 		} else if err != nil || es != 0 {
-			var re *testers.RTMPError
-			if errors.As(err, &re) && try < 4 {
-				msg := fmt.Sprintf(":rotating_light: Test of %s ended with RTMP err=%v errCode=%v try=%d, trying %s time",
-					cvt.host, err, es, try, getNth(try+2))
-				messenger.SendMessage(msg)
-				try++
-				time.Sleep(10 * time.Second)
-				continue
-			}
-			if notRtmpTry < 3 {
-				msg := fmt.Sprintf(":rotating_light: Test of %s ended with some err=%v errCode=%v try=%d, trying %s time",
-					cvt.host, err, es, notRtmpTry, getNth(notRtmpTry+2))
-				messenger.SendMessage(msg)
-				notRtmpTry++
-				time.Sleep(5 * time.Second)
-				continue
-			}
-			msg := fmt.Sprintf(":rotating_light: Test of %s ended with err=%v errCode=%v", cvt.host, err, es)
+			msg := fmt.Sprintf(":rotating_light: Test of VOD on %s ended with err=%v errCode=%v", cvt.host, err, es)
 			messenger.SendFatalMessage(msg)
 			glog.Warning(msg)
 			cvt.sendPagerdutyEvent(vt, err)
 		} else {
-			msg := fmt.Sprintf(":white_check_mark: Test of %s succeeded", cvt.host)
+			msg := fmt.Sprintf(":white_check_mark: Test of VOD on %s succeeded", cvt.host)
 			messenger.SendMessage(msg)
 			glog.Info(msg)
 			cvt.sendPagerdutyEvent(vt, nil)
 		}
-		try = 0
-		notRtmpTry = 0
-		glog.Infof("Waiting %s before next test", pauseBetweenTests)
+		glog.Infof("Waiting %s before next test of VOD", pauseBetweenTests)
 		select {
 		case <-cvt.ctx.Done():
-			messenger.SendMessage(fmt.Sprintf("Continuous vod test of %s cancelled", cvt.host))
+			messenger.SendMessage(fmt.Sprintf("Continuous test of VOD on %s cancelled", cvt.host))
 			return err
 		case <-time.After(pauseBetweenTests):
 		}
@@ -147,7 +124,7 @@ func (cvt *continuousVodTester) sendPagerdutyEvent(vt IVodTester, err error) {
 		Source:    cvt.host,
 		Component: cvt.pagerDutyComponent,
 		Severity:  severity,
-		Summary:   fmt.Sprintf("%s:movie_camera: %s for `%s` error: %v", lopriPrefix, cvt.pagerDutyComponent, cvt.host, err),
+		Summary:   fmt.Sprintf("%s:movie_camera: VOD %s for `%s` error: %v", lopriPrefix, cvt.pagerDutyComponent, cvt.host, err),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 	resp, err := pagerduty.ManageEvent(event)

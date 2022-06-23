@@ -2,6 +2,8 @@ package vodtester
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/golang/glog"
@@ -12,10 +14,9 @@ type (
 	// IVodTester ...
 	IVodTester interface {
 		// Start start test. Blocks until finished.
-		Start(fileName string, testDuration, pauseDuration time.Duration) (int, error)
+		Start(fileName string, taskPollDuration time.Duration) (int, error)
 		Cancel()
 		Done() <-chan struct{}
-		Clean()
 	}
 
 	VodTesterOptions struct {
@@ -40,25 +41,26 @@ func NewVodTester(gctx context.Context, opts VodTesterOptions) IVodTester {
 	return vt
 }
 
-func (vt *vodTester) Start(fileUrl string, testDuration, pauseDuration time.Duration) (int, error) {
+func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int, error) {
 	defer vt.cancel()
 	var (
 		err       error
 		startTime = time.Now()
 	)
 
-	assetName := "vod-test-asset"
+	hostName, _ := os.Hostname()
+	assetName := fmt.Sprintf("vod_test_asset_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	importAsset, importTask, err := vt.lapi.ImportAsset(fileUrl, assetName)
 	if err != nil {
-		glog.Errorf("Error creating import task err=%v", err)
-		return 242, err
+		glog.Errorf("Error importing asset err=%v", err)
+		return 242, fmt.Errorf("Error importing asset: %w", err)
 	}
 	glog.Infof("Importing asset taskId=%s outputAssetId=%s", importTask.ID, importAsset.ID)
 
 	startTime = time.Now()
 	for {
-		glog.Infof("Waiting %s for import assetId=%s, elapsed=%s", pauseDuration, importAsset.ID, time.Since(startTime))
-		time.Sleep(pauseDuration)
+		glog.Infof("Waiting %s for import assetId=%s, elapsed=%s", taskPollDuration, importAsset.ID, time.Since(startTime))
+		time.Sleep(taskPollDuration)
 
 		if err = vt.isCancelled(); err != nil {
 			return 0, err
@@ -67,28 +69,28 @@ func (vt *vodTester) Start(fileUrl string, testDuration, pauseDuration time.Dura
 		asset, err := vt.lapi.GetAsset(importAsset.ID)
 		if err != nil {
 			glog.Errorf("Error retrieving asset id=%s err=%v", importAsset.ID, err)
-			return 243, err
+			return 243, fmt.Errorf("Error retrieving asset id=%s: %w", importAsset.ID, err)
 		}
 		if asset.Status.Phase == "ready" {
 			break
 		}
 		if asset.Status.Phase != "waiting" {
 			glog.Errorf("Error importing asset assetId=%s, task id=%s err=%v", importAsset.ID, importTask.ID, err)
-			return 244, err
+			return 244, fmt.Errorf("Error importing asset assetId=%s, task id=%s: %w", importAsset.ID, importTask.ID, err)
 		}
 	}
 
 	transcodeAsset, transcodeTask, err := vt.lapi.TranscodeAsset(importAsset.ID, assetName, api.StandardProfiles[0])
 	if err != nil {
-		glog.Errorf("Error creating transcode task err=%v", err)
-		return 242, err
+		glog.Errorf("Error transcoding asset id=%s, err=%v", importAsset.ID, err)
+		return 242, fmt.Errorf("Error transcoding asset id=%s: %w", importAsset.ID, err)
 	}
 	glog.Infof("Asset imported id=%s, transcoding taskId=%s outputAssetId=%s", importAsset.ID, transcodeTask.ID, transcodeAsset.ID)
 
 	startTime = time.Now()
 	for {
-		glog.Infof("Waiting %s for transcode assetId=%s outputAssetId=%s, elapsed=%s", pauseDuration, importAsset.ID, transcodeAsset.ID, time.Since(startTime))
-		time.Sleep(pauseDuration)
+		glog.Infof("Waiting %s for transcode assetId=%s outputAssetId=%s, elapsed=%s", taskPollDuration, importAsset.ID, transcodeAsset.ID, time.Since(startTime))
+		time.Sleep(taskPollDuration)
 
 		if err = vt.isCancelled(); err != nil {
 			return 0, err
@@ -97,28 +99,28 @@ func (vt *vodTester) Start(fileUrl string, testDuration, pauseDuration time.Dura
 		asset, err := vt.lapi.GetAsset(transcodeAsset.ID)
 		if err != nil {
 			glog.Errorf("Error retrieving asset id=%s err=%v", transcodeAsset.ID, err)
-			return 243, err
+			return 243, fmt.Errorf("Error retrieving asset id=%s: %w", transcodeAsset.ID, err)
 		}
 		if asset.Status.Phase == "ready" {
 			break
 		}
 		if asset.Status.Phase != "waiting" {
 			glog.Errorf("Error transcoding asset assetId=%s, task id=%s outputAssetId=%s err=%v", importAsset.ID, transcodeTask.ID, transcodeAsset.ID, err)
-			return 244, err
+			return 244, fmt.Errorf("Error transcoding asset assetId=%s, task id=%s outputAssetId=%s: %w", importAsset.ID, transcodeTask.ID, transcodeAsset.ID, err)
 		}
 	}
 
 	exportTask, err := vt.lapi.ExportAsset(importAsset.ID)
 	if err != nil {
-		glog.Errorf("Error creating export task err=%v", err)
-		return 245, err
+		glog.Errorf("Error exporting asset id=%s err=%v", importAsset.ID, err)
+		return 245, fmt.Errorf("Error exporting asset id=%s: %w", importAsset.ID, err)
 	}
 	glog.Infof("Transcode complete assetId=%s ready, exporting assetId=%s, taskId=%s", transcodeAsset.ID, importAsset.ID, exportTask.ID)
 
 	startTime = time.Now()
 	for {
-		glog.Infof("Waiting %s for asset id=%s to be exported, elapsed=%s", pauseDuration, transcodeAsset.ID, time.Since(startTime))
-		time.Sleep(pauseDuration)
+		glog.Infof("Waiting %s for asset id=%s to be exported, elapsed=%s", taskPollDuration, transcodeAsset.ID, time.Since(startTime))
+		time.Sleep(taskPollDuration)
 		if err = vt.isCancelled(); err != nil {
 			return 0, err
 		}
@@ -126,7 +128,7 @@ func (vt *vodTester) Start(fileUrl string, testDuration, pauseDuration time.Dura
 		task, err := vt.lapi.GetTask(exportTask.ID)
 		if err != nil {
 			glog.Errorf("Error retrieving task id=%s err=%v", exportTask.ID, err)
-			return 246, err
+			return 246, fmt.Errorf("Error retrieving task id=%s: %w", exportTask.ID, err)
 		}
 		if task.Output.Export.IPFS.VideoFileGatewayUrl != "" {
 			glog.Infof("Export success, task id=%s assetId=%s ipfs link=%s", exportTask.ID, exportTask.InputAssetID, task.Output.Export.IPFS.VideoFileGatewayUrl)
@@ -136,7 +138,7 @@ func (vt *vodTester) Start(fileUrl string, testDuration, pauseDuration time.Dura
 
 	glog.Info("Done VOD Test")
 
-	return 0, err
+	return 0, nil
 }
 
 func (vt *vodTester) isCancelled() error {
@@ -154,8 +156,4 @@ func (vt *vodTester) Cancel() {
 
 func (vt *vodTester) Done() <-chan struct{} {
 	return vt.ctx.Done()
-}
-
-func (rt *vodTester) Clean() {
-	// TODO
 }
