@@ -96,6 +96,7 @@ func (cvt *continuousVodTester) Start(fileName string, testDuration, taskPollDur
 		case <-time.After(pauseBetweenTests):
 		}
 	}
+	return nil
 }
 
 func (cvt *continuousVodTester) sendPagerdutyEvent(vt IVodTester, err error) {
