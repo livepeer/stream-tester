@@ -134,6 +134,10 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 			glog.Infof("Export success, task id=%s assetId=%s ipfs link=%s", exportTask.ID, exportTask.InputAssetID, task.Output.Export.IPFS.VideoFileGatewayUrl)
 			break
 		}
+		if task.Status.Phase == "completed" {
+			glog.Errorf("Error exporting asset task id=%s", exportTask.ID)
+			return 247, fmt.Errorf("error export failed, task id=%s assetId=%s", exportTask.ID, exportTask.InputAssetID)
+		}
 	}
 
 	glog.Info("Done VOD Test")
