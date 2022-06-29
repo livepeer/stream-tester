@@ -75,8 +75,8 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 			break
 		}
 		if asset.Status.Phase != "waiting" {
-			glog.Errorf("Error importing asset assetId=%s, task id=%s err=%v", importAsset.ID, importTask.ID, err)
-			return 244, fmt.Errorf("error importing asset assetId=%s, task id=%s: %w", importAsset.ID, importTask.ID, err)
+			glog.Errorf("Error importing asset assetId=%s, taskId=%s, status=%s, err=%v", importAsset.ID, importTask.ID, importAsset.Status.Phase, importAsset.Status.ErrorMessage)
+			return 244, fmt.Errorf("error importing asset assetId=%s, taskId=%s, status=%s, err=%v", importAsset.ID, importTask.ID, importAsset.Status.Phase, importAsset.Status.ErrorMessage)
 		}
 	}
 
