@@ -75,8 +75,8 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 			break
 		}
 		if asset.Status.Phase != "waiting" {
-			glog.Errorf("Error importing asset assetId=%s, taskId=%s, status=%s, err=%v", importAsset.ID, importTask.ID, importAsset.Status.Phase, importAsset.Status.ErrorMessage)
-			return 244, fmt.Errorf("error importing asset assetId=%s, taskId=%s, status=%s, err=%v", importAsset.ID, importTask.ID, importAsset.Status.Phase, importAsset.Status.ErrorMessage)
+			glog.Errorf("Error importing asset assetId=%s, taskId=%s, status=%s, err=%v", asset.ID, importTask.ID, asset.Status.Phase, asset.Status.ErrorMessage)
+			return 244, fmt.Errorf("error importing asset assetId=%s, taskId=%s, status=%s, err=%v", asset.ID, importTask.ID, asset.Status.Phase, asset.Status.ErrorMessage)
 		}
 	}
 
@@ -105,8 +105,8 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 			break
 		}
 		if asset.Status.Phase != "waiting" {
-			glog.Errorf("Error transcoding asset assetId=%s, taskId=%s, outputAssetId=%s, status=%s, err=%v", importAsset.ID, transcodeTask.ID, transcodeAsset.ID, asset.Status.Phase, asset.Status.ErrorMessage)
-			return 244, fmt.Errorf("error transcoding asset assetId=%s, taskId=%s, outputAssetId=%s, status=%s, err=%v", importAsset.ID, transcodeTask.ID, transcodeAsset.ID, asset.Status.Phase, asset.Status.ErrorMessage)
+			glog.Errorf("Error transcoding asset assetId=%s, taskId=%s, outputAssetId=%s, status=%s, err=%v", importAsset.ID, transcodeTask.ID, asset.ID, asset.Status.Phase, asset.Status.ErrorMessage)
+			return 244, fmt.Errorf("error transcoding asset assetId=%s, taskId=%s, outputAssetId=%s, status=%s, err=%v", importAsset.ID, transcodeTask.ID, asset.ID, asset.Status.Phase, asset.Status.ErrorMessage)
 		}
 	}
 
@@ -132,15 +132,15 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 		}
 		if task.Status.Phase == "completed" {
 			if task.Output != nil && task.Output.Export != nil && task.Output.Export.IPFS != nil && task.Output.Export.IPFS.VideoFileGatewayUrl != "" {
-				glog.Infof("Export success, taskId=%s assetId=%s ipfsLink=%s", exportTask.ID, exportTask.InputAssetID, task.Output.Export.IPFS.VideoFileGatewayUrl)
+				glog.Infof("Export success, taskId=%s assetId=%s ipfsLink=%s", task.ID, task.InputAssetID, task.Output.Export.IPFS.VideoFileGatewayUrl)
 				break
 			}
-			glog.Errorf("Error exporting asset, completed without ipfsLink taskId=%s assetId=%s", exportTask.ID, exportTask.InputAssetID)
-			return 247, fmt.Errorf("error exporting asset, completed without ipfsLink, taskId=%s assetId=%s", exportTask.ID, exportTask.InputAssetID)
+			glog.Errorf("Error exporting asset, completed without ipfsLink taskId=%s assetId=%s", task.ID, task.InputAssetID)
+			return 247, fmt.Errorf("error exporting asset, completed without ipfsLink, taskId=%s assetId=%s", task.ID, task.InputAssetID)
 		}
 		if task.Status.Phase != "pending" {
-			glog.Errorf("Error exporting asset, taskId=%s assetId=%s status=%s error=%v", exportTask.ID, exportTask.InputAssetID, exportTask.Status.Phase, exportTask.Status.ErrorMessage)
-			return 248, fmt.Errorf("error exporting asset, taskId=%s assetId=%s status=%s error=%v", exportTask.ID, exportTask.InputAssetID, exportTask.Status.Phase, exportTask.Status.ErrorMessage)
+			glog.Errorf("Error exporting asset, taskId=%s assetId=%s status=%s error=%v", task.ID, task.InputAssetID, task.Status.Phase, task.Status.ErrorMessage)
+			return 248, fmt.Errorf("error exporting asset, taskId=%s assetId=%s status=%s error=%v", task.ID, task.InputAssetID, task.Status.Phase, task.Status.ErrorMessage)
 		}
 	}
 
