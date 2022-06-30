@@ -138,7 +138,7 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 			glog.Errorf("Error exporting asset, completed without ipfsLink taskId=%s assetId=%s", task.ID, task.InputAssetID)
 			return 247, fmt.Errorf("error exporting asset, completed without ipfsLink, taskId=%s assetId=%s", task.ID, task.InputAssetID)
 		}
-		if task.Status.Phase != "pending" {
+		if task.Status.Phase != "pending" && task.Status.Phase != "running" && task.Status.Phase != "waiting" {
 			glog.Errorf("Error exporting asset, taskId=%s assetId=%s status=%s error=%v", task.ID, task.InputAssetID, task.Status.Phase, task.Status.ErrorMessage)
 			return 248, fmt.Errorf("error exporting asset, taskId=%s assetId=%s status=%s error=%v", task.ID, task.InputAssetID, task.Status.Phase, task.Status.ErrorMessage)
 		}
