@@ -192,11 +192,6 @@ func (rs *rtmpStreamer) StartUpload(fn, rtmpURL string, streamDuration, waitForT
 		rs.cancel()
 	}()
 
-	// pio.RecommendBufioSize = 1024 * 8
-	// rtmp.Debug = true
-	// rtmp.Debug2 = true
-	// conn, err := rtmp.Dial("rtmp://localhost:1935/" + manifestID)
-	// conn, err := rtmp.Dial(rtmpURL)
 	started := time.Now()
 	rs.started = started
 	for {

@@ -49,9 +49,7 @@ type httpStreamer struct {
 
 type httpStats struct {
 	triedToSend       int
-	sent              int
 	failedToSend      int
-	downloaded        int
 	downloadFailures  int
 	transcodeFailures int
 	success           int

@@ -20,7 +20,6 @@ import (
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/peterbourgon/ff/v2/ffcli"
-	"golang.org/x/net/http2"
 )
 
 const httpTimeout = 16 * time.Second
@@ -28,11 +27,6 @@ const mistPort = 4242
 
 var httpClient = &http.Client{
 	Timeout: httpTimeout,
-}
-
-var http2Client = &http.Client{
-	Transport: &http2.Transport{},
-	Timeout:   httpTimeout,
 }
 
 func main() {

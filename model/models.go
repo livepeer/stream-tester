@@ -53,14 +53,6 @@ var FailHardOnBadSegments bool
 // ExitCode exit code
 var ExitCode int
 
-// InfinitePuller interface
-/*
-type InfinitePuller interface {
-	// Start blocks
-	Start()
-}
-*/
-
 // IFinite public interface
 type IFinite interface {
 	Done() <-chan struct{}
@@ -105,17 +97,9 @@ type StreamStarter func(ctx context.Context, sourceFileName string, waitForTarge
 // Streamer interface (deprecated)
 type Streamer interface {
 	IFinite
-	// StartStreams2(sourceFileName, traceID string, streamDuration time.Duration) error
-	// StartStreams old one, shouldn't be used
 	StartStreams(sourceFileName, bhost, rtmpPort, mhost, mediaPort string, simStreams, repeat uint, streamDuration time.Duration,
 		notFinal, measureLatency, noBar bool, groupStartBy int, startDelayBetweenGroups, waitForTarget time.Duration) (string, error)
 	Stats(basedManifestID string) (*Stats, error)
-	// StatsFormatted() string
-	// DownStatsFormatted() string
-	// AnalyzeFormatted(short bool) string
-	// Done() <-chan struct{}
-	// // Stop() // Stop active streams
-	// Cancel()
 }
 
 // Latencies contains latencies
@@ -310,16 +294,7 @@ Bytes dowloaded:                         %12d`, st.RTMPstreams, st.MediaStreams,
 		st.SentKeyFrames, st.DownloadedKeyFrames, st.DownloadedSourceSegments, st.DownloadedTranscodedSegments, st.SuccessRate2, st.BytesDownloaded)
 	if len(st.Errors) > 0 {
 		r += "\n"
-		// r = fmt.Sprintf("%s\nErrors: %+v\n", r, st.Errors)
 	}
-	/* disable temporarily
-	if len(st.RawTranscodeLatenciesPerStream) > 0 {
-		r += "\nTranscode latencies per stream:\n"
-		for _, rtl := range st.RawTranscodeLatenciesPerStream {
-			r += formatLatenciesSlice(rtl) + "\n"
-		}
-	}
-	*/
 	return r
 }
 
@@ -343,19 +318,4 @@ func (st *Stats) FormatErrorsForConsole() string {
 func (ls *Latencies) String() string {
 	r := fmt.Sprintf(`{Average: %s, P50: %s, P95: %s, P99: %s}`, ls.Avg, ls.P50, ls.P95, ls.P99)
 	return r
-}
-
-func formatLatenciesSlice(lat []time.Duration) string {
-	var buf []string
-	if len(lat) < 17 {
-		return fmt.Sprintf("%+v", lat)
-	}
-	for i := 0; i < 8; i++ {
-		buf = append(buf, fmt.Sprintf("%s", lat[i]))
-	}
-	buf = append(buf, "...")
-	for i := len(lat) - 9; i < len(lat); i++ {
-		buf = append(buf, fmt.Sprintf("%s", lat[i]))
-	}
-	return "[" + strings.Join(buf, " ") + "]"
 }

@@ -127,9 +127,6 @@ func (bm *broadcasterMetrics) avg(m string) float64 {
 }
 
 func (bm *broadcasterMetrics) errorCount() map[string]int {
-	bm.mu.Lock()
-	bm.mu.Unlock()
-
 	res := map[string]int{}
 	for key, value := range bm.incErrs {
 		res[key] = value

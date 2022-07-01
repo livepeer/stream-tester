@@ -12,7 +12,6 @@ import (
 // SaveNewStreams monitors /status endpoint of provided broadcasters, and then 1 new stream
 // arrives - pulls it and save to files
 func SaveNewStreams(ctx context.Context, broadcasters ...string) {
-
 	if len(broadcasters) == 0 {
 		panic("no broadcasters provided")
 	}

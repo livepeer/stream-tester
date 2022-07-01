@@ -77,7 +77,6 @@ func main() {
 	apiToken := flag.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	apiServer := flag.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
 	lapiFlag := flag.Bool("lapi", false, "Use Livepeer API to create streams. api-token should be specified")
-	presets := flag.String("presets", "", "Comma separate list of transcoding profiels to use along with Livepeer API")
 	skipTime := flag.Duration("skip-time", 0, "Skips first x(s|m)")
 	picartoFlag := flag.Bool("picarto", false, "Do Picarto-pull testing")
 	adult := flag.Bool("adult", false, "Adult Picarto")
@@ -110,16 +109,12 @@ func main() {
 	fmt.Printf("Production: %v\n", model.Production)
 
 	if *version {
-		// fmt.Println("Stream tester version: " + model.Version)
-		// fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 		return
 	}
 	if *latencyThreshold > 0 {
 		*latency = true
 	}
 	metrics.InitCensus(hostName, model.Version, "streamtester")
-	// codec.MTest()
-	// return
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
 	messenger.Init(gctx, *discordURL, *discordUserName, *discordUsersToNotify, *botToken, *channelID, *apiToken)
 	defer time.Sleep(2 * time.Second)
@@ -153,12 +148,7 @@ func main() {
 			testers.IgnoreNoCodecError = true
 			testers.IgnoreTimeDrift = true
 		}
-		// puller := testers.NewInfinitePuller(gctx, *infinitePull, *save, *wowza, *mist)
-		// puller.Start()
 		glog.Infof(`Starting infinite pull from %s`, *infinitePull)
-		// messenger.SendMessage(msg)
-		// sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
-		// sr2.StartPulling(*mediaURL)
 		started := time.Now()
 		var wg sync.WaitGroup
 		for i := 0; i < int(*sim); i++ {
@@ -225,8 +215,6 @@ func main() {
 
 		mc := testers.NewMistController(*bhost, int(*picartoStreams), *profiles, *adult, *gaming, *save, mapi,
 			*picartoBlackList, *picartoExternalHost, *picartoStatsInterval, *picartoSDCutOff, *picartoCountry)
-		// emsg := fmt.Sprintf("Starting **%d** Picarto streams (ver %s)", *picartoStreams, model.Version)
-		// messenger.SendMessage(emsg)
 		go startWebServer() // needed for /metrics endpoint
 
 		err = mc.Start()
@@ -242,26 +230,9 @@ func main() {
 		time.Sleep(time.Second)
 		return
 	}
-	// var streamDuration time.Duration
-	// if *stime != "" {
-	// 	if streamDuration, err = server.ParseStreamDurationArgument(*stime); err != nil {
-	// 		panic(err)
-	// 	}
-	// 	if *repeat > 1 {
-	// 		// glog.Fatal("Can't set both -time and -repeat.")
-	// 	}
-	// }
 
 	if *mediaURL != "" && *rtmpURL == "" {
 		glog.Fatal("Should also specifiy -rtmp-url")
-		// glog.Infof(`Starting infinite pull from %s`, *mediaURL)
-		// messenger.SendMessage(msg)
-		// sr2 := testers.NewStreamer2(gctx, *wowza, *mist)
-		// sr2.StartPulling(*mediaURL)
-		// started := time.Now()
-		// downloader := testers.NewM3utester2(gctx, *mediaURL, *wowza, *mist, *save, 15*time.Second, nil) // starts to download at creation
-		// <-downloader.Done()
-		// glog.Infof(`Streaming stopped after %s`, time.Since(started))
 		return
 	}
 	if *rtmpURL != "" {
@@ -285,9 +256,6 @@ func main() {
 		stats, _ := sr2.Stats()
 		fmt.Printf("Stats: %+v\n", stats)
 		os.Exit(model.ExitCode)
-		// to not exit
-		// s := server.NewStreamerServer(*wowza)
-		// s.StartWebServer("localhost:7933")
 		return
 	}
 
@@ -311,25 +279,13 @@ func main() {
 
 		mapi = mistapi.NewMist(*bhost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 		mapi.Login()
-		// mapi.CreateStream("dark1", "P720p30fps16x9")
-		// mapi.DeleteStreams("dark1")
 	}
 	if *lapiFlag {
 		if *apiToken == "" {
 			glog.Fatalf("-api-token should be specified")
 		}
-		if !*httpIngest {
-			// glog.Fatal("Using Livepeer API currently only implemented for HTTP ingest")
-			// glog.Fatal("Using Livepeer API currently only implemented for RTMP ingest")
-			// API webhook doesn't authenicate RTMP streams
-		}
-		if *presets == "" {
-			// glog.Fatal("Presets should be specified")
-		}
 		go startWebServer() // needed for /metrics endpoint
 		hostName, _ := os.Hostname()
-		// presetsParts := strings.Split(*presets, ",")
-		// model.ProfilesNum = len(presetsParts)
 		lapi = livepeer.NewLivepeer(*apiToken, *apiServer, nil)
 		lapi.Init()
 		glog.Infof("Choosen server: %s", lapi.GetServer())
@@ -386,7 +342,6 @@ func main() {
 		os.Exit(model.ExitCode)
 		return
 	}
-	// fmt.Printf("Args: %+v\n", flag.Args())
 	glog.Infof("Starting stream tester %s, file %s number of streams is %d, repeat %d times no bar %v", model.Version, fn, *sim, *repeat, *noBar)
 
 	defer glog.Infof("Exiting")
@@ -406,14 +361,9 @@ func main() {
 				time.Sleep(25 * time.Second)
 				stats, _ := sr.Stats("")
 				fmt.Println(stats.FormatForConsole())
-				// fmt.Println(sr.DownStatsFormatted())
 			}
 		}()
 	}
-	// go func() {
-	// 	time.Sleep(10 * time.Second)
-	// 	sr.Cancel()
-	// }()
 	// Catch interrupt signal to shut down transcoder
 	glog.Infof("Waiting for test to complete")
 	<-sr.Done()
@@ -438,7 +388,6 @@ func main() {
 		}
 	}
 
-	// fmt.Println(sr.AnalyzeFormatted(false))
 	if *latencyThreshold > 0 && stats.TranscodedLatencies.P95 > 0 {
 		// check latencies, report failure or success
 		var msg string
@@ -456,5 +405,4 @@ func main() {
 		s := server.NewStreamerServer(*wowza, "", "", *mistPort)
 		s.StartWebServer(gctx, *serverAddr)
 	}
-	// messenger.SendMessage(sr.AnalyzeFormatted(true))
 }

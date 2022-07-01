@@ -16,11 +16,6 @@ import (
 	"go.opencensus.io/tag"
 )
 
-const (
-	logLevel = 6 // TODO move log levels definitions to separate package
-	// importing `common` package here introduces import cycles
-)
-
 type (
 	censusMetricsCounter struct {
 		nodeID                string

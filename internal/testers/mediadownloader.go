@@ -492,20 +492,11 @@ func (md *mediaDownloader) manifestDownloadLoop() {
 			time.Sleep(time.Second)
 			continue
 		}
-		// if !md.source {
-		// 	fmt.Println("-----################")
-		// 	fmt.Println(string(b))
-		// }
-		// glog.Infoln("-----################")
-		// glog.Infoln(string(b))
-		// err = mpl.DecodeFrom(resp.Body, true)
 		pl, err := m3u8.NewMediaPlaylist(100, 100)
 		if err != nil {
 			glog.Fatal(err)
 		}
 		err = pl.Decode(*bytes.NewBuffer(b), true)
-		// err = pl.DecodeFrom(resp.Body, true)
-		// resp.Body.Close()
 		if err != nil {
 			glog.Fatal(err)
 		}
@@ -523,12 +514,9 @@ func (md *mediaDownloader) manifestDownloadLoop() {
 			md.savePlayList.SeqNo = pl.SeqNo
 			gotManifest = true
 		}
-		// for i := len(pl.Segments) - 1; i >= 0; i--
 		now := time.Now()
 		for i, segment := range pl.Segments {
-			// segment := pl.Segments[i]
 			if segment != nil {
-				// glog.Infof("Segment: %+v", *segment)
 				if md.wowzaMode {
 					// remove Wowza's session id from URL
 					segment.URI = wowzaSessionRE.ReplaceAllString(segment.URI, "_")

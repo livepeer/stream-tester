@@ -119,40 +119,6 @@ func (bot *discordBot) start() {
 	glog.Infof("Bot stopped")
 }
 
-// This function will be called (due to AddHandler above) every time a new
-// message is created on any channel that the autenticated bot has access to.
-func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-
-	// selfMessage := m.Author.ID == s.State.User.ID
-	// glog.Infof("got self=%v message %+m", selfMessage, m)
-	mg := ""
-	if m.Member != nil {
-		mg = m.Member.GuildID
-	}
-	glog.Infof("Channl id %s eq user id %v (my user id %s) mess guild %s member guild %s", m.ChannelID, m.ChannelID == s.State.User.ID, s.State.User.ID,
-		m.GuildID, mg)
-
-	// Ignore all messages created by the bot itself
-	// This isn't required in this specific example but it's a good practice.
-	if m.Author.ID == s.State.User.ID {
-		return
-	}
-	isDirectMessage := m.GuildID == ""
-	if !isDirectMessage {
-		return
-	}
-
-	// If the message is "ping" reply with "Pong!"
-	if m.Content == "ping" {
-		s.ChannelMessageSend(m.ChannelID, "Pong!")
-	}
-
-	// If the message is "pong" reply with "Ping!"
-	if m.Content == "pong" {
-		s.ChannelMessageSend(m.ChannelID, "Ping!")
-	}
-}
-
 // This function will be called (due to AddHandler above) when the bot receives
 // the "ready" event from Discord.
 func ready(s *discordgo.Session, event *discordgo.Ready) {
@@ -164,18 +130,7 @@ func ready(s *discordgo.Session, event *discordgo.Ready) {
 func (bot *discordBot) setupRouter() *exrouter.Route {
 	router := exrouter.New()
 
-	/*
-		router.On("sub", nil).
-			On("sub2", func(ctx *exrouter.Context) {
-				ctx.Reply("sub2 called with arguments:\n", strings.Join(ctx.Args, ";"))
-			}).
-			On("sub3", func(ctx *exrouter.Context) {
-				ctx.Reply("sub3 called with arguments:\n", strings.Join(ctx.Args, ";"))
-			})
-	*/
 	router.On("bstreams", bot.bstreams).Desc("Show active streams across all broadcasters available through API in AC")
-	// router.On("stats", bot.stats)
-	// router.On("img", bot.imgTest)
 
 	router.Default = router.On("help", func(ctx *exrouter.Context) {
 		var f func(depth int, r *exrouter.Route) string
@@ -190,26 +145,6 @@ func (bot *discordBot) setupRouter() *exrouter.Route {
 		ctx.Reply("```" + f(0, router) + "```")
 	}).Desc("prints this help menu")
 	return router
-}
-
-func (bot *discordBot) imgTest(ctx *exrouter.Context) {
-	ctx.Reply("Hello")
-	// ctx.Ses.ChannelMessageSendComplex(ctx.Msg.ChannelID, &discordgo.MessageSend{discordgo.File: &discordgo.File{Name: name, Reader: r}})
-	name := "name01.jpg"
-	contType := "image/jpeg"
-	img := codec.TSFirstImage(nil)
-	if img == nil {
-		return
-	}
-	jpg := utils.Img2Jpeg(img)
-	r := bytes.NewReader(jpg)
-	ctx.Ses.ChannelMessageSendComplex(ctx.Msg.ChannelID, &discordgo.MessageSend{
-		File: &discordgo.File{
-			Name:        name,
-			ContentType: contType,
-			Reader:      r,
-		},
-	})
 }
 
 type streamDesc struct {

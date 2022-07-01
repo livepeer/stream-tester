@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/PagerDuty/go-pagerduty"
@@ -143,13 +142,4 @@ func (cvt *continuousVodTester) Cancel() {
 
 func (cvt *continuousVodTester) Done() <-chan struct{} {
 	return cvt.ctx.Done()
-}
-
-var nth = []string{"0", "first", "second", "third", "forth", "fifth"}
-
-func getNth(i int) string {
-	if i > 0 && i < len(nth) {
-		return nth[i]
-	}
-	return strconv.Itoa(i)
 }
