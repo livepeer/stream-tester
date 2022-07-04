@@ -24,14 +24,12 @@ import (
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/patrickmn/go-cache"
-	"golang.org/x/text/message"
 )
 
 const (
 	// picartoCountry       = "us-east1"
 	hlsURLTemplate       = "http://%s:8080/hls/golive+%s/index.m3u8"
 	baseStreamName       = "golive"
-	streamsStartStep     = 5
 	mainLoopStepDuration = 32 * time.Second
 )
 
@@ -73,7 +71,6 @@ var (
 	// ErrTooBigDurationsDeviation ...
 	ErrTooBigDurationsDeviation = errors.New("Too big deviation of segment's durations")
 
-	mp          = message.NewPrinter(message.MatchLanguage("en"))
 	mhttpClient = &http.Client{
 		// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
 		// Transport: &http2.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: false}},

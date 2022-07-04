@@ -223,17 +223,7 @@ func transcode(apiKey, apiHost, src, dst string, presets []string, lprofile *liv
 
 func main() {
 	flag.Set("logtostderr", "true")
-	// flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	// flag.Parse()
 	flag.CommandLine.Parse(nil)
-	/*
-		vFlag := flag.Lookup("v")
-		verbosity := "6"
-
-		flag.CommandLine.Parse(nil)
-		vFlag.Value.Set(verbosity)
-	*/
-	// var echoTimes int
 	var apiKey, apiHost string
 	var presets string
 	var resolution, frameRate, profile string
@@ -246,7 +236,6 @@ func main() {
 		Long:  `Transcodes video file using Livepeer API.`,
 		Args:  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
-			// fmt.Println("transcode: " + strings.Join(args, " "))
 			var err error
 			inp := args[0]
 			inpExt := filepath.Ext(inp)
@@ -275,8 +264,6 @@ func main() {
 				os.Exit(1)
 			}
 			fmt.Printf("api key %q transcode from %q to %q\n", apiKey, inp, output)
-			// presets := []string{"P144p30fps16x9", "P240p30fps4x3"}
-			// ffmpeg.P720p30fps16x9
 			var presetsAr []string
 			if len(presets) > 0 {
 				presetsAr = strings.Split(presets, ",")

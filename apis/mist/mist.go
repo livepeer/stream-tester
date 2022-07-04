@@ -21,9 +21,6 @@ import (
 const httpTimeout = 2 * time.Second
 
 var httpClient = &http.Client{
-	// Transport: &http2.Transport{TLSClientConfig: tlsConfig},
-	// Transport: &http2.Transport{AllowHTTP: true},
-	// Transport: &http2.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, AllowHTTP: true},
 	Timeout: httpTimeout,
 }
 
@@ -317,7 +314,6 @@ func (mapi *API) CreateStream(name string, presets []string, profiles []Profile,
 		Name:        name,
 		Source:      source,
 		Segmentsize: segmentSize,
-		// Processes:   []*Process{{Process: "Livepeer", AccessToken: mapi.livepeerToken, TargetProfiles: targetProfiles, Leastlive: "1", CustomURL: customURL}},
 	}
 	if !skipTranscoding {
 		audioSelect := ""

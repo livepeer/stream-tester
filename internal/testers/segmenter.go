@@ -17,15 +17,6 @@ import (
 )
 
 // segmenter take video file and cuts it into .ts segments
-// type segmenter struct {
-// 	stopAtFileEnd bool
-// }
-
-// func newSegmenter(stopAtFileEnd bool) *segmenter {
-// 	return &segmenter{
-// 		stopAtFileEnd: stopAtFileEnd,
-// 	}
-// }
 func StartSegmentingR(ctx context.Context, reader io.ReadSeekCloser, stopAtFileEnd bool, stopAfter, skipFirst, segLen time.Duration,
 	useWallTime bool, out chan<- *model.HlsSegment) error {
 	inFile, err := avutil.OpenRC(reader)

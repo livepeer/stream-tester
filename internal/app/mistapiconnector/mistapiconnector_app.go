@@ -38,7 +38,6 @@ const traefikKeyPathRouters = `traefik/http/routers/`
 const traefikKeyPathServices = `traefik/http/services/`
 const traefikKeyPathMiddlewares = `traefik/http/middlewares/`
 const audioAlways = "always"
-const audioNever = "never"
 const audioRecord = "record"
 const audioEnabledStreamSuffix = "rec"
 const etcdDialTimeout = 5 * time.Second

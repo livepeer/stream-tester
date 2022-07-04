@@ -173,9 +173,6 @@ func (mut *m3utester2) VODStats() model.VODStats {
 	}
 	// glog.Infof("==> all results: %+v", mut.allResults)
 	for resolution, drs := range mut.allResults {
-		if mut.sourceRes == resolution {
-		} else {
-		}
 		for _, seg := range drs {
 			vs.SegmentsDur[resolution] += seg.duration
 			vs.SegmentsNum[resolution]++
@@ -403,40 +400,17 @@ func (mut *m3utester2) workerLoop() {
 					}
 				}
 			}
-			// debug print
-			/*
-				if len(correspondingSegments) > 1 {
-					glog.Infof("=======>>> Corresponding segments for %s (%d segs)", dres.String(), len(correspondingSegments))
-					for _, res := range seenResolutions {
-						if seg, has := correspondingSegments[res]; has {
-							// glog.Infof("=====> %s", seg.String2())
-							fmt.Printf("=====> %s\n", seg.String2())
-						}
-					}
-				}
-					glog.Infof("=======>>> segments by time at first ")
-					for _, res := range seenResolutions {
-						for _, seg := range results[res] {
-							// glog.Infof("=====> %s", seg.String2())
-							fmt.Printf("=====> %s\n", seg.String2())
-						}
-					}
-			*/
 			// check for drift
-			// glog.Infof("=====> seen resolutions: %+v", seenResolutions)
 			for i := 0; i < len(seenResolutions)-1; i++ {
 				for j := i + 1; j < len(seenResolutions); j++ {
 					res1 := seenResolutions[i]
 					res2 := seenResolutions[j]
-					// glog.Infof("===> i %d j %d res1 %s res2 %s", i, j, res1, res2)
 					seg1, has1 := correspondingSegments[res1]
 					seg2, has2 := correspondingSegments[res2]
 					if has1 && has2 {
 						if diff := absTimeTiff(seg1.startTime, seg2.startTime); diff > 4*time.Second {
 							msg := fmt.Sprintf("Too big (%s) time difference between %s stream (time %s seqNo %d) and %s stream (time %s seqNo %d)",
 								diff, res1, seg1.startTime, seg1.seqNo, res2, seg2.startTime, seg2.seqNo)
-							// glog.Info("================#########>>>>>>")
-							// glog.Info(msg)
 							if !IgnoreTimeDrift {
 								mut.fatalEnd(errors.New(msg))
 								return
@@ -448,36 +422,11 @@ func (mut *m3utester2) workerLoop() {
 								}
 								lastTimeDriftReportTime = time.Now()
 							}
-							// if problems > 100 {
-							// 	panic(msg)
-							// }
 							problems++
 						}
 					}
 				}
 			}
-			/*
-				for ri := 0; ri <= len(seenResolutions); ri++ {
-					// if resolution == dres.resolution {
-					// 	continue
-					// }
-
-					resolution1 := seenResolutions[i]
-					// find corresponding segment
-					for i := len(ress) - 1; i >= 0; i-- {
-						cseg := ress[i]
-						if isTimeEqualT(dres.appTime, cseg.appTime) {
-							glog.Infof("=======>>> Corresponding segments:\n%s\n%s\n", dres.String(), cseg.String())
-							diff := absTimeTiff(dres.startTime, cseg.startTime)
-							if diff > 2*time.Second {
-								// msg := fmt.Sprintf("\nTime drift detected: %s : %s\ndiff: %d", dres.String(), cseg.String(), diff)
-								// mut.fatalEnd(msg)
-							}
-						}
-						break
-					}
-				}
-			*/
 		}
 	}
 }
@@ -485,10 +434,8 @@ func (mut *m3utester2) workerLoop() {
 func (f *finite) fatalEnd(err error) {
 	f.globalError = err
 	model.ExitCode = 127
-	// glog.Error(msg)
 	messenger.SendFatalMessage(err.Error())
 	f.cancel()
-	// panic(msg)
 }
 
 func (f *finite) Done() <-chan struct{} {
@@ -612,10 +559,6 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			continue
 		}
 		gpl, plt, err := m3u8.Decode(*bytes.NewBuffer(b), true)
-		// glog.Infof("playlist type is %d", plt)
-		// err = mpl.DecodeFrom(resp.Body, true)
-		// mpl := m3u8.NewMasterPlaylist()
-		// err = mpl.Decode(*bytes.NewBuffer(b), true)
 		if err != nil {
 			glog.Error("===== error parsing master playlist: ", err)
 			// glog.Error(err)
@@ -828,9 +771,6 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					rdur, downloadedSegmentsTotalDuration, successRate, successRateRounded, firstSegmentPTS, rlt)
 				successRate = successRateRounded
 			}
-			// dres.data = nil
-			// glog.Infof("downloaded: %+v", *dres)
-			// glog.Infof("downloaded task: %+v", *dres.task)
 			if ms.save {
 				_, segFileName := filepath.Split(dres.name)
 				fullSegFileName := filepath.Join(ms.saveDirName, segFileName)
@@ -1025,14 +965,6 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 			return
 		}
 		pl := gpl.(*m3u8.MediaPlaylist)
-		// pl, err := m3u8.NewMediaPlaylist(100, 100)
-		// if err != nil {
-		// 	glog.Fatal(err)
-		// }
-		// err = pl.Decode(*bytes.NewBuffer(b), true)
-		// if err != nil {
-		// 	glog.Fatal(err)
-		// }
 		if !gotManifest && ms.save {
 			ms.savePlayList.TargetDuration = pl.TargetDuration
 			ms.savePlayList.SeqNo = pl.SeqNo
@@ -1040,9 +972,6 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 		}
 		glog.V(model.VVERBOSE).Infof("Got media playlist %s with %d (really %d (%d)) segments of url %s:", ms.resolution, len(pl.Segments), countSegments(pl), pl.Len(), surl)
 		glog.V(model.INSANE2).Info(string(b))
-		// glog.V(model.VVERBOSE).Info(pl)
-		// glog.Infof("Got media playlist %s with %d (really %d) segments of url %s:", ms.resolution, len(pl.Segments), countSegments(pl), surl)
-		// glog.Info(pl)
 		now := time.Now()
 		var lastTimeDownloadStarted time.Time
 		for i, segment := range pl.Segments {
@@ -1083,10 +1012,8 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 				}
 				lastTimeDownloadStarted = time.Now()
 				now = now.Add(time.Millisecond)
-				// glog.V(model.VERBOSE).Infof("segment %s is of length %f seqId=%d", segment.URI, segment.Duration, segment.SeqId)
 			}
 		}
-		// pl.Live = false
 		if pl.Len() > 0 && (!pl.Live || pl.MediaType == m3u8.EVENT) {
 			// VoD and Event's should show the entire playlist
 			glog.Infof("Playlist %s is VOD, so stopping manifest puller loop", surl)

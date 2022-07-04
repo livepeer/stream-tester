@@ -253,12 +253,7 @@ func sendLoop() {
 						continue
 					}
 				}
-				// if !timer.Stop() {
-				// 	<-timer.C
-				// }
-				// timer.Reset(2 * time.Second)
 				timer = time.NewTimer(2 * time.Second)
-				// glog.Infof("Reset for 2s done")
 				continue
 			}
 		}
@@ -271,32 +266,13 @@ func sendLoop() {
 			frlreset, err := strconv.ParseFloat(rlreset, 64)
 			if err != nil {
 				panic(err)
-				continue
 			}
 			wait := time.Duration(frlreset*1000.0+100.0) * time.Millisecond
 			glog.V(model.VVERBOSE).Infof("Need wait %s", wait)
 			goodAfter = time.Now().Add(wait)
-			// timer.Reset(wait)
 			timer = time.NewTimer(wait)
-			// glog.Infof("Reset for %s done", wait)
-			/*
-				rlreset := headers.Get("X-Ratelimit-Reset")
-				if rlreset == "" {
-					continue
-				}
-				frlreset, err := strconv.ParseFloat(rlreset, 64)
-				if err != nil {
-					continue
-				}
-				nextTime := time.Unix(0, order.Created*int64(time.Millisecond))
-			*/
 
 		} else if len(msgQueue) > 0 {
-			// glog.Infof("Queue not empty")
-			// if !timer.Stop() {
-			// 	<-timer.C
-			// }
-			// timer.Reset(50 * time.Millisecond)
 			timer = time.NewTimer(50 * time.Millisecond)
 		}
 	}
@@ -353,17 +329,8 @@ func postMessage(msg []byte) (int, http.Header) {
 	if webhookURL == "" {
 		return 0, nil
 	}
-	/*
-		dm := &discordMessage{
-			Content:  msg,
-			UserName: userName,
-		}
-		data, _ := json.Marshal(dm)
-		var body io.Reader
-	*/
 	body := bytes.NewReader(msg)
-	// resp, err := http.Post(webhookURL, "application/json", body)
-	req, _ := http.NewRequest("POST", webhookURL, body)
+	req, _ := http.NewRequest(http.MethodPost, webhookURL, body)
 	req.Header.Add("User-Agent", "stream-tester/"+model.Version)
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("X-RateLimit-Precision", "millisecond")
