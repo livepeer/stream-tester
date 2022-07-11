@@ -50,8 +50,10 @@ jobs:
           tags: |
             type=schedule,pattern={{date 'YYYYMMDDHHmmss'}}
             type=ref,event=branch
+            type=ref,event=tag
             type=ref,event=pr
             type=sha
+            type=sha,format=long
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
@@ -73,5 +75,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - uses: actions-ecosystem/action-regex-match@v2
+        id: match-tag
+        with:
+          text: ${{ github.ref_name }}
+          regex: '^(master|main|v[0-9]+\.\d+\.\d+)$'
+
       - name: Notify that new build has been uploaded
+        if: ${{ steps.match-tag.outputs.match != '' }}
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
