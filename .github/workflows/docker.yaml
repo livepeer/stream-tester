@@ -1,4 +1,5 @@
 name: Docker Image CI
+
 on:
   pull_request:
   push:
@@ -21,6 +22,7 @@ jobs:
           {"name": "mist-api-connector", "file": "Dockerfile.mist-api-connector"},
           {"name": "streamtester", "file": "Dockerfile"},
         ]
+
     steps:
       - name: Check out code
         uses: actions/checkout@v3
@@ -31,20 +33,20 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
 
       - name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v4
         with:
           images: livepeer/${{ matrix.arrays.name }}
           tags: |
@@ -56,6 +58,7 @@ jobs:
             type=sha,format=long
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{github.event.pull_request.head.ref}}
 
       - name: Tags
         id: tags
@@ -64,7 +67,7 @@ jobs:
           always-latest-on-branch: master
 
       - name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v3
         with:
           push: true
           build-args: |
@@ -75,12 +78,5 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - uses: actions-ecosystem/action-regex-match@v2
-        id: match-tag
-        with:
-          text: ${{ github.ref_name }}
-          regex: '^(master|main|v[0-9]+\.\d+\.\d+)$'
-
       - name: Notify that new build has been uploaded
-        if: ${{ steps.match-tag.outputs.match != '' }}
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
