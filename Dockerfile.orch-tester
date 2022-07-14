@@ -3,15 +3,12 @@ FROM livepeerci/build AS builder
 RUN apt install -y wget tar
 
 WORKDIR /root
+
 RUN wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
 
-COPY go.mod go.mod
-COPY go.sum go.sum
+COPY go.mod go.sum ./
 
 RUN go mod download
-
-ARG version
-RUN echo $version
 
 COPY . .
 

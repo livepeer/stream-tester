@@ -24,14 +24,6 @@ jobs:
         ]
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          # Check https://github.com/livepeer/go-livepeer/pull/1891
-          # for ref value discussion
-          ref: ${{ github.event.pull_request.head.sha }}
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
@@ -60,18 +52,13 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=${{github.event.pull_request.head.ref}}
 
-      - name: Tags
-        id: tags
-        uses: livepeer/action-gh-release-tags@v0
-        with:
-          always-latest-on-branch: master
-
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
+          platforms: linux/amd64, linux/arm64
           push: true
           build-args: |
-            version=${{ steps.tags.outputs.version }}
+            version=${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           file: ${{ matrix.arrays.file }}
           labels: ${{ steps.meta.outputs.labels }}

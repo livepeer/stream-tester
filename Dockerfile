@@ -1,31 +1,19 @@
 FROM golang:1.17-alpine3.15 as builder
 
-RUN apk add --no-cache make gcc musl-dev linux-headers git
-
-RUN apk add --no-cache git pkgconfig gnutls-dev ffmpeg-dev build-base
+RUN apk add --no-cache make gcc musl-dev linux-headers git pkgconfig gnutls-dev ffmpeg-dev build-base parallel
 
 WORKDIR /root
-RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs.mp4
-RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_3min.mp4
-RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_t02.mp4
-RUN wget https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_2min.mp4
-RUN wget https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s.mp4
-RUN wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
+
+RUN parallel wget https://storage.googleapis.com/lp_testharness_assets/{} ::: official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs_3min.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4 official_test_source_2s_keys_24pfs_30s.mp4 \
+    && wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
 
 ARG version
 
-COPY go.mod go.mod
-COPY go.sum go.sum
+COPY go.mod go.sum ./
 
 RUN go mod download
 
-COPY cmd cmd
-COPY internal internal
-COPY model model
-COPY messenger messenger
-COPY apis apis
-
-RUN echo $version
+COPY . .
 
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" -tags h264 cmd/streamtester/streamtester.go
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/testdriver/testdriver.go
@@ -35,9 +23,11 @@ RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$vers
 RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/recordtester/recordtester.go
 
 FROM alpine:3.15.4
+
 RUN apk add --no-cache ca-certificates ffmpeg
 
 WORKDIR /root
+
 COPY --from=builder /root/official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs.mp4
 COPY --from=builder /root/official_test_source_2s_keys_24pfs_3min.mp4 official_test_source_2s_keys_24pfs_3min.mp4
 COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4
