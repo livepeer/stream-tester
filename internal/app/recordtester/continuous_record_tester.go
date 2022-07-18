@@ -158,7 +158,7 @@ func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err erro
 		Source:    crt.host,
 		Component: crt.pagerDutyComponent,
 		Severity:  severity,
-		Summary:   fmt.Sprintf("%s%s %s for `%s` error: %v", componentName, lopriPrefix, crt.pagerDutyComponent, crt.host, err),
+		Summary:   fmt.Sprintf("%s%s %s for `%s` error: %v", lopriPrefix, componentName, crt.pagerDutyComponent, crt.host, err),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 	sid := rt.StreamID()
