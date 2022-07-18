@@ -55,6 +55,7 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 		glog.Errorf("Error importing asset err=%v", err)
 		return 242, fmt.Errorf("error importing asset: %w", err)
 	}
+	defer vt.lapi.DeleteAsset(importAsset.ID)
 	glog.Infof("Importing asset taskId=%s outputAssetId=%s", importTask.ID, importAsset.ID)
 
 	startTime = time.Now()
@@ -85,6 +86,7 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 		glog.Errorf("Error transcoding asset id=%s, err=%v", importAsset.ID, err)
 		return 242, fmt.Errorf("error transcoding asset id=%s: %w", importAsset.ID, err)
 	}
+	defer vt.lapi.DeleteAsset(transcodeAsset.ID)
 	glog.Infof("Asset imported id=%s, transcoding taskId=%s outputAssetId=%s", importAsset.ID, transcodeTask.ID, transcodeAsset.ID)
 
 	startTime = time.Now()
