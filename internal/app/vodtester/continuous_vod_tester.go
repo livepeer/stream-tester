@@ -124,7 +124,7 @@ func (cvt *continuousVodTester) sendPagerdutyEvent(vt IVodTester, err error) {
 		Source:    cvt.host,
 		Component: cvt.pagerDutyComponent,
 		Severity:  severity,
-		Summary:   fmt.Sprintf("%s:movie_camera: VOD %s for `%s` error: %v", lopriPrefix, cvt.pagerDutyComponent, cvt.host, err),
+		Summary:   fmt.Sprintf("%s:vhs: VOD %s for `%s` error: %v", lopriPrefix, cvt.pagerDutyComponent, cvt.host, err),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 	resp, err := pagerduty.ManageEvent(event)

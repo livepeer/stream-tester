@@ -3,7 +3,6 @@ package testers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -21,6 +20,10 @@ type (
 	// AnalyzerByRegion is a map of regions (generally just the base URL) to an
 	// analyzer client configured to connect there.
 	AnalyzerByRegion map[string]client.Analyzer
+
+	StreamHealthError struct {
+		Message string
+	}
 
 	streamHealth struct {
 		finite
@@ -88,7 +91,7 @@ func (h *streamHealth) workerLoop(waitForTarget time.Duration) {
 
 			msg := fmt.Sprintf("Global Stream Health API: stream did not become healthy on global analyzers after `%s`: %s",
 				waitForTarget, strings.Join(aggErrs, "; "))
-			h.fatalEnd(errors.New(msg))
+			h.fatalEnd(StreamHealthError{msg})
 			return
 		}
 	}
@@ -146,4 +149,8 @@ func conditionsStatus(health *data.HealthStatus) []string {
 		}
 	}
 	return failed
+}
+
+func (e StreamHealthError) Error() string {
+	return e.Message
 }

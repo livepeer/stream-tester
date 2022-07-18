@@ -185,7 +185,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		}
 		if srerr != nil {
 			glog.Warningf("Streaming returned error err=%v", srerr)
-			return 3, err
+			return 3, srerr
 		}
 		stats, err := sr2.Stats()
 		if err != nil {
@@ -210,7 +210,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			}
 			if srerr != nil {
 				glog.Warningf("Streaming second returned error err=%v", srerr)
-				return 3, err
+				return 3, srerr
 			}
 			stats, err := sr2.Stats()
 			if err != nil {

@@ -130,10 +130,16 @@ func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err erro
 	if crt.pagerDutyIntegrationKey == "" {
 		return
 	}
+	isStreamHealth := errors.As(err, &testers.StreamHealthError{})
 	severity, lopriPrefix, dedupKey := "error", "", fmt.Sprintf("cont-record-tester:%s", crt.host)
-	if crt.pagerDutyLowUrgency {
+	if crt.pagerDutyLowUrgency || isStreamHealth {
 		severity, lopriPrefix = "warning", "[LOPRI] "
 		dedupKey = "lopri-" + dedupKey
+	}
+	componentName := ":movie_camera: LIVE"
+	if isStreamHealth {
+		dedupKey = "stream-health-" + dedupKey
+		componentName = ":hospital: STREAM_HEALTH"
 	}
 	event := pagerduty.V2Event{
 		RoutingKey: crt.pagerDutyIntegrationKey,
@@ -152,7 +158,7 @@ func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err erro
 		Source:    crt.host,
 		Component: crt.pagerDutyComponent,
 		Severity:  severity,
-		Summary:   fmt.Sprintf("%s:movie_camera: RECORD %s for `%s` error: %v", lopriPrefix, crt.pagerDutyComponent, crt.host, err),
+		Summary:   fmt.Sprintf("%s%s %s for `%s` error: %v", componentName, lopriPrefix, crt.pagerDutyComponent, crt.host, err),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 	sid := rt.StreamID()
