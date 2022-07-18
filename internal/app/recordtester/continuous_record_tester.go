@@ -107,12 +107,18 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			msg := fmt.Sprintf(":rotating_light: Test of %s ended with err=%v errCode=%v", crt.host, err, es)
 			messenger.SendFatalMessage(msg)
 			glog.Warning(msg)
-			crt.sendPagerdutyEvent(rt, err)
+			var sherr testers.StreamHealthError
+			if errors.As(err, &sherr) {
+				err = nil
+			}
+			crt.sendPagerdutyEvent(rt, err, false)
+			crt.sendPagerdutyEvent(rt, sherr, true)
 		} else {
 			msg := fmt.Sprintf(":white_check_mark: Test of %s succeeded", crt.host)
 			messenger.SendMessage(msg)
 			glog.Info(msg)
-			crt.sendPagerdutyEvent(rt, nil)
+			crt.sendPagerdutyEvent(rt, nil, false)
+			crt.sendPagerdutyEvent(rt, nil, true)
 		}
 		try = 0
 		notRtmpTry = 0
@@ -126,11 +132,10 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 	}
 }
 
-func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err error) {
+func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err error, isStreamHealth bool) {
 	if crt.pagerDutyIntegrationKey == "" {
 		return
 	}
-	isStreamHealth := errors.As(err, &testers.StreamHealthError{})
 	severity, lopriPrefix, dedupKey := "error", "", fmt.Sprintf("cont-record-tester:%s", crt.host)
 	if crt.pagerDutyLowUrgency || isStreamHealth {
 		severity, lopriPrefix = "warning", "[LOPRI] "
