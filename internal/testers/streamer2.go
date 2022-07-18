@@ -100,7 +100,7 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 		var (
 			ctx, cancel = context.WithCancel(sr.ctx)
 			testsDone   = onAnyDone(ctx, tests)
-			errs        = []string{}
+			errs        []error
 		)
 		defer cancel()
 		for {
@@ -111,16 +111,11 @@ func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaU
 						sr.globalError = err
 						time.AfterFunc(waitForTarget, cancel)
 					}
-					errs = append(errs, err.Error())
+					errs = append(errs, err)
 				}
 			case <-ctx.Done():
-				if len(errs) > 0 {
-					msg := errs[0]
-					if len(errs) > 1 {
-						sortErrs(errs)
-						msg = "Multiple errors: " + strings.Join(errs, "; ")
-					}
-					sr.fatalEnd(errors.New(msg))
+				if err := joinErrors(errs); err != nil {
+					sr.fatalEnd(err)
 				}
 				return
 			}
@@ -152,10 +147,23 @@ func onAnyDone(ctx context.Context, finites []Finite) <-chan Finite {
 	return finished
 }
 
-func sortErrs(errs []string) {
+func joinErrors(errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	} else if len(errs) == 1 {
+		return errs[0]
+	}
+	sortErrs(errs)
+	msgs := make([]string, len(errs))
+	for i, err := range errs {
+		msgs[i] = err.Error()
+	}
+	return fmt.Errorf("Multiple errors: %s", strings.Join(msgs, "; "))
+}
+
+func sortErrs(errs []error) {
 	sortIdx := func(idx int) int {
-		err := strings.ToLower(errs[idx])
-		if strings.Contains(err, "health") {
+		if errors.As(errs[idx], &StreamHealthError{}) {
 			// stream health errs should go last. they're never the root cause when
 			// there are multiple errors.
 			return 1
@@ -166,7 +174,7 @@ func sortErrs(errs []string) {
 		if si1, si2 := sortIdx(idx1), sortIdx(idx2); si1 != si2 {
 			return si1 < si2
 		}
-		return errs[idx1] < errs[idx2]
+		return errs[idx1].Error() < errs[idx2].Error()
 	})
 }
 
