@@ -18,6 +18,7 @@ jobs:
         arrays: [
           {"name": "loadtester", "file": "Dockerfile.load-tester"},
           {"name": "record-tester", "file": "Dockerfile.record-tester"},
+          {"name": "orch-tester", "file": "Dockerfile.orch-tester"},
           {"name": "mist-api-connector", "file": "Dockerfile.mist-api-connector"},
           {"name": "streamtester", "file": "Dockerfile"},
         ]
