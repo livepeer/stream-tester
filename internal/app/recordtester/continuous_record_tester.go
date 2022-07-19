@@ -107,9 +107,9 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			msg := fmt.Sprintf(":rotating_light: Test of %s ended with err=%v errCode=%v", crt.host, err, es)
 			messenger.SendFatalMessage(msg)
 			glog.Warning(msg)
-			var sherr testers.StreamHealthError
-			if errors.As(err, &sherr) {
-				err = nil
+			var sherr error
+			if errors.As(err, &testers.StreamHealthError{}) {
+				sherr, err = err, nil
 			}
 			crt.sendPagerdutyEvent(rt, err, false)
 			crt.sendPagerdutyEvent(rt, sherr, true)
