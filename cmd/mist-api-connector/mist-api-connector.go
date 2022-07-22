@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	mistapi "github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/app/mistapiconnector"
 	"github.com/livepeer/stream-tester/internal/metrics"
-	"github.com/livepeer/livepeer-data/pkg/mistconnector"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
 	"github.com/peterbourgon/ff"
@@ -39,6 +39,7 @@ func main() {
 	mistPort := fs.Uint("mist-port", 4242, "Port of the Mist server")
 	mistCreds := fs.String("mist-creds", "", "login:password of the Mist server")
 	mistConnectTimeout := fs.Duration("mist-connect-timeout", 5*time.Minute, "Max time to wait attempting to connect to Mist server")
+	mistStreamSource := fs.String("mist-stream-source", "push://", "Stream source we should use for created Mist stream")
 	sendAudio := fs.String("send-audio", "record", "when should we send audio?  {always|never|record}")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
@@ -101,23 +102,24 @@ func main() {
 	}
 
 	opts := mistapiconnector.MacOptions{
-		NodeID:         hostName,
-		MistHost:       *mistHost,
-		MistAPI:        mapi,
-		LivepeerAPI:    lapi,
-		BalancerHost:   *balancerHost,
-		RoutePrefix:    *routePrefix,
-		PlaybackDomain: *playbackDomain,
-		MistURL:        *mistURL,
-		BaseStreamName: *baseStreamName,
-		CheckBandwidth: false,
-		SendAudio:      *sendAudio,
-		EtcdEndpoints:  etcdEndpoints,
-		EtcdCaCert:     *etcdCaCert,
-		EtcdCert:       *etcdCert,
-		EtcdKey:        *etcdKey,
-		AMQPUrl:        *amqpUrl,
-		OwnRegion:      *ownRegion,
+		NodeID:           hostName,
+		MistHost:         *mistHost,
+		MistAPI:          mapi,
+		LivepeerAPI:      lapi,
+		BalancerHost:     *balancerHost,
+		RoutePrefix:      *routePrefix,
+		PlaybackDomain:   *playbackDomain,
+		MistURL:          *mistURL,
+		BaseStreamName:   *baseStreamName,
+		CheckBandwidth:   false,
+		SendAudio:        *sendAudio,
+		EtcdEndpoints:    etcdEndpoints,
+		EtcdCaCert:       *etcdCaCert,
+		EtcdCert:         *etcdCert,
+		EtcdKey:          *etcdKey,
+		AMQPUrl:          *amqpUrl,
+		OwnRegion:        *ownRegion,
+		MistStreamSource: *mistStreamSource,
 	}
 	mc, err := mistapiconnector.NewMac(opts)
 	if err != nil {
