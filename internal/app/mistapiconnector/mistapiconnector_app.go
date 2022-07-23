@@ -122,34 +122,36 @@ type (
 		EtcdEndpoints                 []string
 		EtcdCaCert, EtcdCert, EtcdKey string
 		AMQPUrl, OwnRegion            string
+		MistStreamSource              string
 	}
 
 	trackList map[string]*trackListDesc
 
 	mac struct {
-		ctx            context.Context
-		cancel         context.CancelFunc
-		mapi           *mist.API
-		lapi           *livepeer.API
-		balancerHost   string
-		srv            *http.Server
-		srvShutCh      chan error
-		mu             sync.RWMutex
-		mistHot        string
-		checkBandwidth bool
-		routePrefix    string
-		mistURL        string
-		playbackDomain string
-		sendAudio      string
-		baseStreamName string
-		useEtcd        bool
-		etcdClient     *clientv3.Client
-		etcdSession    *concurrency.Session
-		etcdPub2rev    map[string]etcdRevData // public key to revision of etcd keys
-		pub2info       map[string]*streamInfo // public key to info
-		producer       *event.AMQPProducer
-		nodeID         string
-		ownRegion      string
+		ctx              context.Context
+		cancel           context.CancelFunc
+		mapi             *mist.API
+		lapi             *livepeer.API
+		balancerHost     string
+		srv              *http.Server
+		srvShutCh        chan error
+		mu               sync.RWMutex
+		mistHot          string
+		checkBandwidth   bool
+		routePrefix      string
+		mistURL          string
+		playbackDomain   string
+		sendAudio        string
+		baseStreamName   string
+		useEtcd          bool
+		etcdClient       *clientv3.Client
+		etcdSession      *concurrency.Session
+		etcdPub2rev      map[string]etcdRevData // public key to revision of etcd keys
+		pub2info         map[string]*streamInfo // public key to info
+		producer         *event.AMQPProducer
+		nodeID           string
+		ownRegion        string
+		mistStreamSource string
 		// pub2id         map[string]string // public key to stream id
 	}
 )
@@ -239,21 +241,22 @@ func NewMac(opts MacOptions) (IMac, error) {
 		checkBandwidth: opts.CheckBandwidth,
 		balancerHost:   opts.BalancerHost,
 		// pub2id:         make(map[string]string), // public key to stream id
-		pub2info:       make(map[string]*streamInfo), // public key to info
-		routePrefix:    opts.RoutePrefix,
-		mistURL:        opts.MistURL,
-		playbackDomain: opts.PlaybackDomain,
-		sendAudio:      opts.SendAudio,
-		baseStreamName: opts.BaseStreamName,
-		useEtcd:        useEtcd,
-		etcdClient:     cli,
-		etcdSession:    sess,
-		etcdPub2rev:    make(map[string]etcdRevData), // public key to revision of etcd keys
-		srvShutCh:      make(chan error),
-		ctx:            ctx,
-		cancel:         cancel,
-		producer:       producer,
-		ownRegion:      opts.OwnRegion,
+		pub2info:         make(map[string]*streamInfo), // public key to info
+		routePrefix:      opts.RoutePrefix,
+		mistURL:          opts.MistURL,
+		playbackDomain:   opts.PlaybackDomain,
+		sendAudio:        opts.SendAudio,
+		baseStreamName:   opts.BaseStreamName,
+		useEtcd:          useEtcd,
+		etcdClient:       cli,
+		etcdSession:      sess,
+		etcdPub2rev:      make(map[string]etcdRevData), // public key to revision of etcd keys
+		srvShutCh:        make(chan error),
+		ctx:              ctx,
+		cancel:           cancel,
+		producer:         producer,
+		ownRegion:        opts.OwnRegion,
+		mistStreamSource: opts.MistStreamSource,
 	}
 	go mc.recoverSessionLoop()
 	if producer != nil {
@@ -1120,13 +1123,13 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 		apiURL := mc.lapi.GetServer() + "/api/stream/" + mc.baseStreamName
 		presets := []string{"P144p30fps16x9"}
 		// base stream created with audio disabled
-		err = mc.mapi.CreateStream(mc.baseStreamName, presets, nil, "1", apiURL, "", false, false)
+		err = mc.mapi.CreateStream(mc.baseStreamName, presets, nil, "1", apiURL, mc.mistStreamSource, false, false)
 		if err != nil {
 			glog.Error(err)
 			return err
 		}
 		// create second stream with audio enabled - used for stream with recording enabled
-		err = mc.mapi.CreateStream(mc.baseStreamName+audioEnabledStreamSuffix, presets, nil, "1", apiURL, "", false, true)
+		err = mc.mapi.CreateStream(mc.baseStreamName+audioEnabledStreamSuffix, presets, nil, "1", apiURL, mc.mistStreamSource, false, true)
 	}
 	return err
 }
