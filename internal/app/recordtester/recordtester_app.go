@@ -149,7 +149,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	testerFuncs := []testers.StartTestFunc{}
 	if rt.streamHealth {
 		testerFuncs = append(testerFuncs, func(ctx context.Context, mediaURL string, waitForTarget time.Duration, opts testers.Streamer2Options) testers.Finite {
-			return testers.NewStreamHealth(ctx, stream.ID, rt.lanalyzers, waitForTarget)
+			return testers.NewStreamHealth(ctx, stream.ID, rt.lanalyzers, 2*time.Minute)
 		})
 	}
 
