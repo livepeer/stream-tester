@@ -123,35 +123,37 @@ type (
 		EtcdCaCert, EtcdCert, EtcdKey string
 		AMQPUrl, OwnRegion            string
 		MistStreamSource              string
+		MistHardcodedBroadcasters     string
 	}
 
 	trackList map[string]*trackListDesc
 
 	mac struct {
-		ctx              context.Context
-		cancel           context.CancelFunc
-		mapi             *mist.API
-		lapi             *livepeer.API
-		balancerHost     string
-		srv              *http.Server
-		srvShutCh        chan error
-		mu               sync.RWMutex
-		mistHot          string
-		checkBandwidth   bool
-		routePrefix      string
-		mistURL          string
-		playbackDomain   string
-		sendAudio        string
-		baseStreamName   string
-		useEtcd          bool
-		etcdClient       *clientv3.Client
-		etcdSession      *concurrency.Session
-		etcdPub2rev      map[string]etcdRevData // public key to revision of etcd keys
-		pub2info         map[string]*streamInfo // public key to info
-		producer         *event.AMQPProducer
-		nodeID           string
-		ownRegion        string
-		mistStreamSource string
+		ctx                       context.Context
+		cancel                    context.CancelFunc
+		mapi                      *mist.API
+		lapi                      *livepeer.API
+		balancerHost              string
+		srv                       *http.Server
+		srvShutCh                 chan error
+		mu                        sync.RWMutex
+		mistHot                   string
+		checkBandwidth            bool
+		routePrefix               string
+		mistURL                   string
+		playbackDomain            string
+		sendAudio                 string
+		baseStreamName            string
+		useEtcd                   bool
+		etcdClient                *clientv3.Client
+		etcdSession               *concurrency.Session
+		etcdPub2rev               map[string]etcdRevData // public key to revision of etcd keys
+		pub2info                  map[string]*streamInfo // public key to info
+		producer                  *event.AMQPProducer
+		nodeID                    string
+		ownRegion                 string
+		mistStreamSource          string
+		mistHardcodedBroadcasters string
 		// pub2id         map[string]string // public key to stream id
 	}
 )
@@ -241,22 +243,23 @@ func NewMac(opts MacOptions) (IMac, error) {
 		checkBandwidth: opts.CheckBandwidth,
 		balancerHost:   opts.BalancerHost,
 		// pub2id:         make(map[string]string), // public key to stream id
-		pub2info:         make(map[string]*streamInfo), // public key to info
-		routePrefix:      opts.RoutePrefix,
-		mistURL:          opts.MistURL,
-		playbackDomain:   opts.PlaybackDomain,
-		sendAudio:        opts.SendAudio,
-		baseStreamName:   opts.BaseStreamName,
-		useEtcd:          useEtcd,
-		etcdClient:       cli,
-		etcdSession:      sess,
-		etcdPub2rev:      make(map[string]etcdRevData), // public key to revision of etcd keys
-		srvShutCh:        make(chan error),
-		ctx:              ctx,
-		cancel:           cancel,
-		producer:         producer,
-		ownRegion:        opts.OwnRegion,
-		mistStreamSource: opts.MistStreamSource,
+		pub2info:                  make(map[string]*streamInfo), // public key to info
+		routePrefix:               opts.RoutePrefix,
+		mistURL:                   opts.MistURL,
+		playbackDomain:            opts.PlaybackDomain,
+		sendAudio:                 opts.SendAudio,
+		baseStreamName:            opts.BaseStreamName,
+		useEtcd:                   useEtcd,
+		etcdClient:                cli,
+		etcdSession:               sess,
+		etcdPub2rev:               make(map[string]etcdRevData), // public key to revision of etcd keys
+		srvShutCh:                 make(chan error),
+		ctx:                       ctx,
+		cancel:                    cancel,
+		producer:                  producer,
+		ownRegion:                 opts.OwnRegion,
+		mistStreamSource:          opts.MistStreamSource,
+		mistHardcodedBroadcasters: opts.MistHardcodedBroadcasters,
 	}
 	go mc.recoverSessionLoop()
 	if producer != nil {
@@ -1015,7 +1018,7 @@ func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStream
 	}
 	audio := mc.shouldEnableAudio(stream)
 	err := mc.mapi.CreateStream(streamName, stream.Presets,
-		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, skipTranscoding, audio)
+		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, mc.mistHardcodedBroadcasters, skipTranscoding, audio)
 	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
 	return err
 }
@@ -1123,13 +1126,13 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 		apiURL := mc.lapi.GetServer() + "/api/stream/" + mc.baseStreamName
 		presets := []string{"P144p30fps16x9"}
 		// base stream created with audio disabled
-		err = mc.mapi.CreateStream(mc.baseStreamName, presets, nil, "1", apiURL, mc.mistStreamSource, false, false)
+		err = mc.mapi.CreateStream(mc.baseStreamName, presets, nil, "1", apiURL, mc.mistStreamSource, mc.mistHardcodedBroadcasters, false, false)
 		if err != nil {
 			glog.Error(err)
 			return err
 		}
 		// create second stream with audio enabled - used for stream with recording enabled
-		err = mc.mapi.CreateStream(mc.baseStreamName+audioEnabledStreamSuffix, presets, nil, "1", apiURL, mc.mistStreamSource, false, true)
+		err = mc.mapi.CreateStream(mc.baseStreamName+audioEnabledStreamSuffix, presets, nil, "1", apiURL, mc.mistStreamSource, mc.mistHardcodedBroadcasters, false, true)
 	}
 	return err
 }

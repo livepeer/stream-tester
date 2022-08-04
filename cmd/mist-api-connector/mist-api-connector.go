@@ -40,6 +40,7 @@ func main() {
 	mistCreds := fs.String("mist-creds", "", "login:password of the Mist server")
 	mistConnectTimeout := fs.Duration("mist-connect-timeout", 5*time.Minute, "Max time to wait attempting to connect to Mist server")
 	mistStreamSource := fs.String("mist-stream-source", "push://", "Stream source we should use for created Mist stream")
+	mistHardcodedBroadcasters := fs.String("mist-hardcoded-broadcasters", "", "Hardcoded broadcasters for use by MistProcLivepeer")
 	sendAudio := fs.String("send-audio", "record", "when should we send audio?  {always|never|record}")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
@@ -102,24 +103,25 @@ func main() {
 	}
 
 	opts := mistapiconnector.MacOptions{
-		NodeID:           hostName,
-		MistHost:         *mistHost,
-		MistAPI:          mapi,
-		LivepeerAPI:      lapi,
-		BalancerHost:     *balancerHost,
-		RoutePrefix:      *routePrefix,
-		PlaybackDomain:   *playbackDomain,
-		MistURL:          *mistURL,
-		BaseStreamName:   *baseStreamName,
-		CheckBandwidth:   false,
-		SendAudio:        *sendAudio,
-		EtcdEndpoints:    etcdEndpoints,
-		EtcdCaCert:       *etcdCaCert,
-		EtcdCert:         *etcdCert,
-		EtcdKey:          *etcdKey,
-		AMQPUrl:          *amqpUrl,
-		OwnRegion:        *ownRegion,
-		MistStreamSource: *mistStreamSource,
+		NodeID:                    hostName,
+		MistHost:                  *mistHost,
+		MistAPI:                   mapi,
+		LivepeerAPI:               lapi,
+		BalancerHost:              *balancerHost,
+		RoutePrefix:               *routePrefix,
+		PlaybackDomain:            *playbackDomain,
+		MistURL:                   *mistURL,
+		BaseStreamName:            *baseStreamName,
+		CheckBandwidth:            false,
+		SendAudio:                 *sendAudio,
+		EtcdEndpoints:             etcdEndpoints,
+		EtcdCaCert:                *etcdCaCert,
+		EtcdCert:                  *etcdCert,
+		EtcdKey:                   *etcdKey,
+		AMQPUrl:                   *amqpUrl,
+		OwnRegion:                 *ownRegion,
+		MistStreamSource:          *mistStreamSource,
+		MistHardcodedBroadcasters: *mistHardcodedBroadcasters,
 	}
 	mc, err := mistapiconnector.NewMac(opts)
 	if err != nil {
