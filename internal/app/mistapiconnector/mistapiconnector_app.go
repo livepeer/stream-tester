@@ -501,8 +501,14 @@ func (mc *mac) sign(body string, sharedSecret string) string {
 	return signature
 }
 
-func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
+func (mc *mac) webhookStatusUpdate(status livepeer.WebhookStatus, id string) {
+	statusRequestUpdate := map[string]interface{}{
+		"status": status,
+	}
+	mc.lapi.UpdateWebhookStatus(id, statusRequestUpdate)
+}
 
+func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
 	if len(lines) != 6 {
 		glog.Errorf("Expected 6 lines, got %d, request \n%s", len(lines), rawRequest)
 		w.WriteHeader(http.StatusBadRequest)
@@ -552,7 +558,6 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 	}
 
 	for _, userWebhook := range userWebhooks {
-
 		if userWebhook.Url == "" {
 			glog.Errorf("User webhook %s has no URL", userWebhook.ID)
 			return true
@@ -579,34 +584,55 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 			req.Header.Add("Livepeer-Signature", signature_header)
 		}
 
-		glog.V(model.DEBUG).Infof("Calling playback.user.new webhook %s", userWebhook.Url)
-
 		resp, err := http.DefaultClient.Do(req)
+		webhookStatus := livepeer.WebhookStatus{
+			LastTriggeredAt: time.Now().Unix(),
+		}
 
 		if err != nil {
-			glog.Errorf("Error calling playback.user.new webhook %s err=%v", userWebhook.Url, err)
+			strerr := fmt.Sprintf("Error calling playback.user.new webhook %s err=%v", userWebhook.Url, err)
+			glog.Errorf(strerr)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("false"))
+			webhookStatus.LastFailure = map[string]interface{}{
+				"timestamp": time.Now().Unix(),
+				"error":     strerr,
+			}
+			mc.webhookStatusUpdate(webhookStatus, userWebhook.ID)
 			return false
 		}
 
 		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			glog.Errorf("Error reading response body from playback.user.new webhook %s err=%v", userWebhook.Url, err)
+			strerr := fmt.Sprintf("Error reading response body from playback.user.new webhook %s err=%v", userWebhook.Url, err)
+			glog.Errorf(strerr)
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("false"))
+			webhookStatus.LastFailure = map[string]interface{}{
+				"timestamp": time.Now().Unix(),
+				"error":     strerr,
+			}
+			mc.webhookStatusUpdate(webhookStatus, userWebhook.ID)
 			return false
 		}
 
 		if resp.StatusCode/100 != 2 {
-			glog.Errorf("Response calling playback.user.new webhook %s got status code=%d body=%s", userWebhook.Url, resp.StatusCode, string(body))
+			strerr := fmt.Sprintf("Response calling playback.user.new webhook %s got status code=%d body=%s", userWebhook.Url, resp.StatusCode, string(body))
+			glog.Errorf(strerr)
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("false"))
+			webhookStatus.LastFailure = map[string]interface{}{
+				"timestamp":  time.Now().Unix(),
+				"error":      strerr,
+				"response":   string(body),
+				"statusCode": resp.StatusCode,
+			}
+			mc.webhookStatusUpdate(webhookStatus, userWebhook.ID)
 			return false
 		}
 
-		glog.V(model.DEBUG).Infof("Response from playback.user.new webhook %s: %s", userWebhook.Url, string(body))
+		mc.webhookStatusUpdate(webhookStatus, userWebhook.ID)
 
 	}
 

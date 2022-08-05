@@ -134,14 +134,21 @@ type (
 
 	// User Webhooks
 	UserWebhook struct {
-		ID           string   `json:"id,omitempty"`
-		Url          string   `json:"url,omitempty"`
-		Kind         string   `json:"kind,omitempty"`
-		Name         string   `json:"name,omitempty"`
-		Events       []string `json:"events,omitempty"`
-		UserID       string   `json:"userId,omitempty"`
-		CreatedAt    int64    `json:"createdAt,omitempty"`
-		SharedSecret string   `json:"sharedSecret,omitempty"`
+		ID           string        `json:"id,omitempty"`
+		Url          string        `json:"url,omitempty"`
+		Kind         string        `json:"kind,omitempty"`
+		Name         string        `json:"name,omitempty"`
+		Events       []string      `json:"events,omitempty"`
+		UserID       string        `json:"userId,omitempty"`
+		CreatedAt    int64         `json:"createdAt,omitempty"`
+		SharedSecret string        `json:"sharedSecret,omitempty"`
+		Status       WebhookStatus `json:"status,omitempty"`
+	}
+
+	// Webhooks status
+	WebhookStatus struct {
+		LastTriggeredAt int64                  `json:"lastTriggeredAt,omitempty"`
+		LastFailure     map[string]interface{} `json:"lastFailure,omitempty"`
 	}
 
 	MultistreamTarget struct {
@@ -468,6 +475,12 @@ func (lapi *API) GetWebhooksForEvent(userId string, streamId string, event strin
 	}
 	u := fmt.Sprintf("%s/api/webhook/subscribed/%s?userId=%s&streamId=%s", lapi.choosenServer, event, userId, streamId)
 	return lapi.GetWebhooks(u)
+}
+
+// Update webhook status & response
+func (lapi *API) UpdateWebhookStatus(id string, status map[string]interface{}) bool {
+	go lapi.UpdateWebhook(id, status)
+	return true
 }
 
 // GetStreamByKey gets stream by streamKey
@@ -818,6 +831,50 @@ func (lapi *API) GetWebhooks(u string) ([]UserWebhook, error) {
 	}
 
 	return r, nil
+}
+
+func (lapi *API) UpdateWebhook(id string, status map[string]interface{}) error {
+	rType := "update_webhook"
+	start := time.Now()
+	u := fmt.Sprintf("%s/api/webhook/%s/status", lapi.choosenServer, id)
+
+	b, err := json.Marshal(status)
+	if err != nil {
+		glog.Errorf("Error marshalling webhook status to json: %v", err)
+		metrics.APIRequest(rType, 0, err)
+		return err
+	}
+	req, err := uhttp.NewRequest("POST", u, bytes.NewBuffer(b))
+
+	if err != nil {
+		glog.Errorf("Error creating webhook status request: %v", err)
+		metrics.APIRequest(rType, 0, err)
+		return err
+	}
+
+	req.Header.Add("Authorization", "Bearer "+lapi.accessToken)
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := lapi.httpClient.Do(req)
+	if err != nil {
+		glog.Errorf("Error updating webhook from Livepeer API server (%s) error: %v", u, err)
+		metrics.APIRequest(rType, 0, err)
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		b, _ := ioutil.ReadAll(resp.Body)
+		glog.Errorf("Status error updating webhook from Livepeer API server (%s) status %d body: %s", u, resp.StatusCode, string(b))
+		if resp.StatusCode == http.StatusNotFound {
+			metrics.APIRequest(rType, 0, ErrNotExists)
+			return ErrNotExists
+		}
+		err := errors.New(http.StatusText(resp.StatusCode))
+		metrics.APIRequest(rType, 0, err)
+		return err
+	}
+	took := time.Since(start)
+	metrics.APIRequest(rType, took, nil)
+	return nil
 }
 
 func (lapi *API) GetMultistreamTarget(id string) (*MultistreamTarget, error) {
