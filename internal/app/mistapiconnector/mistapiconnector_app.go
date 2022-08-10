@@ -501,11 +501,16 @@ func (mc *mac) sign(body string, sharedSecret string) string {
 	return signature
 }
 
-func (mc *mac) webhookStatusUpdate(status livepeer.WebhookStatus, id string) {
-	statusRequestUpdate := map[string]interface{}{
-		"status": status,
-	}
-	mc.lapi.UpdateWebhookStatus(id, statusRequestUpdate)
+func (mc *mac) webhookStatusUpdate(status livepeer.WebhookUpdateStatusRequest, id string) {
+	mc.lapi.UpdateWebhookAsync(id, status)
+}
+
+func (mc *mac) updateFailedWebhook(status livepeer.WebhookUpdateStatusRequest, strerr string, statusCode int, body string) livepeer.WebhookUpdateStatusRequest {
+	status.ErrorMessage = strerr
+	status.Response.StatusCode = statusCode
+	status.Response.Response.Status = statusCode
+	status.Response.Response.Body = string(body)
+	return status
 }
 
 func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
@@ -585,8 +590,12 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 		}
 
 		resp, err := http.DefaultClient.Do(req)
-		webhookStatus := livepeer.WebhookStatus{
-			LastTriggeredAt: time.Now().Unix(),
+		webhookStatus := livepeer.WebhookUpdateStatusRequest{
+			Response: livepeer.WebhookResponseStatus{
+				ID:        userWebhook.ID,
+				CreatedAt: time.Now().UnixNano() / int64(time.Millisecond/time.Nanosecond),
+				Response:  livepeer.WebhookResponse{},
+			},
 		}
 
 		if err != nil {
@@ -594,10 +603,7 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 			glog.Errorf(strerr)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("false"))
-			webhookStatus.LastFailure = map[string]interface{}{
-				"timestamp": time.Now().Unix(),
-				"error":     strerr,
-			}
+			webhookStatus = mc.updateFailedWebhook(webhookStatus, strerr, resp.StatusCode, "")
 			mc.webhookStatusUpdate(webhookStatus, userWebhook.ID)
 			return false
 		}
@@ -609,10 +615,7 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 			glog.Errorf(strerr)
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("false"))
-			webhookStatus.LastFailure = map[string]interface{}{
-				"timestamp": time.Now().Unix(),
-				"error":     strerr,
-			}
+			webhookStatus = mc.updateFailedWebhook(webhookStatus, strerr, resp.StatusCode, string(body))
 			mc.webhookStatusUpdate(webhookStatus, userWebhook.ID)
 			return false
 		}
@@ -622,15 +625,14 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 			glog.Errorf(strerr)
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("false"))
-			webhookStatus.LastFailure = map[string]interface{}{
-				"timestamp":  time.Now().Unix(),
-				"error":      strerr,
-				"response":   string(body),
-				"statusCode": resp.StatusCode,
-			}
+			webhookStatus = mc.updateFailedWebhook(webhookStatus, strerr, resp.StatusCode, string(body))
 			mc.webhookStatusUpdate(webhookStatus, userWebhook.ID)
 			return false
 		}
+
+		webhookStatus.Response.StatusCode = resp.StatusCode
+		webhookStatus.Response.Response.Status = resp.StatusCode
+		webhookStatus.Response.Response.Body = string(body)
 
 		mc.webhookStatusUpdate(webhookStatus, userWebhook.ID)
 
@@ -713,6 +715,10 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		}
 
 		userNewHooks, err := mc.lapi.GetWebhooksForEvent(stream.UserID, stream.ID, "playback.user.new")
+
+		if err != nil {
+			glog.Errorf("Error getting webhooks for event playback.user.new streamID=%s err=%v", stream.ID, err)
+		}
 
 		mc.pub2info[stream.PlaybackID] = &streamInfo{
 			id:           stream.ID,

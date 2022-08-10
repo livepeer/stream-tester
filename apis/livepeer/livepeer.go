@@ -134,21 +134,34 @@ type (
 
 	// User Webhooks
 	UserWebhook struct {
-		ID           string        `json:"id,omitempty"`
-		Url          string        `json:"url,omitempty"`
-		Kind         string        `json:"kind,omitempty"`
-		Name         string        `json:"name,omitempty"`
-		Events       []string      `json:"events,omitempty"`
-		UserID       string        `json:"userId,omitempty"`
-		CreatedAt    int64         `json:"createdAt,omitempty"`
-		SharedSecret string        `json:"sharedSecret,omitempty"`
-		Status       WebhookStatus `json:"status,omitempty"`
+		ID           string   `json:"id,omitempty"`
+		Url          string   `json:"url,omitempty"`
+		Kind         string   `json:"kind,omitempty"`
+		Name         string   `json:"name,omitempty"`
+		Events       []string `json:"events,omitempty"`
+		UserID       string   `json:"userId,omitempty"`
+		CreatedAt    int64    `json:"createdAt,omitempty"`
+		SharedSecret string   `json:"sharedSecret,omitempty"`
 	}
 
-	// Webhooks status
-	WebhookStatus struct {
-		LastTriggeredAt int64                  `json:"lastTriggeredAt,omitempty"`
-		LastFailure     map[string]interface{} `json:"lastFailure,omitempty"`
+	WebhookUpdateStatusRequest struct {
+		ErrorMessage string                `json:"errorMessage,omitempty"`
+		Response     WebhookResponseStatus `json:"response,omitempty"`
+	}
+
+	WebhookResponseStatus struct {
+		ID         string          `json:"webhookId,omitempty"`
+		CreatedAt  int64           `json:"createdAt,omitempty"`
+		StatusCode int             `json:"statusCode,omitempty"`
+		Response   WebhookResponse `json:"response,omitempty"`
+	}
+
+	WebhookResponse struct {
+		Body       string            `json:"body"`
+		Status     int               `json:"status,omitempty"`
+		Headers    map[string]string `json:"headers,omitempty"`
+		Redirected bool              `json:"redirected,omitempty"`
+		StatusText string            `json:"statusText,omitempty"`
 	}
 
 	MultistreamTarget struct {
@@ -478,9 +491,8 @@ func (lapi *API) GetWebhooksForEvent(userId string, streamId string, event strin
 }
 
 // Update webhook status & response
-func (lapi *API) UpdateWebhookStatus(id string, status map[string]interface{}) bool {
+func (lapi *API) UpdateWebhookAsync(id string, status WebhookUpdateStatusRequest) {
 	go lapi.UpdateWebhook(id, status)
-	return true
 }
 
 // GetStreamByKey gets stream by streamKey
@@ -833,7 +845,7 @@ func (lapi *API) GetWebhooks(u string) ([]UserWebhook, error) {
 	return r, nil
 }
 
-func (lapi *API) UpdateWebhook(id string, status map[string]interface{}) error {
+func (lapi *API) UpdateWebhook(id string, status WebhookUpdateStatusRequest) error {
 	rType := "update_webhook"
 	start := time.Now()
 	u := fmt.Sprintf("%s/api/webhook/%s/status", lapi.choosenServer, id)
