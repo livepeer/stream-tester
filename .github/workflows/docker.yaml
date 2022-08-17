@@ -60,7 +60,7 @@ jobs:
           build-args: |
             version=${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
-          file: ${{ matrix.arrays.file }}
+          file: 'docker/${{ matrix.arrays.file }}'
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
