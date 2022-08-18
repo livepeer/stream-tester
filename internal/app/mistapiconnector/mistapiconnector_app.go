@@ -61,6 +61,15 @@ const eventMultistreamDisconnected = "multistream.disconnected"
 
 var playbackPrefixes = []string{"hls", "cmaf"}
 
+var webhookClient = &http.Client{
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) > 2 {
+			return http.ErrUseLastResponse
+		}
+		return nil
+	},
+}
+
 type (
 	// IMac creates new Mist API Connector application
 	IMac interface {
@@ -581,7 +590,7 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 			req.Header.Add("Livepeer-Signature", signature_header)
 		}
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := webhookClient.Do(req)
 		webhookStatus := livepeer.WebhookUpdateStatusRequest{
 			Response: livepeer.WebhookResponseStatus{
 				ID:        userWebhook.ID,
