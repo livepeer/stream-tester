@@ -568,18 +568,10 @@ func (mc *mac) triggerUserNew(w http.ResponseWriter, r *http.Request, lines []st
 			return true
 		}
 
-		req := &http.Request{
-			Method: "POST",
-			Header: http.Header{
-				"Content-Type": []string{"application/json"},
-			},
-			Body: ioutil.NopCloser(strings.NewReader(payload)),
-		}
-
-		req.URL, err = url.Parse(userWebhook.Url)
-
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, userWebhook.Url, strings.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
 		if err != nil {
-			glog.Errorf("Error parsing URL %s for user webhook %s err=%v", userWebhook.Url, userWebhook.ID, err)
+			glog.Errorf("Error creating request to url=%q webhookId=%s err=%q", userWebhook.Url, userWebhook.ID, err)
 			return false
 		}
 
