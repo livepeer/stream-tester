@@ -12,6 +12,9 @@ jobs:
   build:
     name: Build and publish docker images
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
     strategy:
       fail-fast: true
       matrix:
