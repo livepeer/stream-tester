@@ -44,7 +44,7 @@ api-transcoder:
 
 .PHONY: docker
 docker:
-	docker build -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .
+	docker build -f docker/Dockerfile -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .
 
 .PHONY: push
 push:
@@ -52,7 +52,7 @@ push:
 
 .PHONY: localdocker
 localdocker:
-	docker build -f Dockerfile.debian -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .
+	docker build -f docker/Dockerfile.debian -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .
 
 .PHONY: release
 release:

@@ -1,43 +1,38 @@
-FROM golang:1.17-alpine3.15 as builder
+FROM	golang:1.17-alpine3.15	as	builder
 
-RUN apk add --no-cache make gcc musl-dev linux-headers git pkgconfig gnutls-dev ffmpeg-dev build-base parallel
+RUN	apk add --no-cache make gcc musl-dev linux-headers git \
+	pkgconfig gnutls-dev ffmpeg-dev build-base parallel
 
-WORKDIR /root
+WORKDIR	/root
 
-RUN parallel wget https://storage.googleapis.com/lp_testharness_assets/{} ::: official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs_3min.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4 official_test_source_2s_keys_24pfs_30s.mp4 \
-    && wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
+RUN	parallel wget https://storage.googleapis.com/lp_testharness_assets/{} ::: official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs_3min.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4 official_test_source_2s_keys_24pfs_30s.mp4 && \
+	wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
 
-ARG version
+COPY	go.mod	go.sum	./
 
-COPY go.mod go.sum ./
+RUN	go mod download
 
-RUN go mod download
+COPY	.	.
 
-COPY . .
+ARG	version
 
-RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" -tags h264 cmd/streamtester/streamtester.go
-RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/testdriver/testdriver.go
-RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/mist-api-connector/mist-api-connector.go
-RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/loadtester/loadtester.go
-RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/stream-monitor/stream-monitor.go
-RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/recordtester/recordtester.go
+RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" -tags h264 cmd/streamtester/streamtester.go
+RUN	parallel -q go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/{}/{}.go ::: testdriver mist-api-connector loadtester stream-monitor recordtester
 
-FROM alpine:3.15.4
+FROM	alpine:3.15.4
 
-RUN apk add --no-cache ca-certificates ffmpeg
+RUN	apk add --no-cache ca-certificates ffmpeg
 
-WORKDIR /root
+WORKDIR	/root
 
-COPY --from=builder /root/official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs.mp4
-COPY --from=builder /root/official_test_source_2s_keys_24pfs_3min.mp4 official_test_source_2s_keys_24pfs_3min.mp4
-COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4
-COPY --from=builder /root/bbb_sunflower_1080p_30fps_normal_2min.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4
-COPY --from=builder /root/official_test_source_2s_keys_24pfs_30s.mp4 official_test_source_2s_keys_24pfs_30s.mp4
-COPY --from=builder /root/official_test_source_2s_keys_24pfs_30s_hls official_test_source_2s_keys_24pfs_30s_hls
+COPY --from=builder	/root/*.mp4	./
+COPY --from=builder	/root/official_test_source_2s_keys_24pfs_30s_hls	official_test_source_2s_keys_24pfs_30s_hls
 
-COPY --from=builder /root/streamtester streamtester
-COPY --from=builder /root/testdriver testdriver
-COPY --from=builder /root/mist-api-connector mist-api-connector
-COPY --from=builder /root/loadtester loadtester
-COPY --from=builder /root/stream-monitor stream-monitor
-COPY --from=builder /root/recordtester recordtester
+COPY --from=builder	/root/streamtester	/usr/local/bin/streamtester
+COPY --from=builder	/root/testdriver	/usr/local/bin/testdriver
+COPY --from=builder	/root/mist-api-connector	/usr/local/bin/mist-api-connector
+COPY --from=builder	/root/loadtester	/usr/local/bin/loadtester
+COPY --from=builder	/root/stream-monitor	/usr/local/bin/stream-monitor
+COPY --from=builder	/root/recordtester	/usr/local/bin/recordtester
+
+RUN	for b in testdriver mist-api-connector loadtester stream-monitor recordtester; do ln -s /usr/local/bin/$b ./$b; done
