@@ -16,7 +16,7 @@ jobs:
       packages: write
       contents: read
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         arrays: [
           {"name": "loadtester", "file": "Dockerfile.load-tester"},
