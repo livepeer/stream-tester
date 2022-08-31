@@ -1,4 +1,3 @@
-// Load tester is a tool to do load testing
 package main
 
 import (
@@ -25,34 +24,54 @@ import (
 	"github.com/peterbourgon/ff/v2"
 )
 
+type cliArguments struct {
+	Verbosity    int
+	Simultaneous uint
+	Version      bool
+	MistMode     bool
+	HTTPIngest   bool
+	RTMPTemplate string
+	HLSTemplate  string
+	APIServer    string
+	APIToken     string
+	Filename     string
+
+	StreamDuration        time.Duration
+	TestDuration          time.Duration
+	WaitForTargetDuration time.Duration
+	StartDelayDuration    time.Duration
+}
+
 func init() {
 	format.RegisterAll()
 }
 
 func main() {
+	var cliFlags = &cliArguments{}
+
 	flag.Set("logtostderr", "true")
 	vFlag := flag.Lookup("v")
 
-	fs := flag.NewFlagSet("loadteter", flag.ExitOnError)
+	fs := flag.NewFlagSet("loadtester", flag.ExitOnError)
 
-	verbosity := fs.String("v", "", "Log verbosity.  {4|5|6}")
-	version := fs.Bool("version", false, "Print out the version")
+	fs.IntVar(&cliFlags.Verbosity, "v", 3, "Log verbosity.  {4|5|6}")
+	fs.BoolVar(&cliFlags.Version, "version", false, "Print out the version")
+	fs.BoolVar(&cliFlags.MistMode, "mist", false, "Mist mode (remove session query)")
+	fs.BoolVar(&cliFlags.HTTPIngest, "http-ingest", false, "Use Livepeer HTTP HLS ingest")
 
 	// startDelay := fs.Duration("start-delay", 0*time.Second, "time delay before start")
-	streamDuration := fs.Duration("stream-dur", 0, "How long to stream each stream (0 to stream whole file)")
-	testDuration := fs.Duration("test-dur", 0, "How long to run overall test")
-	waitForTargetDuration := fs.Duration("wait-for-target", 30*time.Second, "How long to wait for a new stream to appear before giving up")
-	mist := fs.Bool("mist", false, "Mist mode (remove session query)")
+	fs.DurationVar(&cliFlags.StreamDuration, "stream-dur", 0, "How long to stream each stream (0 to stream whole file)")
+	fs.DurationVar(&cliFlags.TestDuration, "test-dur", 0, "How long to run overall test")
+	fs.DurationVar(&cliFlags.WaitForTargetDuration, "wait-for-target", 30*time.Second, "How long to wait for a new stream to appear before giving up")
+	fs.DurationVar(&cliFlags.StartDelayDuration, "delay-between-streams", 2*time.Second, "Delay between starting group of streams")
 
 	// profiles := fs.Uint("profiles", 2, "number of transcoded profiles should be in output")
-	sim := fs.Uint("sim", 1, "Number of simulteneous streams to stream")
-	delayBetweenGroups := fs.Duration("delay-between-streams", 2*time.Second, "Delay between starting group of streams")
-	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
-	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
-	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
-	httpIngest := fs.Bool("http-ingest", false, "Use Livepeer HTTP HLS ingest")
-	rtmpTemplate := fs.String("rtmp-template", "", "Template of RTMP ingest URL")
-	hlsTemplate := fs.String("hls-template", "", "Template of HLS playback URL")
+	fs.UintVar(&cliFlags.Simultaneous, "sim", 1, "Number of simulteneous streams to stream")
+	fs.StringVar(&cliFlags.Filename, "file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
+	fs.StringVar(&cliFlags.APIToken, "api-token", "", "Token of the Livepeer API to be used")
+	fs.StringVar(&cliFlags.APIServer, "api-server", "livepeer.com", "Server of the Livepeer API to be used")
+	fs.StringVar(&cliFlags.RTMPTemplate, "rtmp-template", "", "Template of RTMP ingest URL")
+	fs.StringVar(&cliFlags.HLSTemplate, "hls-template", "", "Template of HLS playback URL")
 	// ignoreNoCodecError := fs.Bool("ignore-no-codec-error", true, "Do not stop streaming if segment without codec's info downloaded")
 
 	_ = fs.String("config", "", "config file (optional)")
@@ -63,7 +82,7 @@ func main() {
 		ff.WithEnvVarPrefix("LOADTESTER"),
 	)
 	flag.CommandLine.Parse(nil)
-	vFlag.Value.Set(*verbosity)
+	vFlag.Value.Set(fmt.Sprintf("%d", cliFlags.Verbosity))
 
 	hostName, _ := os.Hostname()
 	fmt.Println("Loadtester version: " + model.Version)
@@ -71,7 +90,7 @@ func main() {
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
 	fmt.Printf("Production: %v\n", model.Production)
 
-	if *version {
+	if cliFlags.Version {
 		return
 	}
 	metrics.InitCensus(hostName, model.Version, "loadtester")
@@ -79,12 +98,11 @@ func main() {
 	testers.IgnoreNoCodecError = true
 	testers.IgnoreGaps = true
 	testers.IgnoreTimeDrift = true
-	testers.StartDelayBetweenGroups = *delayBetweenGroups
+	testers.StartDelayBetweenGroups = cliFlags.StartDelayDuration
 	model.ProfilesNum = 0
 
-	if *fileArg == "" {
-		fmt.Println("Should provide -file argumnet")
-		os.Exit(1)
+	if cliFlags.Filename == "" {
+		glog.Fatal("missing --file parameter")
 	}
 	var err error
 	var fileName string
@@ -95,31 +113,30 @@ func main() {
 	// }
 	// model.ProfilesNum = int(*profiles)
 
-	if *testDuration == 0 {
+	if cliFlags.TestDuration == 0 {
 		glog.Fatalf("-test-dur should be specified")
 	}
-	if *apiToken != "" && (*rtmpTemplate != "") {
-		glog.Infof("notice: overriding ingest URL returned by %s with %s", *apiServer, *rtmpTemplate)
+	if cliFlags.APIToken != "" && (cliFlags.RTMPTemplate != "") {
+		glog.Infof("notice: overriding ingest URL returned by %s with %s", cliFlags.APIServer, cliFlags.RTMPTemplate)
 	}
-	if *apiToken != "" && (*hlsTemplate != "") {
-		glog.Infof("notice: overriding playback URL returned by %s with %s", *apiServer, *hlsTemplate)
+	if cliFlags.APIToken != "" && (cliFlags.HLSTemplate != "") {
+		glog.Infof("notice: overriding playback URL returned by %s with %s", cliFlags.APIServer, cliFlags.HLSTemplate)
 	}
-	if *apiToken == "" && *rtmpTemplate == "" {
+	if cliFlags.APIToken == "" && cliFlags.RTMPTemplate == "" {
 		glog.Fatalf("-api-token or -rtmp-template should be specified")
 	}
-	if *rtmpTemplate != "" && *httpIngest {
+	if cliFlags.RTMPTemplate != "" && cliFlags.HTTPIngest {
 		glog.Fatal("-http-ingest can't be specified together with -rtmp-template")
 	}
 
-	if fileName, err = utils.GetFile(*fileArg, strings.ReplaceAll(hostName, ".", "_")); err != nil {
+	if fileName, err = utils.GetFile(cliFlags.Filename, strings.ReplaceAll(hostName, ".", "_")); err != nil {
 		if err == utils.ErrNotFound {
-			fmt.Printf("File %s not found\n", *fileArg)
+			glog.Fatalf("file %s not found\n", cliFlags.Filename)
 		} else {
-			fmt.Printf("Error getting file %s: %v\n", *fileArg, err)
+			glog.Fatalf("error getting file %s: %v\n", cliFlags.Filename, err)
 		}
-		os.Exit(1)
 	}
-	fmt.Printf("Streaming video file '%s'\n", fileName)
+	glog.Infof("streaming video file %q", fileName)
 	var lapi *livepeer.API
 	var createdAPIStreams []string
 	cleanup := func(fn, fa string) {
@@ -135,7 +152,7 @@ func main() {
 	exit := func(exitCode int, fn, fa string, err error) {
 		cleanup(fn, fa)
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			glog.Errorf("Error: %v\n", err)
 		}
 		os.Exit(exitCode)
 	}
@@ -143,28 +160,28 @@ func main() {
 	var streamStarter model.StreamStarter
 	var id int
 	var mu sync.Mutex
-	if *apiToken != "" {
-		lapi = livepeer.NewLivepeer(*apiToken, *apiServer, nil)
+	if cliFlags.APIToken != "" {
+		lapi = livepeer.NewLivepeer(cliFlags.APIToken, cliFlags.APIServer, nil)
 		lapi.Init()
 		glog.Infof("Choosen server: %s", lapi.GetServer())
 		ingests, err := lapi.Ingest(false)
 		if err != nil {
-			exit(255, fileName, *fileArg, err)
+			exit(255, fileName, cliFlags.Filename, err)
 		}
 		glog.Infof("Got ingests: %+v", ingests)
 		broadcasters, err := lapi.Broadcasters()
 		if err != nil {
-			exit(255, fileName, *fileArg, err)
+			exit(255, fileName, cliFlags.Filename, err)
 		}
 		glog.Infof("Got broadcasters: %+v", broadcasters)
 		httpIngestURLTemplates := make([]string, 0, len(broadcasters))
 		for _, b := range broadcasters {
 			httpIngestURLTemplates = append(httpIngestURLTemplates, fmt.Sprintf("%s/live/%%s", b))
 		}
-		if *httpIngest && len(broadcasters) == 0 {
-			exit(254, fileName, *fileArg, errors.New("Empty list of broadcasters"))
-		} else if !*httpIngest && len(ingests) == 0 {
-			exit(254, fileName, *fileArg, errors.New("Empty list of ingests"))
+		if cliFlags.HTTPIngest && len(broadcasters) == 0 {
+			exit(254, fileName, cliFlags.Filename, errors.New("Empty list of broadcasters"))
+		} else if !cliFlags.HTTPIngest && len(ingests) == 0 {
+			exit(254, fileName, cliFlags.Filename, errors.New("Empty list of ingests"))
 		}
 		streamStarter = func(ctx context.Context, sourceFileName string, waitForTarget, timeToStream time.Duration) (model.OneTestStream, error) {
 			mu.Lock()
@@ -178,7 +195,7 @@ func main() {
 			}
 			glog.V(model.VERBOSE).Infof("Create Livepeer stream id=%s streamKey=%s playbackId=%s", stream.ID, stream.StreamKey, stream.PlaybackID)
 			createdAPIStreams = append(createdAPIStreams, stream.ID)
-			if *httpIngest {
+			if cliFlags.HTTPIngest {
 				httpIngestURLTemplate := httpIngestURLTemplates[id%len(httpIngestURLTemplates)]
 				httpIngestURL := fmt.Sprintf(httpIngestURLTemplate, stream.ID)
 				glog.V(model.SHORT).Infof("HTTP ingest: %s", httpIngestURL)
@@ -188,21 +205,21 @@ func main() {
 				return up, nil
 			}
 			var rtmpURL string
-			if *rtmpTemplate != "" {
-				rtmpURL = fmt.Sprintf(*rtmpTemplate, stream.StreamKey)
+			if cliFlags.RTMPTemplate != "" {
+				rtmpURL = fmt.Sprintf(cliFlags.RTMPTemplate, stream.StreamKey)
 			} else {
 				rtmpURL = fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.StreamKey)
 			}
 
 			var mediaURL string
-			if *hlsTemplate != "" {
-				mediaURL = fmt.Sprintf(*hlsTemplate, stream.PlaybackID)
+			if cliFlags.HLSTemplate != "" {
+				mediaURL = fmt.Sprintf(cliFlags.HLSTemplate, stream.PlaybackID)
 			} else {
 				mediaURL = fmt.Sprintf("%s/%s/index.m3u8", ingests[0].Playback, stream.PlaybackID)
 			}
 			glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 			glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
-			sr2 := testers.NewStreamer2(ctx, testers.Streamer2Options{MistMode: *mist})
+			sr2 := testers.NewStreamer2(ctx, testers.Streamer2Options{MistMode: cliFlags.MistMode})
 			go sr2.StartStreaming(sourceFileName, rtmpURL, mediaURL, waitForTarget, timeToStream)
 			go func() {
 				<-sr2.Done()
@@ -217,8 +234,8 @@ func main() {
 			manifestID := fmt.Sprintf("%s_%d", baseName, id)
 			id++
 			mu.Unlock()
-			rtmpURL := fmt.Sprintf(*rtmpTemplate, manifestID)
-			mediaURL := fmt.Sprintf(*hlsTemplate, manifestID)
+			rtmpURL := fmt.Sprintf(cliFlags.RTMPTemplate, manifestID)
+			mediaURL := fmt.Sprintf(cliFlags.HLSTemplate, manifestID)
 			glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 			glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
 			if err := utils.WaitForTCP(waitForTarget, rtmpURL); err != nil {
@@ -231,7 +248,7 @@ func main() {
 		}
 	}
 
-	loadTester := testers.NewLoadTester(gctx, streamStarter, *delayBetweenGroups)
+	loadTester := testers.NewLoadTester(gctx, streamStarter, cliFlags.StartDelayDuration)
 	exitc := make(chan os.Signal, 1)
 	signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	go func(fn, fa string) {
@@ -243,32 +260,32 @@ func main() {
 		stats, _ := loadTester.Stats()
 		fmt.Println(stats.FormatForConsole())
 		// exit(0, fn, fa, nil)
-	}(fileName, *fileArg)
+	}(fileName, cliFlags.Filename)
 
-	err = loadTester.Start(fileName, *waitForTargetDuration, *streamDuration, *testDuration, int(*sim))
+	err = loadTester.Start(fileName, cliFlags.WaitForTargetDuration, cliFlags.StreamDuration, cliFlags.TestDuration, int(cliFlags.Simultaneous))
 	if err != nil {
 		glog.Errorf("Error starting test: %v", err)
-		exit(255, fileName, *fileArg, err)
+		exit(255, fileName, cliFlags.Filename, err)
 	}
 	<-loadTester.Done()
 	glog.Infof("Testing finished")
-	cleanup(fileName, *fileArg)
+	cleanup(fileName, cliFlags.Filename)
 	stats, _ := loadTester.Stats()
 	glog.Info(stats.FormatForConsole())
-	// exit(255, fileName, *fileArg, err)
+	// exit(255, fileName, cliFlags.Filename, err)
 
 	/*
-		lapi := livepeer.NewLivepeer(*apiToken, *apiServer, nil)
+		lapi := livepeer.NewLivepeer(cliFlags.APIToken, cliFlags.APIServer, nil)
 		lapi.Init()
 		glog.Infof("Choosen server: %s", lapi.GetServer())
 		ingests, err := lapi.Ingest(false)
 		if err != nil {
-			exit(255, fileName, *fileArg, err)
+			exit(255, fileName, cliFlags.Filename, err)
 		}
 		glog.Infof("Got ingests: %+v", ingests)
 		broadcasters, err := lapi.Broadcasters()
 		if err != nil {
-			exit(255, fileName, *fileArg, err)
+			exit(255, fileName, cliFlags.Filename, err)
 		}
 		glog.Infof("Got broadcasters: %+v", broadcasters)
 
@@ -276,14 +293,14 @@ func main() {
 
 		// sr := testers.NewHTTPLoadTester(gctx, gcancel, lapi, 0)
 		var sr model.Streamer
-		if !*httpIngest {
+		if !cliFlags.HTTPIngest {
 			sr = testers.NewStreamer(gctx, gcancel, false, true, nil, lapi)
 		} else {
 			sr = testers.NewHTTPLoadTester(gctx, gcancel, lapi, 0)
 		}
-		baseManifesID, err := sr.StartStreams(fileName, "", "1935", "", "443", *sim, 1, *streamDuration, false, true, true, 2, 5*time.Second, 0)
+		baseManifesID, err := sr.StartStreams(fileName, "", "1935", "", "443", *sim, 1, cliFlags.StreamDuration, false, true, true, 2, 5*time.Second, 0)
 		if err != nil {
-			exit(255, fileName, *fileArg, err)
+			exit(255, fileName, cliFlags.Filename, err)
 		}
 		glog.Infof("Base manfiest id: %s", baseManifesID)
 		exitc := make(chan os.Signal, 1)
@@ -296,7 +313,7 @@ func main() {
 			time.Sleep(2 * time.Second)
 			stats, _ := sr.Stats("")
 			fmt.Println(stats.FormatForConsole())
-			if fileName != *fileArg {
+			if fileName != cliFlags.Filename {
 				os.Remove(fileName)
 			}
 		}()
@@ -308,7 +325,7 @@ func main() {
 		stats, _ := sr.Stats("")
 		fmt.Println(stats.FormatForConsole())
 		fmt.Println(stats.FormatErrorsForConsole())
-		exit(model.ExitCode, fileName, *fileArg, err)
+		exit(model.ExitCode, fileName, cliFlags.Filename, err)
 	*/
 }
 
