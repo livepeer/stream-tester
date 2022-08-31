@@ -71,7 +71,7 @@ func (sr *streamer2) Stats() (model.Stats1, error) {
 // StartStreaming starts streaming into rtmpIngestURL and reading back from mediaURL.
 // Will stream indefinitely if timeToStream is -1, until error occurs.
 // Does not exit until error or stream ends.
-func (sr *streamer2) StartStreaming(sourceFileName string, rtmpIngestURL, mediaURL string, waitForTarget, timeToStream time.Duration) {
+func (sr *streamer2) StartStreaming(sourceFileName, rtmpIngestURL, mediaURL string, waitForTarget, timeToStream time.Duration) {
 	if sr.uploader != nil {
 		glog.Fatal("Already streaming")
 	}
