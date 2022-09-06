@@ -169,7 +169,9 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 
 	uploadEndpoint := requestUpload.Url
 	uploadAsset := requestUpload.Asset
-	uploadTask := requestUpload.Task
+	uploadTask := api.Task{
+		ID: requestUpload.Task.ID,
+	}
 
 	glog.Infof("Uploading to endpoint=%s", uploadEndpoint)
 
@@ -179,27 +181,11 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 		return 250, fmt.Errorf("error uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
 	}
 
-	startTime = time.Now()
-	for {
-		glog.Infof("Waiting %s for upload assetId=%s, elapsed=%s", taskPollDuration, uploadAsset.ID, time.Since(startTime))
-		time.Sleep(taskPollDuration)
+	err = vt.checkAssetProcessing(taskPollDuration, uploadAsset, uploadTask)
 
-		if err = vt.isCancelled(); err != nil {
-			return 0, err
-		}
-
-		asset, err := vt.lapi.GetAsset(uploadAsset.ID)
-		if err != nil {
-			glog.Errorf("Error retrieving asset id=%s err=%v", uploadAsset.ID, err)
-			return 251, fmt.Errorf("error retrieving asset id=%s: %w", uploadAsset.ID, err)
-		}
-		if asset.Status.Phase == "ready" {
-			break
-		}
-		if asset.Status.Phase != "waiting" {
-			glog.Errorf("Error uploading asset assetId=%s, taskId=%s, status=%s, err=%v", asset.ID, uploadTask.ID, asset.Status.Phase, asset.Status.ErrorMessage)
-			return 252, fmt.Errorf("error uploading asset assetId=%s, taskId=%s, status=%s, err=%v", asset.ID, uploadTask.ID, asset.Status.Phase, asset.Status.ErrorMessage)
-		}
+	if err != nil {
+		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
+		return 251, err
 	}
 
 	assetName = fmt.Sprintf("vod_test_asset_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
@@ -207,23 +193,57 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 
 	if err != nil {
 		glog.Errorf("Error requesting upload for assetName=%s err=%v", assetName, err)
-		return 253, fmt.Errorf("error requesting upload for assetName=%s: %w", assetName, err)
+		return 252, fmt.Errorf("error requesting upload for assetName=%s: %w", assetName, err)
 	}
 
 	tusUploadEndpoint := requestUpload.TusEndpoint
 	uploadAsset = requestUpload.Asset
-	uploadTask = requestUpload.Task
+	uploadTask = api.Task{
+		ID: requestUpload.Task.ID,
+	}
 
 	err = vt.lapi.ResumableUpload(tusUploadEndpoint, filePath)
 
 	if err != nil {
 		glog.Errorf("Error resumable uploading file filePath=%s err=%v", filePath, err)
-		return 254, fmt.Errorf("error resumable uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
+		return 253, fmt.Errorf("error resumable uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
+	}
+
+	err = vt.checkAssetProcessing(taskPollDuration, uploadAsset, uploadTask)
+
+	if err != nil {
+		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
+		return 254, err
 	}
 
 	glog.Info("Done VOD Test")
 
 	return 0, nil
+}
+
+func (vt *vodTester) checkAssetProcessing(taskPollDuration time.Duration, uploadAsset api.Asset, uploadTask api.Task) error {
+	startTime := time.Now()
+	for {
+		glog.Infof("Waiting %s assetId=%s, elapsed=%s", taskPollDuration, uploadAsset.ID, time.Since(startTime))
+		time.Sleep(taskPollDuration)
+
+		if err := vt.isCancelled(); err != nil {
+			return err
+		}
+
+		asset, err := vt.lapi.GetAsset(uploadAsset.ID)
+		if err != nil {
+			glog.Errorf("Error retrieving asset id=%s err=%v", uploadAsset.ID, err)
+			return fmt.Errorf("error retrieving asset id=%s: %w", uploadAsset.ID, err)
+		}
+		if asset.Status.Phase == "ready" {
+			return nil
+		}
+		if asset.Status.Phase != "waiting" {
+			glog.Errorf("Error task on asset assetId=%s, taskId=%s, status=%s, err=%v", asset.ID, uploadTask.ID, asset.Status.Phase, asset.Status.ErrorMessage)
+			return fmt.Errorf("error task on asset assetId=%s, taskId=%s, status=%s, err=%v", asset.ID, uploadTask.ID, asset.Status.Phase, asset.Status.ErrorMessage)
+		}
+	}
 }
 
 func (vt *vodTester) isCancelled() error {
