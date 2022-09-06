@@ -145,14 +145,9 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 		}
 	}
 
-	filePath := "/tmp/test.mp4"
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", fileUrl, nil)
-	if err != nil {
-		glog.Errorf("Error creating request for fileUrl=%s err=%v", fileUrl, err)
-	}
+	filePath := "/tmp/uploadtester.mp4"
+	resp, err := http.Get(fileUrl)
 
-	resp, err := client.Do(req)
 	if err != nil {
 		glog.Errorf("Error downloading fileUrl=%s err=%v", fileUrl, err)
 	}
@@ -205,6 +200,25 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 			glog.Errorf("Error uploading asset assetId=%s, taskId=%s, status=%s, err=%v", asset.ID, uploadTask.ID, asset.Status.Phase, asset.Status.ErrorMessage)
 			return 252, fmt.Errorf("error uploading asset assetId=%s, taskId=%s, status=%s, err=%v", asset.ID, uploadTask.ID, asset.Status.Phase, asset.Status.ErrorMessage)
 		}
+	}
+
+	assetName = fmt.Sprintf("vod_test_asset_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
+	requestUpload, err = vt.lapi.RequestUpload(assetName)
+
+	if err != nil {
+		glog.Errorf("Error requesting upload for assetName=%s err=%v", assetName, err)
+		return 253, fmt.Errorf("error requesting upload for assetName=%s: %w", assetName, err)
+	}
+
+	tusUploadEndpoint := requestUpload.TusEndpoint
+	uploadAsset = requestUpload.Asset
+	uploadTask = requestUpload.Task
+
+	err = vt.lapi.ResumableUpload(tusUploadEndpoint, filePath)
+
+	if err != nil {
+		glog.Errorf("Error resumable uploading file filePath=%s err=%v", filePath, err)
+		return 254, fmt.Errorf("error resumable uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
 	}
 
 	glog.Info("Done VOD Test")
