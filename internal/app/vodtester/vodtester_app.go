@@ -193,7 +193,14 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 		ID: requestUpload.Task.ID,
 	}
 
-	err = vt.lapi.ResumableUpload(tusUploadEndpoint, fileName)
+	file, err := os.Open(fileName)
+
+	if err != nil {
+		glog.Errorf("Error opening file=%s err=%v", fileName, err)
+		return fmt.Errorf("error opening file=%s: %w", fileName, err)
+	}
+
+	err = vt.lapi.ResumableUpload(tusUploadEndpoint, file)
 
 	if err != nil {
 		glog.Errorf("Error resumable uploading file filePath=%s err=%v", fileName, err)
