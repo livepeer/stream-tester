@@ -52,7 +52,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 		hostName, _ := os.Hostname()
 		assetName := fmt.Sprintf("vod_test_asset_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 
-		importAsset, err := vt.importFromUrlTester(vodImportUrl, taskPollDuration, assetName)
+		importAsset, err := vt.uploadViaUrlTester(vodImportUrl, taskPollDuration, assetName)
 
 		if err != nil {
 			glog.Errorf("Error importing asset from url=%s err=%v", vodImportUrl, err)
@@ -122,7 +122,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 	return 0, nil
 }
 
-func (vt *vodTester) importFromUrlTester(vodImportUrl string, taskPollDuration time.Duration, assetName string) (*api.Asset, error) {
+func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration time.Duration, assetName string) (*api.Asset, error) {
 
 	importAsset, importTask, err := vt.lapi.ImportAsset(vodImportUrl, assetName)
 	if err != nil {
