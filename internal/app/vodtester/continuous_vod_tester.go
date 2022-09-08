@@ -16,7 +16,7 @@ type (
 	// IContinuousVodTester ...
 	IContinuousVodTester interface {
 		// Start start test. Blocks until error.
-		Start(fileName string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error
+		Start(fileName string, vodImportUrl string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error
 		Cancel()
 		Done() <-chan struct{}
 	}
@@ -56,7 +56,7 @@ func NewContinuousVodTester(gctx context.Context, opts ContinuousVodTesterOption
 	return cvt
 }
 
-func (cvt *continuousVodTester) Start(fileName string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error {
+func (cvt *continuousVodTester) Start(fileName string, vodImportUrl string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error {
 	messenger.SendMessage(fmt.Sprintf("Starting continuous vod test of %s", cvt.host))
 	ticker := time.NewTicker(testDuration)
 	defer ticker.Stop()
@@ -66,7 +66,7 @@ func (cvt *continuousVodTester) Start(fileName string, testDuration, taskPollDur
 
 		ctx, cancel := context.WithTimeout(cvt.ctx, testDuration)
 		vt := NewVodTester(ctx, cvt.vtOpts)
-		es, err := vt.Start(fileName, taskPollDuration)
+		es, err := vt.Start(fileName, vodImportUrl, taskPollDuration)
 		ctxErr := ctx.Err()
 		cancel()
 
