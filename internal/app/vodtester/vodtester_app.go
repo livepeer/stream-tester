@@ -218,6 +218,10 @@ func (vt *vodTester) checkTaskProcessing(taskPollDuration time.Duration, process
 		glog.Infof("Waiting %s for task id=%s to be processed, elapsed=%s", taskPollDuration, processingTask.ID, time.Since(startTime))
 		time.Sleep(taskPollDuration)
 
+		if err := vt.isCancelled(); err != nil {
+			return err
+		}
+
 		task, err := vt.lapi.GetTask(processingTask.ID)
 		if err != nil {
 			glog.Errorf("Error retrieving task id=%s err=%v", processingTask.ID, err)
