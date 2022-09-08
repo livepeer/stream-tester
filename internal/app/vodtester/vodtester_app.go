@@ -8,6 +8,7 @@ import (
 
 	"github.com/golang/glog"
 	api "github.com/livepeer/go-api-client"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -44,56 +45,76 @@ func NewVodTester(gctx context.Context, opts VodTesterOptions) IVodTester {
 func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) (int, error) {
 	defer vt.cancel()
 
-	hostName, _ := os.Hostname()
-	assetName := fmt.Sprintf("vod_test_asset_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
+	eg, _ := errgroup.WithContext(vt.ctx)
 
-	importAsset, err := vt.importFromUrlTester(vodImportUrl, taskPollDuration, assetName)
+	eg.Go(func() error {
 
-	if err != nil {
-		glog.Errorf("Error importing asset from url=%s err=%v", vodImportUrl, err)
-		return 0, fmt.Errorf("error importing asset from url=%s: %w", vodImportUrl, err)
-	}
+		hostName, _ := os.Hostname()
+		assetName := fmt.Sprintf("vod_test_asset_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 
-	_, transcodeTask, err := vt.lapi.TranscodeAsset(importAsset.ID, assetName, api.StandardProfiles[0])
+		importAsset, err := vt.importFromUrlTester(vodImportUrl, taskPollDuration, assetName)
 
-	if err != nil {
-		glog.Errorf("Error transcoding asset assetId=%s err=%v", importAsset.ID, err)
-		return 0, fmt.Errorf("error transcoding asset assetId=%s: %w", importAsset.ID, err)
-	}
+		if err != nil {
+			glog.Errorf("Error importing asset from url=%s err=%v", vodImportUrl, err)
+			return fmt.Errorf("error importing asset from url=%s: %w", vodImportUrl, err)
+		}
 
-	err = vt.checkTaskProcessing(taskPollDuration, *transcodeTask)
+		_, transcodeTask, err := vt.lapi.TranscodeAsset(importAsset.ID, assetName, api.StandardProfiles[0])
 
-	if err != nil {
-		glog.Errorf("Error in trasncoding task taskId=%s", transcodeTask.ID)
-		return 0, fmt.Errorf("error in transcoding task taskId=%s: %w", transcodeTask.ID, err)
-	}
+		if err != nil {
+			glog.Errorf("Error transcoding asset assetId=%s err=%v", importAsset.ID, err)
+			return fmt.Errorf("error transcoding asset assetId=%s: %w", importAsset.ID, err)
+		}
 
-	exportTask, err := vt.lapi.ExportAsset(importAsset.ID)
+		err = vt.checkTaskProcessing(taskPollDuration, *transcodeTask)
 
-	if err != nil {
-		glog.Errorf("Error exporting asset assetId=%s err=%v", importAsset.ID, err)
-		return 0, fmt.Errorf("error exporting asset assetId=%s: %w", importAsset.ID, err)
-	}
+		if err != nil {
+			glog.Errorf("Error in trasncoding task taskId=%s", transcodeTask.ID)
+			return fmt.Errorf("error in transcoding task taskId=%s: %w", transcodeTask.ID, err)
+		}
 
-	err = vt.checkTaskProcessing(taskPollDuration, *exportTask)
+		exportTask, err := vt.lapi.ExportAsset(importAsset.ID)
 
-	if err != nil {
-		glog.Errorf("Error in export task taskId=%s", exportTask.ID)
-		return 0, fmt.Errorf("error in export task taskId=%s: %w", exportTask.ID, err)
-	}
+		if err != nil {
+			glog.Errorf("Error exporting asset assetId=%s err=%v", importAsset.ID, err)
+			return fmt.Errorf("error exporting asset assetId=%s: %w", importAsset.ID, err)
+		}
 
-	err = vt.directUploadTester(fileName, taskPollDuration)
+		err = vt.checkTaskProcessing(taskPollDuration, *exportTask)
 
-	if err != nil {
-		glog.Errorf("Error in direct upload task err=%v", err)
-		return 0, fmt.Errorf("error in direct upload task: %w", err)
-	}
+		if err != nil {
+			glog.Errorf("Error in export task taskId=%s", exportTask.ID)
+			return fmt.Errorf("error in export task taskId=%s: %w", exportTask.ID, err)
+		}
 
-	err = vt.resumableUploadTester(fileName, taskPollDuration)
+		return nil
+	})
 
-	if err != nil {
-		glog.Errorf("Error in resumable upload task err=%v", err)
-		return 0, fmt.Errorf("error in resumable upload task: %w", err)
+	eg.Go(func() error {
+
+		err := vt.directUploadTester(fileName, taskPollDuration)
+
+		if err != nil {
+			glog.Errorf("Error in direct upload task err=%v", err)
+			return fmt.Errorf("error in direct upload task: %w", err)
+		}
+
+		return nil
+	})
+
+	eg.Go(func() error {
+		err := vt.resumableUploadTester(fileName, taskPollDuration)
+
+		if err != nil {
+			glog.Errorf("Error in resumable upload task err=%v", err)
+			return fmt.Errorf("error in resumable upload task: %w", err)
+		}
+
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return 1, err
 	}
 
 	glog.Info("Done VOD Test")
