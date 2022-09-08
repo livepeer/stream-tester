@@ -1,6 +1,9 @@
+.dockerignore
 *.mp4
 *.ts
 /segmented
 /hls
 /hls2
-docker/
+/docker/*
+Makefile
+*Dockerfile*

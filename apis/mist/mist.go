@@ -292,7 +292,18 @@ func (mapi *API) caclChallengeResponse(password, challenge string) string {
 
 // CreateStream creates new stream in Mist server
 // func (mapi *API) CreateStream(name string, presets []string, profiles []Profile, segmentSize, customURL, source string) error
-func (mapi *API) CreateStream(name string, presets []string, profiles []Profile, segmentSize, customURL, source, hardcodedBroadcasters string, skipTranscoding, sendAudio bool) error {
+func (mapi *API) CreateStream(name string, presets []string, profiles []Profile, segmentSize, customURL, source, hardcodedBroadcasters string, skipTranscoding, sendAudio, overwrite bool) error {
+	if !overwrite {
+		streams, _, err := mapi.Streams()
+		if err != nil {
+			return err
+		}
+		_, exists := streams[name]
+		if exists {
+			glog.Infof("Mist stream '%s' already exists, skipping creation", name)
+			return nil
+		}
+	}
 	glog.Infof("Creating Mist stream '%s' with presets '%+v' profiles %+v", name, presets, profiles)
 	reqs := &addStreamReq{
 		Minimal:   1,

@@ -1018,7 +1018,7 @@ func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStream
 	}
 	audio := mc.shouldEnableAudio(stream)
 	err := mc.mapi.CreateStream(streamName, stream.Presets,
-		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, mc.mistHardcodedBroadcasters, skipTranscoding, audio)
+		LivepeerProfiles2MistProfiles(stream.Profiles), "1", mc.lapi.GetServer()+"/api/stream/"+stream.ID, source, mc.mistHardcodedBroadcasters, skipTranscoding, audio, true)
 	// err = mc.mapi.CreateStream(streamKey, stream.Presets, LivepeerProfiles2MistProfiles(stream.Profiles), "1", "http://host.docker.internal:3004/api/stream/"+stream.ID)
 	return err
 }
@@ -1126,13 +1126,13 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 		apiURL := mc.lapi.GetServer() + "/api/stream/" + mc.baseStreamName
 		presets := []string{"P144p30fps16x9"}
 		// base stream created with audio disabled
-		err = mc.mapi.CreateStream(mc.baseStreamName, presets, nil, "1", apiURL, mc.mistStreamSource, mc.mistHardcodedBroadcasters, false, false)
+		err = mc.mapi.CreateStream(mc.baseStreamName, presets, nil, "1", apiURL, mc.mistStreamSource, mc.mistHardcodedBroadcasters, false, false, false)
 		if err != nil {
 			glog.Error(err)
 			return err
 		}
 		// create second stream with audio enabled - used for stream with recording enabled
-		err = mc.mapi.CreateStream(mc.baseStreamName+audioEnabledStreamSuffix, presets, nil, "1", apiURL, mc.mistStreamSource, mc.mistHardcodedBroadcasters, false, true)
+		err = mc.mapi.CreateStream(mc.baseStreamName+audioEnabledStreamSuffix, presets, nil, "1", apiURL, mc.mistStreamSource, mc.mistHardcodedBroadcasters, false, true, false)
 	}
 	return err
 }

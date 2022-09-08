@@ -26,6 +26,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Restore go modules cache
+        id: cache-go-mod
         uses: actions/cache@v3
         with:
           path: |
@@ -40,5 +41,12 @@ jobs:
 
       - name: Trigger test suite
         run: |
-          # Skip orch-tester, because we not released as a binary
-          go test $(go list ./... | grep -v 'orch-tester') -v
+          # ignoring orch-tester
+          go test $(go list ./... | grep -v "orch-tester") --short -v --covermode=atomic --coverprofile=coverage.out
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.out
+          name: ${{ github.event.repository.name }}
+          verbose: true

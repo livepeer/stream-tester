@@ -1,30 +1,36 @@
-FROM livepeerci/build as builder
+FROM	livepeerci/build	as	builder
 
-RUN apt update \
-    && apt install -yqq wget tar
+RUN	apt update && \
+	apt install -yqq wget tar
+
+WORKDIR	/root
+
+RUN	wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
+
+COPY	go.mod go.sum ./
+
+RUN	go mod download
+
+COPY	.	.
+
+RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" \
+	-tags mainnet \
+	cmd/orch-tester/orch_tester.go cmd/orch-tester/broadcaster_metrics.go
+
+FROM	debian:stretch-slim
+
+RUN	apt update && \
+	apt install -y ca-certificates && \
+	apt clean && \
+	apt autoclean
+
+RUN	update-ca-certificates
 
 WORKDIR /root
 
-RUN wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
+COPY --from=builder	/root/official_test_source_2s_keys_24pfs_30s_hls	official_test_source_2s_keys_24pfs_30s_hls
+COPY --from=builder	/root/orch_tester	/usr/local/bin/orch_tester
 
-COPY go.mod go.sum ./
+RUN	ln -s /usr/local/bin/orch_tester ./
 
-RUN go mod download
-
-COPY . .
-
-RUN go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" -tags mainnet cmd/orch-tester/orch_tester.go cmd/orch-tester/broadcaster_metrics.go
-
-FROM debian:stretch-slim
-
-RUN apt update \
-  && apt install -y ca-certificates \
-  && apt clean && apt autoclean
-RUN update-ca-certificates
-
-WORKDIR /root
-
-COPY --from=builder /root/official_test_source_2s_keys_24pfs_30s_hls official_test_source_2s_keys_24pfs_30s_hls
-COPY --from=builder /root/orch_tester orch_tester
-
-ENTRYPOINT ["/root/orch_tester"]
+ENTRYPOINT ["/usr/local/bin/orch_tester"]

@@ -651,7 +651,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			}
 			// glog.Infof("Parsed uri: %+v", pvrui, pvrui.IsAbs)
 			if !pvrui.IsAbs() {
-				pvrui = mut.initialURL.ResolveReference(pvrui)
+				pvrui = resp.Request.URL.ResolveReference(pvrui)
 			}
 			if ms, has := mut.streams[res]; has {
 				if ms.name != variant.URI && mut.followRename {
