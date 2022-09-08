@@ -110,7 +110,8 @@ func (vt *vodTester) importFromUrlTester(vodImportUrl string, taskPollDuration t
 	}
 	glog.Infof("Importing asset taskId=%s outputAssetId=%s", importTask.ID, importAsset.ID)
 
-	err = vt.checkAssetProcessing(taskPollDuration, *importAsset, *importTask)
+	err = vt.checkTaskProcessing(taskPollDuration, *importTask)
+
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", importAsset.ID, importTask.ID)
 	}
@@ -148,7 +149,7 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 		return fmt.Errorf("error uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
 	}
 
-	err = vt.checkAssetProcessing(taskPollDuration, uploadAsset, uploadTask)
+	err = vt.checkTaskProcessing(taskPollDuration, uploadTask)
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
 	}
@@ -178,38 +179,13 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 		return fmt.Errorf("error resumable uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
 	}
 
-	err = vt.checkAssetProcessing(taskPollDuration, uploadAsset, uploadTask)
+	err = vt.checkTaskProcessing(taskPollDuration, uploadTask)
 
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
 	}
 
 	return err
-}
-
-func (vt *vodTester) checkAssetProcessing(taskPollDuration time.Duration, uploadAsset api.Asset, uploadTask api.Task) error {
-	startTime := time.Now()
-	for {
-		glog.Infof("Waiting %s assetId=%s, elapsed=%s", taskPollDuration, uploadAsset.ID, time.Since(startTime))
-		time.Sleep(taskPollDuration)
-
-		if err := vt.isCancelled(); err != nil {
-			return err
-		}
-
-		asset, err := vt.lapi.GetAsset(uploadAsset.ID)
-		if err != nil {
-			glog.Errorf("Error retrieving asset id=%s err=%v", uploadAsset.ID, err)
-			return fmt.Errorf("error retrieving asset id=%s: %w", uploadAsset.ID, err)
-		}
-		if asset.Status.Phase == "ready" {
-			return nil
-		}
-		if asset.Status.Phase != "waiting" {
-			glog.Errorf("Error task on asset assetId=%s, taskId=%s, status=%s, err=%v", asset.ID, uploadTask.ID, asset.Status.Phase, asset.Status.ErrorMessage)
-			return fmt.Errorf("error task on asset assetId=%s, taskId=%s, status=%s, err=%v", asset.ID, uploadTask.ID, asset.Status.Phase, asset.Status.ErrorMessage)
-		}
-	}
 }
 
 func (vt *vodTester) checkTaskProcessing(taskPollDuration time.Duration, processingTask api.Task) error {
