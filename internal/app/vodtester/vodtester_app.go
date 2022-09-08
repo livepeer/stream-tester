@@ -204,12 +204,12 @@ func (vt *vodTester) checkTaskProcessing(taskPollDuration time.Duration, process
 			return fmt.Errorf("error retrieving task id=%s: %w", processingTask.ID, err)
 		}
 		if task.Status.Phase == "completed" {
-			glog.Infof("Task success, taskId=%s assetId=%s ", task.ID, task.InputAssetID)
+			glog.Infof("Task success, taskId=%s", task.ID)
 			return nil
 		}
 		if task.Status.Phase != "pending" && task.Status.Phase != "running" && task.Status.Phase != "waiting" {
-			glog.Errorf("Error processing task, taskId=%s assetId=%s status=%s error=%v", task.ID, task.InputAssetID, task.Status.Phase, task.Status.ErrorMessage)
-			return fmt.Errorf("error processing task, taskId=%s assetId=%s status=%s error=%v", task.ID, task.InputAssetID, task.Status.Phase, task.Status.ErrorMessage)
+			glog.Errorf("Error processing task, taskId=%s status=%s error=%v", task.ID, task.Status.Phase, task.Status.ErrorMessage)
+			return fmt.Errorf("error processing task, taskId=%s status=%s error=%v", task.ID, task.Status.Phase, task.Status.ErrorMessage)
 		}
 	}
 }
