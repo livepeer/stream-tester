@@ -3,7 +3,6 @@ package vodtester
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
@@ -15,7 +14,7 @@ type (
 	// IVodTester ...
 	IVodTester interface {
 		// Start start test. Blocks until finished.
-		Start(fileName string, taskPollDuration time.Duration) (int, error)
+		Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) (int, error)
 		Cancel()
 		Done() <-chan struct{}
 	}
@@ -42,7 +41,7 @@ func NewVodTester(gctx context.Context, opts VodTesterOptions) IVodTester {
 	return vt
 }
 
-func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int, error) {
+func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) (int, error) {
 	defer vt.cancel()
 	var (
 		err       error
@@ -51,7 +50,7 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 
 	hostName, _ := os.Hostname()
 	assetName := fmt.Sprintf("vod_test_asset_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	importAsset, importTask, err := vt.lapi.ImportAsset(fileUrl, assetName)
+	importAsset, importTask, err := vt.lapi.ImportAsset(vodImportUrl, assetName)
 	if err != nil {
 		glog.Errorf("Error importing asset err=%v", err)
 		return 242, fmt.Errorf("error importing asset: %w", err)
@@ -145,20 +144,6 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 		}
 	}
 
-	filePath := "/tmp/uploadtester.mp4"
-	resp, err := http.Get(fileUrl)
-
-	if err != nil {
-		glog.Errorf("Error downloading fileUrl=%s err=%v", fileUrl, err)
-	}
-	defer resp.Body.Close()
-
-	out, err := os.Create(filePath)
-	if err != nil {
-		glog.Errorf("Error creating file filePath=%s err=%v", filePath, err)
-	}
-	defer out.Close()
-
 	assetName = fmt.Sprintf("vod_test_asset_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	requestUpload, err := vt.lapi.RequestUpload(assetName)
 
@@ -175,17 +160,25 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 
 	glog.Infof("Uploading to endpoint=%s", uploadEndpoint)
 
-	err = vt.lapi.UploadAsset(uploadEndpoint, out)
+	// read file from fileName
+	file, err := os.Open(fileName)
+
 	if err != nil {
-		glog.Errorf("Error uploading file filePath=%s err=%v", filePath, err)
-		return 250, fmt.Errorf("error uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
+		glog.Errorf("Error opening file=%s err=%v", fileName, err)
+		return 250, fmt.Errorf("error opening file=%s: %w", fileName, err)
+	}
+
+	err = vt.lapi.UploadAsset(uploadEndpoint, file)
+	if err != nil {
+		glog.Errorf("Error uploading file filePath=%s err=%v", fileName, err)
+		return 251, fmt.Errorf("error uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
 	}
 
 	err = vt.checkAssetProcessing(taskPollDuration, uploadAsset, uploadTask)
 
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
-		return 251, err
+		return 252, err
 	}
 
 	assetName = fmt.Sprintf("vod_test_asset_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
@@ -193,7 +186,7 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 
 	if err != nil {
 		glog.Errorf("Error requesting upload for assetName=%s err=%v", assetName, err)
-		return 252, fmt.Errorf("error requesting upload for assetName=%s: %w", assetName, err)
+		return 253, fmt.Errorf("error requesting upload for assetName=%s: %w", assetName, err)
 	}
 
 	tusUploadEndpoint := requestUpload.TusEndpoint
@@ -202,18 +195,18 @@ func (vt *vodTester) Start(fileUrl string, taskPollDuration time.Duration) (int,
 		ID: requestUpload.Task.ID,
 	}
 
-	err = vt.lapi.ResumableUpload(tusUploadEndpoint, filePath)
+	err = vt.lapi.ResumableUpload(tusUploadEndpoint, fileName)
 
 	if err != nil {
-		glog.Errorf("Error resumable uploading file filePath=%s err=%v", filePath, err)
-		return 253, fmt.Errorf("error resumable uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
+		glog.Errorf("Error resumable uploading file filePath=%s err=%v", fileName, err)
+		return 254, fmt.Errorf("error resumable uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
 	}
 
 	err = vt.checkAssetProcessing(taskPollDuration, uploadAsset, uploadTask)
 
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
-		return 254, err
+		return 255, err
 	}
 
 	glog.Info("Done VOD Test")

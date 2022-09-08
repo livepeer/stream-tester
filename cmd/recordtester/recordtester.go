@@ -283,7 +283,7 @@ func main() {
 					VodTesterOptions:        vtOpts,
 				}
 				cvt := vodtester.NewContinuousVodTester(egCtx, cvtOpts)
-				return cvt.Start(*vodImportUrl, *testDuration, *taskPollDuration, *continuousTest)
+				return cvt.Start(fileName, *vodImportUrl, *testDuration, *taskPollDuration, *continuousTest)
 			})
 		}
 		if err := eg.Wait(); err != nil {
