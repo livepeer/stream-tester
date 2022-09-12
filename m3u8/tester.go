@@ -20,11 +20,11 @@ func Check(ctx context.Context, url string, profiles []api.Profile, expectedDura
 	downloader := testers.NewM3utester2(ctx, url, false, false, false, false, timeout, nil, false)
 	<-downloader.Done()
 	stats := downloader.VODStats()
-	if len(stats.SegmentsNum) != len(profiles)+1 {
-		return fmt.Errorf("number of renditions doesn't match (has %d should %d)", len(stats.SegmentsNum), len(profiles)+1)
-	}
 	if ok, ers := stats.IsOk(expectedDuration, false); !ok {
 		return fmt.Errorf("playlist not ok: %s", ers)
+	}
+	if len(stats.SegmentsNum) != len(profiles)+1 {
+		return fmt.Errorf("number of renditions doesn't match (has %d should %d)", len(stats.SegmentsNum), len(profiles)+1)
 	}
 	return nil
 }
