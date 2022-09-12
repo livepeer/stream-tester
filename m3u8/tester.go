@@ -16,8 +16,8 @@ func InitCensus(service, version string) {
 	metrics.InitCensus(hostname, version, service)
 }
 
-func Check(ctx context.Context, url string, profiles []api.Profile, expectedDuration time.Duration) error {
-	downloader := testers.NewM3utester2(ctx, url, false, false, false, false, 5*time.Second, nil, false)
+func Check(ctx context.Context, url string, profiles []api.Profile, expectedDuration time.Duration, timeout time.Duration) error {
+	downloader := testers.NewM3utester2(ctx, url, false, false, false, false, timeout, nil, false)
 	<-downloader.Done()
 	stats := downloader.VODStats()
 	if len(stats.SegmentsNum) != len(profiles)+1 {
