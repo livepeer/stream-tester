@@ -45,7 +45,7 @@ func NewVodTester(gctx context.Context, opts VodTesterOptions) IVodTester {
 func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) (int, error) {
 	defer vt.cancel()
 
-	eg, _ := errgroup.WithContext(vt.ctx)
+	eg, egCtx := errgroup.WithContext(vt.ctx)
 
 	eg.Go(func() error {
 
@@ -91,7 +91,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 	})
 
 	eg.Go(func() error {
-		err := vt.directUploadTester(vt.ctx, fileName, taskPollDuration)
+		err := vt.directUploadTester(fileName, taskPollDuration)
 
 		if err != nil {
 			glog.Errorf("Error in direct upload task err=%v", err)
@@ -111,13 +111,15 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 
 		return nil
 	})
-
+	go func() {
+		<-egCtx.Done()
+		vt.cancel()
+	}()
 	if err := eg.Wait(); err != nil {
 		return 1, err
 	}
 
 	glog.Info("Done VOD Test")
-
 	return 0, nil
 }
 
@@ -138,7 +140,7 @@ func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration ti
 	return importAsset, err
 }
 
-func (vt *vodTester) directUploadTester(ctx context.Context, fileName string, taskPollDuration time.Duration) error {
+func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.Duration) error {
 	hostName, _ := os.Hostname()
 	assetName := fmt.Sprintf("vod_test_upload_direct_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	requestUpload, err := vt.lapi.RequestUpload(assetName)
@@ -163,7 +165,7 @@ func (vt *vodTester) directUploadTester(ctx context.Context, fileName string, ta
 		return fmt.Errorf("error opening file=%s: %w", fileName, err)
 	}
 
-	err = vt.lapi.UploadAsset(ctx, uploadEndpoint, file)
+	err = vt.lapi.UploadAsset(vt.ctx, uploadEndpoint, file)
 	if err != nil {
 		glog.Errorf("Error uploading file filePath=%s err=%v", fileName, err)
 		return fmt.Errorf("error uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
