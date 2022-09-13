@@ -120,11 +120,15 @@ func (cvt *continuousVodTester) sendPagerdutyEvent(vt IVodTester, err error) {
 		}
 		return
 	}
+	summary := fmt.Sprintf("%s:vhs: VOD %s for `%s` error: %v", lopriPrefix, cvt.pagerDutyComponent, cvt.host, err)
+	if len(summary) > 1024 {
+		summary = summary[:1021] + "..."
+	}
 	event.Payload = &pagerduty.V2Payload{
 		Source:    cvt.host,
 		Component: cvt.pagerDutyComponent,
 		Severity:  severity,
-		Summary:   fmt.Sprintf("%s:vhs: VOD %s for `%s` error: %v", lopriPrefix, cvt.pagerDutyComponent, cvt.host, err),
+		Summary:   summary,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 	resp, err := pagerduty.ManageEvent(event)
