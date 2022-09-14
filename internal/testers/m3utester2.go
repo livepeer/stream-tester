@@ -622,11 +622,18 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 				// remove Wowza's session id from URL
 				variant.URI = wowzaSessionRE.ReplaceAllString(variant.URI, "_")
 			}
-			if mut.mistMode {
-				variant.URI = mistSessionRE.ReplaceAllString(variant.URI, "")
-			}
 			ress := variant.Resolution
-			if !mut.followRename {
+			if mut.mistMode {
+				// for Mist, strip the query string for matching purposes but keep it for the actual request
+				misturl, err := url.Parse(variant.URI)
+				if err != nil {
+					msg := fmt.Sprintf("Error parsing variant url %s: %v", variant.URI, err)
+					mut.fatalEnd(errors.New(msg))
+					return
+				}
+				misturl.RawQuery = ""
+				ress = misturl.String()
+			} else if !mut.followRename {
 				ress = variant.URI
 			} else {
 				if variant.Resolution == "" {
@@ -658,10 +665,13 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 					// stream changed, notify stream downloaded
 					ms.streamSwitchedTo <- nameAndURI{name: variant.URI, uri: pvrui} // blocks until processed, needed to make sure name was changed
 				}
+				glog.V(model.VVERBOSE).Infof("Rendition playlist matched, skipping res=%s mediaUrl=%s", res, pvrui.String())
 				continue
+			} else {
+				glog.V(model.VVERBOSE).Infof("Rendition playlist did not march, streaming res=%s mediaUrl=%s", res, pvrui.String())
 			}
 
-			glog.V(model.VVERBOSE).Infof("Media url=%s", pvrui.String())
+			glog.V(4).Infof("Starting rendition pull! mediaUrl=%s", pvrui.String())
 			if mut.sourceRes == "" {
 				mut.sourceRes = ress
 			}
