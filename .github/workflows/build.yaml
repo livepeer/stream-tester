@@ -11,6 +11,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         platform:
           - name: linux
@@ -22,6 +23,7 @@ jobs:
         arch:
           - arm64
           - amd64
+
     name: Build binaries for ${{ matrix.platform.name }}-${{ matrix.arch }}
     runs-on: ${{ matrix.platform.os }}
     steps:
@@ -81,23 +83,23 @@ jobs:
           app-bundle-id: "org.livepeer.lapi"
 
       - name: Archive binaries for windows
-        if: matrix.platform == 'windows'
+        if: matrix.platform.name == 'windows'
         run: |
           cd build/
           for file in $(find . -type f -perm -a+x)
           do
             f_name="$(basename $file)"
-            zip -9q "../releases/livepeer-${f_name/.exe/}-${GOOS}-${GOARCH}.zip" "livepeer-${f_name}"
+            zip -9q "../releases/${f_name/.exe/}-${GOOS}-${GOARCH}.zip" "${f_name}"
           done
 
       - name: Archive binaries for linux/macos
-        if: matrix.platform != 'windows'
+        if: matrix.platform.name != 'windows'
         run: |
           cd build/
           for file in $(find . -type f -perm -a+x)
           do
             f_name="$(basename $file)"
-            tar -czf "../releases/livepeer-${f_name}-${GOOS}-${GOARCH}.tar.gz" "livepeer-${f_name}"
+            tar -czf "../releases/${f_name}-${GOOS}-${GOARCH}.tar.gz" "${f_name}"
           done
 
       - name: Upload artifacts for cutting release
