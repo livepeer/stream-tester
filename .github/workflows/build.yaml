@@ -109,7 +109,7 @@ jobs:
           path: releases/
 
   upload:
-    name: Upload artifacts to google bucket
+    name: Upload ${{ matrix.project }} to google bucket
     permissions:
       contents: "read"
       id-token: "write"
@@ -139,7 +139,7 @@ jobs:
         run: |
           mkdir -p releases/
           cd "${{ steps.download.outputs.download-path }}/"
-          mv "*${{ matrix.project }}*" ../releases/
+          mv livepeer-${{ matrix.project }}* ../releases/
 
       - name: Generate sha256 checksum and gpg signatures for release artifacts
         uses: livepeer/action-gh-checksum-and-gpg-sign@latest
