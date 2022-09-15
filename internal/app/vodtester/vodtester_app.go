@@ -164,7 +164,7 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 		return fmt.Errorf("error opening file=%s: %w", fileName, err)
 	}
 
-	err = vt.lapi.UploadAsset(uploadEndpoint, file)
+	err = vt.lapi.UploadAsset(vt.ctx, uploadEndpoint, file)
 	if err != nil {
 		glog.Errorf("Error uploading file filePath=%s err=%v", fileName, err)
 		return fmt.Errorf("error uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
