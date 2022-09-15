@@ -632,6 +632,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 					return
 				}
 				misturl.RawQuery = ""
+				misturl.Host = ""
 				ress = misturl.String()
 			} else if !mut.followRename {
 				ress = variant.URI
