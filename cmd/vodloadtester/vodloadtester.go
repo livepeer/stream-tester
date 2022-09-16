@@ -65,7 +65,7 @@ func main() {
 	flag.Set("logtostderr", "true")
 	vFlag := flag.Lookup("v")
 
-	fs := flag.NewFlagSet("loadtester", flag.ExitOnError)
+	fs := flag.NewFlagSet("vodloadtester", flag.ExitOnError)
 
 	fs.IntVar(&cliFlags.Verbosity, "v", 3, "Log verbosity.  {4|5|6}")
 	fs.BoolVar(&cliFlags.Version, "version", false, "Print out the version")
