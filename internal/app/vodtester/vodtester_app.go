@@ -179,11 +179,6 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 }
 
 func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration time.Duration) error {
-	// TODO: Resumable upload tests are disabled as they're currently broken.
-	// Remove this once they are fixed.
-	if true {
-		return nil
-	}
 
 	hostName, _ := os.Hostname()
 	assetName := fmt.Sprintf("vod_test_upload_resumable_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
