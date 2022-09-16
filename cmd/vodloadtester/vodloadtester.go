@@ -95,7 +95,7 @@ func main() {
 	vFlag.Value.Set(fmt.Sprintf("%d", cliFlags.Verbosity))
 
 	hostName, _ := os.Hostname()
-	runnerInfo := fmt.Sprintf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
+	runnerInfo := fmt.Sprintf("Hostname %s OS %s", hostName, runtime.GOOS)
 	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	fmt.Print(runnerInfo)
 
