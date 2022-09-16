@@ -137,7 +137,7 @@ func main() {
 			glog.Fatal("Cannot use -import with either -direct or -resumable")
 		}
 		fileName = cliFlags.Filename
-		vt.importFromUrlTest(fileName)
+		vt.importFromUrlTest(fileName, runnerInfo)
 	}
 
 	if cliFlags.DirectUpload || cliFlags.ResumableUpload {
@@ -184,6 +184,7 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 				}
 				rndAssetName := fmt.Sprintf("load_test_direct_%s", randName())
 				requestedUpload, err := vt.requestUploadUrls(rndAssetName)
+				defer vt.lapi.DeleteAsset(requestedUpload.Asset.ID)
 
 				if err != nil {
 					glog.Errorf("Error requesting upload urls: %v", err)
@@ -240,6 +241,7 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 				}
 				rndAssetName := fmt.Sprintf("load_test_resumable_%s", randName())
 				requestedUpload, err := vt.requestUploadUrls(rndAssetName)
+				defer vt.lapi.DeleteAsset(requestedUpload.Asset.ID)
 
 				if err != nil {
 					glog.Errorf("Error requesting upload urls: %v", err)
@@ -284,7 +286,7 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 
 }
 
-func (vt *vodLoadTester) importFromUrlTest(url string) {
+func (vt *vodLoadTester) importFromUrlTest(url string, runnerInfo string) {
 	wg := &sync.WaitGroup{}
 
 	for i := 0; i < int(vt.cliFlags.VideoAmount); i += int(vt.cliFlags.Simultaneous) {
@@ -293,12 +295,14 @@ func (vt *vodLoadTester) importFromUrlTest(url string) {
 			wg.Add(1)
 			go func() {
 				uploadTest := uploadTest{
-					StartTime: time.Now(),
-					Kind:      "import",
+					StartTime:  time.Now(),
+					RunnerInfo: runnerInfo,
+					Kind:       "import",
 				}
 
 				rndAssetName := fmt.Sprintf("load_test_import_%s", randName())
 				asset, task, err := vt.lapi.ImportAsset(url, rndAssetName)
+				defer vt.lapi.DeleteAsset(asset.ID)
 
 				if err != nil {
 					glog.Errorf("Error importing asset: %v", err)
