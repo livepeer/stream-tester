@@ -54,6 +54,7 @@ type uploadTest struct {
 	TaskID               string    `json:"taskId,omitempty"`
 	RequestUploadSuccess uint      `json:"requestUploadSuccess,omitempty"`
 	UploadSuccess        uint      `json:"uploadSuccess,omitempty"`
+	ImportSuccess        uint      `json:"importSuccess,omitempty"`
 	TaskCheckSuccess     uint      `json:"taskCheckSuccess,omitempty"`
 	ErrorMessage         string    `json:"errorMessage,omitempty"`
 }
@@ -131,6 +132,14 @@ func main() {
 		cliFlags: *cliFlags,
 	}
 
+	if cliFlags.Import {
+		if cliFlags.DirectUpload || cliFlags.ResumableUpload {
+			glog.Fatal("Cannot use -import with either -direct or -resumable")
+		}
+		fileName = cliFlags.Filename
+		vt.importFromUrlTest(fileName)
+	}
+
 	if cliFlags.DirectUpload || cliFlags.ResumableUpload {
 		if fileName, err = utils.GetFile(cliFlags.Filename, strings.ReplaceAll(hostName, ".", "_")); err != nil {
 			if err == utils.ErrNotFound {
@@ -173,13 +182,15 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 					RunnerInfo: runnerInfo,
 					Kind:       "directUpload",
 				}
-				rndAssetName := fmt.Sprintf("load_test_%s", randName())
+				rndAssetName := fmt.Sprintf("load_test_direct_%s", randName())
 				requestedUpload, err := vt.requestUploadUrls(rndAssetName)
 
 				if err != nil {
 					glog.Errorf("Error requesting upload urls: %v", err)
 					uploadTest.RequestUploadSuccess = 0
 					uploadTest.ErrorMessage = err.Error()
+					vt.writeResultNdjson(uploadTest)
+					return
 				} else {
 					uploadTest.RequestUploadSuccess = 1
 					uploadTest.AssetID = requestedUpload.Asset.ID
@@ -191,7 +202,6 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 				if err != nil {
 					glog.Errorf("Error uploading asset: %v", err)
 					uploadTest.UploadSuccess = 0
-					uploadTest.EndTime = time.Now()
 				} else {
 					uploadTest.UploadSuccess = 1
 					if vt.cliFlags.TaskCheck {
@@ -204,7 +214,6 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 						}
 					}
 
-					uploadTest.EndTime = time.Now()
 				}
 				vt.writeResultNdjson(uploadTest)
 				wg.Done()
@@ -229,13 +238,15 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 					RunnerInfo: runnerInfo,
 					Kind:       "resumable",
 				}
-				rndAssetName := fmt.Sprintf("load_test_%s", randName())
+				rndAssetName := fmt.Sprintf("load_test_resumable_%s", randName())
 				requestedUpload, err := vt.requestUploadUrls(rndAssetName)
 
 				if err != nil {
 					glog.Errorf("Error requesting upload urls: %v", err)
 					uploadTest.RequestUploadSuccess = 0
 					uploadTest.ErrorMessage = err.Error()
+					vt.writeResultNdjson(uploadTest)
+					return
 				} else {
 					uploadTest.RequestUploadSuccess = 1
 					uploadTest.AssetID = requestedUpload.Asset.ID
@@ -249,9 +260,55 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 				if err != nil {
 					glog.Errorf("Error on resumable upload: %v", err)
 					uploadTest.UploadSuccess = 0
-					uploadTest.EndTime = time.Now()
 				} else {
 					uploadTest.UploadSuccess = 1
+					if vt.cliFlags.TaskCheck {
+						err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
+						if err != nil {
+							uploadTest.TaskCheckSuccess = 0
+							uploadTest.ErrorMessage = err.Error()
+						} else {
+							uploadTest.TaskCheckSuccess = 1
+						}
+					}
+
+				}
+				vt.writeResultNdjson(uploadTest)
+				wg.Done()
+			}()
+		}
+		time.Sleep(vt.cliFlags.StartDelayDuration)
+	}
+
+	wg.Wait()
+
+}
+
+func (vt *vodLoadTester) importFromUrlTest(url string) {
+	wg := &sync.WaitGroup{}
+
+	for i := 0; i < int(vt.cliFlags.VideoAmount); i += int(vt.cliFlags.Simultaneous) {
+		for j := 0; j < int(vt.cliFlags.Simultaneous); j++ {
+			fmt.Printf("Importing video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
+			wg.Add(1)
+			go func() {
+				uploadTest := uploadTest{
+					StartTime: time.Now(),
+					Kind:      "import",
+				}
+
+				rndAssetName := fmt.Sprintf("load_test_import_%s", randName())
+				asset, task, err := vt.lapi.ImportAsset(url, rndAssetName)
+
+				if err != nil {
+					glog.Errorf("Error importing asset: %v", err)
+					uploadTest.ImportSuccess = 0
+					uploadTest.ErrorMessage = err.Error()
+					uploadTest.EndTime = time.Now()
+				} else {
+					uploadTest.AssetID = asset.ID
+					uploadTest.TaskID = task.ID
+					uploadTest.ImportSuccess = 1
 					if vt.cliFlags.TaskCheck {
 						err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
 						if err != nil {
@@ -270,12 +327,11 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
 	}
-
 	wg.Wait()
-
 }
 
 func (vt *vodLoadTester) writeResultNdjson(uploadTest uploadTest) {
+	uploadTest.EndTime = time.Now()
 	jsonString, err := json.Marshal(uploadTest)
 	if err != nil {
 		glog.Errorf("Error converting runTests to json: %v", err)
