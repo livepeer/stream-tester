@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/eventials/go-tus"
 	"github.com/golang/glog"
 	api "github.com/livepeer/go-api-client"
 	"github.com/livepeer/stream-tester/internal/utils"
@@ -309,7 +308,6 @@ func (vt *vodLoadTester) uploadAsset(fileName string, uploadUrl string) error {
 	return err
 }
 
-// Temporary function while waiting for go-api-client to get fixed
 func (vt *vodLoadTester) uploadAssetResumable(url string, fileName string) error {
 
 	file, err := os.Open(fileName)
@@ -319,31 +317,10 @@ func (vt *vodLoadTester) uploadAssetResumable(url string, fileName string) error
 		return err
 	}
 
-	defer file.Close()
-
-	config := tus.DefaultConfig()
-	config.ChunkSize = 5 * 1024 * 1024 // S3 complains if less than 5MB
-
-	client, err := tus.NewClient(url, config)
-	if err != nil {
-		fmt.Printf("error creating tus client: %v\n", err)
-		return err
-	}
-	upload, err := tus.NewUploadFromFile(file)
-	if err != nil {
-		fmt.Printf("error creating new upload from file: %v\n", err)
-		return err
-	}
-	uploader, err := client.CreateUpload(upload)
-	if err != nil {
-		fmt.Printf("error creating upload: %v\n", err)
-		return err
-	}
-
-	err = uploader.Upload()
+	err = vt.lapi.ResumableUpload(url, file)
 
 	if err != nil {
-		fmt.Printf("error resumable uploading asset: %v\n", err)
+		fmt.Printf("error on resumable upload asset: %v", err)
 	}
 
 	return err
