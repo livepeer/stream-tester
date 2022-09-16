@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/eventials/go-tus"
 	"github.com/golang/glog"
 	api "github.com/livepeer/go-api-client"
 	"github.com/livepeer/stream-tester/internal/utils"
@@ -22,21 +23,27 @@ type cliArguments struct {
 	Verbosity    int
 	Simultaneous uint
 	Version      bool
-	TaskCheck    bool
-	APIServer    string
-	APIToken     string
-	Filename     string
-	VideoAmount  uint
-	OutputPath   string
+
+	DirectUpload    bool
+	ResumableUpload bool
+	Import          bool
+
+	TaskCheck   bool
+	APIServer   string
+	APIToken    string
+	Filename    string
+	VideoAmount uint
+	OutputPath  string
 
 	TestDuration       time.Duration
 	StartDelayDuration time.Duration
 }
 
 type vodLoadTester struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	lapi   *api.Client
+	ctx      context.Context
+	cancel   context.CancelFunc
+	lapi     *api.Client
+	cliFlags cliArguments
 }
 
 type uploadTest struct {
@@ -64,11 +71,15 @@ func main() {
 	fs.BoolVar(&cliFlags.Version, "version", false, "Print out the version")
 	fs.BoolVar(&cliFlags.TaskCheck, "task-check", false, "Check task processing")
 
+	fs.BoolVar(&cliFlags.DirectUpload, "direct", false, "Launch direct upload test")
+	fs.BoolVar(&cliFlags.ResumableUpload, "resumable", false, "Launch tus upload test")
+	fs.BoolVar(&cliFlags.Import, "import", false, "Launch import from url test")
+
 	fs.UintVar(&cliFlags.VideoAmount, "video-amt", 1, "How many video to upload")
 	fs.DurationVar(&cliFlags.StartDelayDuration, "delay-between-groups", 10*time.Second, "Delay between starting group of uploads")
 
 	fs.UintVar(&cliFlags.Simultaneous, "sim", 1, "Number of simulteneous videos to upload")
-	fs.StringVar(&cliFlags.Filename, "file", "bbb_sunflower_1080p_30fps_normal_2min.mp4", "File to upload")
+	fs.StringVar(&cliFlags.Filename, "file", "bbb_sunflower_1080p_30fps_normal_2min.mp4", "File to upload or url to import")
 	fs.StringVar(&cliFlags.APIToken, "api-token", "", "Token of the Livepeer API to be used")
 	fs.StringVar(&cliFlags.APIServer, "api-server", "origin.livepeer.com", "Server of the Livepeer API to be used")
 	fs.StringVar(&cliFlags.OutputPath, "output-path", "/tmp/results.ndjson", "Path to output result .ndjson file")
@@ -95,17 +106,9 @@ func main() {
 	if cliFlags.Filename == "" {
 		glog.Fatal("missing --file parameter")
 	}
+
 	var err error
 	var fileName string
-
-	if fileName, err = utils.GetFile(cliFlags.Filename, strings.ReplaceAll(hostName, ".", "_")); err != nil {
-		if err == utils.ErrNotFound {
-			glog.Fatalf("file %s not found\n", cliFlags.Filename)
-		} else {
-			glog.Fatalf("error getting file %s: %v\n", cliFlags.Filename, err)
-		}
-	}
-	glog.Infof("uploading video file %q", fileName)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -115,7 +118,6 @@ func main() {
 
 	apiToken := cliFlags.APIToken
 	apiServer := cliFlags.APIServer
-	outputNdjson := cliFlags.OutputPath
 
 	lApiOpts := api.ClientOptions{
 		Server:      apiServer,
@@ -124,16 +126,47 @@ func main() {
 	}
 	lapi, _ := api.NewAPIClientGeolocated(lApiOpts)
 	vt := &vodLoadTester{
-		lapi:   lapi,
-		ctx:    ctx,
-		cancel: cancel,
+		lapi:     lapi,
+		ctx:      ctx,
+		cancel:   cancel,
+		cliFlags: *cliFlags,
 	}
 
+	if cliFlags.DirectUpload || cliFlags.ResumableUpload {
+		if fileName, err = utils.GetFile(cliFlags.Filename, strings.ReplaceAll(hostName, ".", "_")); err != nil {
+			if err == utils.ErrNotFound {
+				glog.Fatalf("file %s not found\n", cliFlags.Filename)
+			} else {
+				glog.Fatalf("error getting file %s: %v\n", cliFlags.Filename, err)
+			}
+		}
+
+		if cliFlags.DirectUpload {
+			glog.Infof("Launching direct upload load test for %q", fileName)
+			vt.directUploadLoadTest(fileName, runnerInfo)
+		}
+		if cliFlags.ResumableUpload {
+			glog.Infof("Launching resumable upload load test for %q", fileName)
+			vt.resumableUploadLoadTest(fileName, runnerInfo)
+		}
+	}
+
+}
+
+func (vt *vodLoadTester) requestUploadUrls(assetName string) (*api.UploadUrls, error) {
+	uploadUrls, err := vt.lapi.RequestUpload(assetName)
+	if err != nil {
+		return nil, err
+	}
+	return uploadUrls, nil
+}
+
+func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string) {
 	wg := &sync.WaitGroup{}
 
-	for i := 0; i < int(cliFlags.VideoAmount); i += int(cliFlags.Simultaneous) {
-		for j := 0; j < int(cliFlags.Simultaneous); j++ {
-			fmt.Printf("Uploading video %d/%d\n", i+j+1, cliFlags.VideoAmount)
+	for i := 0; i < int(vt.cliFlags.VideoAmount); i += int(vt.cliFlags.Simultaneous) {
+		for j := 0; j < int(vt.cliFlags.Simultaneous); j++ {
+			fmt.Printf("Uploading video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
 			wg.Add(1)
 			go func() {
 				uploadTest := uploadTest{
@@ -141,23 +174,28 @@ func main() {
 					RunnerInfo: runnerInfo,
 					Kind:       "directUpload",
 				}
-				assetId, taskId, err := vt.uploadAsset(fileName)
+				rndAssetName := fmt.Sprintf("load_test_%s", randName())
+				requestedUpload, err := vt.requestUploadUrls(rndAssetName)
+
+				if err != nil {
+					glog.Errorf("Error requesting upload urls: %v", err)
+					uploadTest.RequestUploadSuccess = 0
+					uploadTest.ErrorMessage = err.Error()
+				} else {
+					uploadTest.RequestUploadSuccess = 1
+					uploadTest.AssetID = requestedUpload.Asset.ID
+					uploadTest.TaskID = requestedUpload.Task.ID
+				}
+
+				err = vt.uploadAsset(fileName, requestedUpload.Url)
+
 				if err != nil {
 					glog.Errorf("Error uploading asset: %v", err)
-					if assetId == "" {
-						uploadTest.RequestUploadSuccess = 0
-						uploadTest.ErrorMessage = err.Error()
-					} else {
-						uploadTest.AssetID = assetId
-						uploadTest.RequestUploadSuccess = 1
-						uploadTest.UploadSuccess = 0
-					}
+					uploadTest.UploadSuccess = 0
+					uploadTest.EndTime = time.Now()
 				} else {
-					uploadTest.AssetID = assetId
-					uploadTest.TaskID = taskId
-					uploadTest.RequestUploadSuccess = 1
 					uploadTest.UploadSuccess = 1
-					if cliFlags.TaskCheck {
+					if vt.cliFlags.TaskCheck {
 						err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
 						if err != nil {
 							uploadTest.TaskCheckSuccess = 0
@@ -168,58 +206,147 @@ func main() {
 					}
 
 					uploadTest.EndTime = time.Now()
-					jsonString, err := json.Marshal(uploadTest)
-					if err != nil {
-						glog.Errorf("Error converting runTests to json: %v", err)
-					}
-					f, err := os.OpenFile(outputNdjson, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-					if err != nil {
-						glog.Errorf("Error opening %s: %v", outputNdjson, err)
-					}
-					defer f.Close()
-					if _, err := f.WriteString(string(jsonString) + "\n"); err != nil {
-						glog.Errorf("Error writing to %s: %v", outputNdjson, err)
-					}
-
 				}
+				vt.writeResultNdjson(uploadTest)
 				wg.Done()
 			}()
 		}
-		time.Sleep(cliFlags.StartDelayDuration)
+		time.Sleep(vt.cliFlags.StartDelayDuration)
+	}
+
+	wg.Wait()
+}
+
+func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
+	wg := &sync.WaitGroup{}
+
+	for i := 0; i < int(vt.cliFlags.VideoAmount); i += int(vt.cliFlags.Simultaneous) {
+		for j := 0; j < int(vt.cliFlags.Simultaneous); j++ {
+			fmt.Printf("rUpload video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
+			wg.Add(1)
+			go func() {
+				uploadTest := uploadTest{
+					StartTime:  time.Now(),
+					RunnerInfo: runnerInfo,
+					Kind:       "resumable",
+				}
+				rndAssetName := fmt.Sprintf("load_test_%s", randName())
+				requestedUpload, err := vt.requestUploadUrls(rndAssetName)
+
+				if err != nil {
+					glog.Errorf("Error requesting upload urls: %v", err)
+					uploadTest.RequestUploadSuccess = 0
+					uploadTest.ErrorMessage = err.Error()
+				} else {
+					uploadTest.RequestUploadSuccess = 1
+					uploadTest.AssetID = requestedUpload.Asset.ID
+					uploadTest.TaskID = requestedUpload.Task.ID
+				}
+
+				uploadUrl := requestedUpload.TusEndpoint
+
+				err = vt.uploadAssetResumable(uploadUrl, fileName)
+
+				if err != nil {
+					glog.Errorf("Error on resumable upload: %v", err)
+					uploadTest.UploadSuccess = 0
+					uploadTest.EndTime = time.Now()
+				} else {
+					uploadTest.UploadSuccess = 1
+					if vt.cliFlags.TaskCheck {
+						err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
+						if err != nil {
+							uploadTest.TaskCheckSuccess = 0
+							uploadTest.ErrorMessage = err.Error()
+						} else {
+							uploadTest.TaskCheckSuccess = 1
+						}
+					}
+
+					uploadTest.EndTime = time.Now()
+				}
+				vt.writeResultNdjson(uploadTest)
+				wg.Done()
+			}()
+		}
+		time.Sleep(vt.cliFlags.StartDelayDuration)
 	}
 
 	wg.Wait()
 
 }
 
-func (vt *vodLoadTester) uploadAsset(fileName string) (string, string, error) {
-	rndAssetName := fmt.Sprintf("load_test_%s", randName())
-
-	res, err := vt.lapi.RequestUpload(rndAssetName)
+func (vt *vodLoadTester) writeResultNdjson(uploadTest uploadTest) {
+	jsonString, err := json.Marshal(uploadTest)
 	if err != nil {
-		fmt.Printf("error requesting upload: %v\n", err)
-		return "", "", err
+		glog.Errorf("Error converting runTests to json: %v", err)
 	}
-	uploadUrl := res.Url
-	assetId := res.Asset.ID
-	taskId := res.Task.ID
+	f, err := os.OpenFile(vt.cliFlags.OutputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		glog.Errorf("Error opening %s: %v", vt.cliFlags.OutputPath, err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(string(jsonString) + "\n"); err != nil {
+		glog.Errorf("Error writing to %s: %v", vt.cliFlags.OutputPath, err)
+	}
+}
+
+func (vt *vodLoadTester) uploadAsset(fileName string, uploadUrl string) error {
 
 	file, err := os.Open(fileName)
 
 	if err != nil {
 		fmt.Printf("error opening file %s: %v\n", fileName, err)
-		return assetId, taskId, err
+		return err
 	}
 
 	err = vt.lapi.UploadAsset(vt.ctx, uploadUrl, file)
 	if err != nil {
 		fmt.Printf("error uploading asset: %v\n", err)
-		return assetId, taskId, err
+		return err
 	}
 
-	fmt.Printf("Video uploaded for asset id %s\n", assetId)
+	return err
+}
 
-	return assetId, taskId, err
+// Temporary function while waiting for go-api-client to get fixed
+func (vt *vodLoadTester) uploadAssetResumable(url string, fileName string) error {
+
+	file, err := os.Open(fileName)
+
+	if err != nil {
+		fmt.Printf("error opening file %s: %v\n", fileName, err)
+		return err
+	}
+
+	defer file.Close()
+
+	config := tus.DefaultConfig()
+	config.ChunkSize = 5 * 1024 * 1024 // S3 complains if less than 5MB
+
+	client, err := tus.NewClient(url, config)
+	if err != nil {
+		fmt.Printf("error creating tus client: %v\n", err)
+		return err
+	}
+	upload, err := tus.NewUploadFromFile(file)
+	if err != nil {
+		fmt.Printf("error creating new upload from file: %v\n", err)
+		return err
+	}
+	uploader, err := client.CreateUpload(upload)
+	if err != nil {
+		fmt.Printf("error creating upload: %v\n", err)
+		return err
+	}
+
+	err = uploader.Upload()
+
+	if err != nil {
+		fmt.Printf("error resumable uploading asset: %v\n", err)
+	}
+
+	return err
 }
 
 func (vt *vodLoadTester) checkTaskProcessing(taskPollDuration time.Duration, processingTask api.TaskOnlyId) error {
