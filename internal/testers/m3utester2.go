@@ -1111,7 +1111,7 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 			return
 		}
 		// glog.Infof("Download %s result: %s len %d", fsurl, resp.Status, len(b))
-		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(b)
+		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(b, 0)
 		if verr != nil {
 			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v",
 				fsurl, resp.Status, len(b), verr)

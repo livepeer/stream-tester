@@ -109,7 +109,7 @@ func pushHLSSegmentsLoop(dir string, pl *m3u8.MediaPlaylist, stopAfter time.Dura
 			out <- &model.HlsSegment{Err: err}
 			return
 		}
-		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(segData)
+		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(segData, 0)
 		if verr != nil {
 			out <- &model.HlsSegment{Err: verr}
 			return
@@ -353,7 +353,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *model.HlsSe
 			hs.mu.Lock()
 			hs.dstats.bytes += int64(len(tseg))
 			hs.mu.Unlock()
-			fsttim, dur, verr := utils.GetVideoStartTimeAndDur(tseg)
+			fsttim, dur, verr := utils.GetVideoStartTimeAndDur(tseg, 0)
 			if verr != nil {
 				msg := fmt.Sprintf("Error parsing video data (manifest=%s seqNo=%d) profile %d result status=%s video data len=%d err=%v",
 					manifestID, seg.SeqNo, i, resp.Status, len(tseg), verr)

@@ -227,7 +227,7 @@ func (md *mediaDownloader) downloadSegment(task *downloadTask, res chan download
 			res <- downloadResult{status: resp.Status, try: try}
 			return
 		}
-		fsttim, dur, keyFrames, skeyFrames, verr := utils.GetVideoStartTimeDurFrames(b)
+		fsttim, dur, keyFrames, skeyFrames, verr := utils.GetVideoStartTimeDurFrames(b, 0)
 		if verr != nil {
 			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v", fsurl, resp.Status, len(b), err)
 			glog.Error(msg)

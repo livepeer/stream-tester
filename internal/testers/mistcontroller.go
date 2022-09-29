@@ -809,7 +809,7 @@ func (mc *MistController) downloadSegment(userName, uri string) ([]byte, error, 
 		// panic(err)
 		return nil, nil, err
 	}
-	fsttim, dur, keyFrames, _, verr := utils.GetVideoStartTimeDurFrames(b)
+	fsttim, dur, keyFrames, _, verr := utils.GetVideoStartTimeDurFrames(b, 0)
 	glog.V(model.DEBUG).Infof("Downloaded segment %s pts=%s dur=%s keyFrames=%d len=%d verr=%v iseOF=%v", uri, fsttim, dur, keyFrames, len(b), verr, errors.Is(verr, io.EOF))
 	if verr != nil && false {
 		fname := "bad_video_seg_" + userName + ".ts"

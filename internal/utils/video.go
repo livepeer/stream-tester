@@ -58,16 +58,19 @@ func GetVideoStartTime(segment []byte) (time.Duration, error) {
 }
 
 // GetVideoStartTimeAndDur ...
-func GetVideoStartTimeAndDur(segment []byte) (time.Duration, time.Duration, error) {
-	d1, d2, _, _, err := GetVideoStartTimeDurFrames(segment)
+func GetVideoStartTimeAndDur(segment []byte, numTracks int) (time.Duration, time.Duration, error) {
+	d1, d2, _, _, err := GetVideoStartTimeDurFrames(segment, numTracks)
 	return d1, d2, err
 }
 
 // GetVideoStartTimeDurFrames ...
-func GetVideoStartTimeDurFrames(segment []byte) (time.Duration, time.Duration, int, []time.Duration, error) {
+func GetVideoStartTimeDurFrames(segment []byte, numTracks int) (time.Duration, time.Duration, int, []time.Duration, error) {
 	var skeyframes []time.Duration
 	r := bytes.NewReader(segment)
 	demuxer := ts.NewDemuxer(r)
+	if numTracks > 0 {
+		demuxer.NumStreamsToFind = numTracks
+	}
 	var videoIdx int8
 	var keyFrames int
 	var lastKeyFramePTS time.Duration = -1
