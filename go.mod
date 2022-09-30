@@ -25,7 +25,7 @@ require (
 	github.com/prometheus/common v0.26.0
 	github.com/rabbitmq/amqp091-go v1.1.0
 	github.com/rabbitmq/rabbitmq-stream-go-client v0.1.0-beta.0.20211027081212-fd5e6d497413 // indirect
-	github.com/spf13/cobra v1.2.1
+	github.com/spf13/cobra v1.5.0
 	go.etcd.io/etcd/client/pkg/v3 v3.5.0
 	go.etcd.io/etcd/client/v3 v3.5.0-rc.0
 	go.opencensus.io v0.23.0
