@@ -25,7 +25,7 @@ require (
 	github.com/prometheus/common v0.26.0
 	github.com/rabbitmq/amqp091-go v1.1.0
 	github.com/rabbitmq/rabbitmq-stream-go-client v0.1.0-beta.0.20211027081212-fd5e6d497413 // indirect
-	github.com/spf13/cobra v1.2.1
+	github.com/spf13/cobra v1.6.0
 	go.etcd.io/etcd/client/pkg/v3 v3.5.0
 	go.etcd.io/etcd/client/v3 v3.5.0-rc.0
 	go.opencensus.io v0.23.0
@@ -60,7 +60,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.0.5 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/jaypipes/ghw v0.9.0 // indirect
 	github.com/jaypipes/pcidb v1.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
@@ -105,7 +105,7 @@ require (
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.0 // indirect
 )
 
