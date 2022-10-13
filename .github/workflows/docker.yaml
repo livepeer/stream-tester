@@ -76,7 +76,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/amd64, linux/arm64
+          platforms: linux/amd64
           push: true
           build-args: |
             version=${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
