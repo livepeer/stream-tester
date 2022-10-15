@@ -124,6 +124,7 @@ type (
 		AMQPUrl, OwnRegion            string
 		MistStreamSource              string
 		MistHardcodedBroadcasters     string
+		MistScrapeMetrics             bool
 	}
 
 	trackList map[string]*trackListDesc
@@ -262,7 +263,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 		mistHardcodedBroadcasters: opts.MistHardcodedBroadcasters,
 	}
 	go mc.recoverSessionLoop()
-	if producer != nil {
+	if producer != nil && opts.MistScrapeMetrics {
 		startMetricsCollector(ctx, statsCollectionPeriod, opts.NodeID, opts.OwnRegion, opts.MistAPI, producer, ownExchangeName, mc)
 	}
 	return mc, nil
