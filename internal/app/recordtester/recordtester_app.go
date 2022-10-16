@@ -175,7 +175,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	} else {
 
 		sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{MistMode: true}, testerFuncs...)
-		sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
+		sr2.StartStreaming(fileName, rtmpURL, mediaURL, 2*time.Minute, testDuration)
 		// <-sr2.Done()
 		srerr := sr2.Err()
 		glog.Infof("Streaming stream id=%s done err=%v", stream.ID, srerr)
