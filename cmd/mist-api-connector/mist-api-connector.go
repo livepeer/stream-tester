@@ -41,7 +41,7 @@ func main() {
 	mistConnectTimeout := fs.Duration("mist-connect-timeout", 5*time.Minute, "Max time to wait attempting to connect to Mist server")
 	mistStreamSource := fs.String("mist-stream-source", "push://", "Stream source we should use for created Mist stream")
 	mistHardcodedBroadcasters := fs.String("mist-hardcoded-broadcasters", "", "Hardcoded broadcasters for use by MistProcLivepeer")
-	noMistScrapeMetrics := fs.Bool("no-mist-scrape-metrics", true, "Scrape statistics from MistServer and publish to RabbitMQ")
+	noMistScrapeMetrics := fs.Bool("no-mist-scrape-metrics", false, "Scrape statistics from MistServer and publish to RabbitMQ")
 	sendAudio := fs.String("send-audio", "record", "when should we send audio?  {always|never|record}")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
 	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
