@@ -242,7 +242,7 @@ func main() {
 				// glog.Error(err)
 				return nil, err
 			}
-			sr2 := testers.NewStreamer2(ctx, testers.Streamer2Options{})
+			sr2 := testers.NewStreamer2(ctx, testers.Streamer2Options{MistMode: cliFlags.MistMode})
 			go sr2.StartStreaming(sourceFileName, rtmpURL, mediaURL, waitForTarget, timeToStream)
 			return sr2, nil
 		}

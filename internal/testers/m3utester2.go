@@ -669,7 +669,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 				glog.V(model.VVERBOSE).Infof("Rendition playlist matched, skipping res=%s mediaUrl=%s", res, pvrui.String())
 				continue
 			} else {
-				glog.V(model.VVERBOSE).Infof("Rendition playlist did not march, streaming res=%s mediaUrl=%s", res, pvrui.String())
+				glog.V(model.VVERBOSE).Infof("Rendition playlist did not match, streaming res=%s mediaUrl=%s", res, pvrui.String())
 			}
 
 			glog.V(4).Infof("Starting rendition pull! mediaUrl=%s", pvrui.String())
