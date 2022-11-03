@@ -1234,7 +1234,9 @@ func (mc *mac) shutdown() {
 
 	err := mc.srv.Shutdown(ctx)
 	glog.Infof("Done shutting down server with err=%v", err)
-	mc.etcdClient.Close()
+	if mc.useEtcd {
+		mc.etcdClient.Close()
+	}
 	deactivateGroup.Wait()
 
 	mc.cancel()
