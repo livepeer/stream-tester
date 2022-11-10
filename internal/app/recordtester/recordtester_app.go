@@ -3,6 +3,7 @@ package recordtester
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/glog"
 	api "github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format/mp4"
@@ -42,6 +44,9 @@ type (
 		UseHTTP             bool
 		TestMP4             bool
 		TestStreamHealth    bool
+		TestAccessControl   bool
+		SigningKey          string
+		PublicKey           string
 	}
 
 	recordTester struct {
@@ -55,6 +60,9 @@ type (
 		useHTTP             bool
 		mp4                 bool
 		streamHealth        bool
+		accessControl       bool
+		signingKey          string
+		publicKey           string
 
 		// mutable fields
 		streamID string
@@ -77,6 +85,9 @@ func NewRecordTester(gctx context.Context, opts RecordTesterOptions) IRecordTest
 		useHTTP:             opts.UseHTTP,
 		mp4:                 opts.TestMP4,
 		streamHealth:        opts.TestStreamHealth,
+		accessControl:       opts.TestAccessControl,
+		signingKey:          opts.SigningKey,
+		publicKey:           opts.PublicKey,
 	}
 	return rt
 }
@@ -123,7 +134,17 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	var stream *api.Stream
 	for {
-		stream, err = rt.lapi.CreateStream(api.CreateStreamReq{Name: streamName, Record: true, RecordObjectStoreId: rt.recordObjectStoreId})
+		streamOptions := api.CreateStreamReq{Name: streamName, Record: true, RecordObjectStoreId: rt.recordObjectStoreId}
+
+		if rt.accessControl {
+			streamOptions.PlaybackPolicy = api.PlaybackPolicy{
+				Type: "jwt",
+			}
+			streamOptions.Record = false
+			glog.Infof("Creating stream with access control")
+		}
+
+		stream, err = rt.lapi.CreateStream(streamOptions)
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -156,6 +177,20 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingest.Playback, stream.PlaybackID)
 	glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 	glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
+
+	if rt.accessControl {
+		if rt.signingKey == "" || rt.publicKey == "" {
+			return 2, errors.New("test access control is enabled but no signing key or public key is provided")
+		}
+
+		es, err := rt.testAccessControl(stream, mediaURL, fileName, rtmpURL, testDuration)
+		if err == nil {
+			rt.lapi.DeleteStream(stream.ID)
+		}
+
+		return es, err
+	}
+
 	if rt.useHTTP {
 		sterr := rt.doOneHTTPStream(fileName, streamName, broadcasters[0], testDuration, stream)
 		if sterr != nil {
@@ -387,6 +422,62 @@ func (rt *recordTester) isCancelled() error {
 	default:
 	}
 	return nil
+}
+
+func (rt *recordTester) testAccessControl(stream *api.Stream, mediaURL string, fileName string, rtmpURL string, testDuration time.Duration) (int, error) {
+	testerFuncs := []testers.StartTestFunc{}
+	token, err := rt.signJwt(stream)
+
+	if err != nil {
+		return 1, err
+	}
+
+	sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{MistMode: true}, testerFuncs...)
+
+	go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
+	gatedMediaUrl := fmt.Sprintf("%s?jwt=%s", mediaURL, token)
+
+	// wait 15 seconds
+	time.Sleep(15 * time.Second)
+
+	_, err = rt.checkDown(stream, mediaURL, testDuration, false)
+
+	if err == nil {
+		return 2, errors.New("access should be denied for mediaURL=%s" + mediaURL)
+	}
+
+	_, err = rt.checkDown(stream, gatedMediaUrl, testDuration, false)
+
+	if err != nil {
+		return 2, fmt.Errorf("unable to playback gated mediaURL=%s", gatedMediaUrl)
+	}
+
+	return 0, nil
+}
+
+func (rt *recordTester) signJwt(stream *api.Stream) (string, error) {
+	expiration := time.Now().Add(time.Minute * 5).Unix()
+	unsignedToken := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
+		"sub": stream.PlaybackID,
+		"pub": rt.publicKey,
+		"exp": expiration,
+	})
+
+	decodedPrivateKey, _ := base64.StdEncoding.DecodeString(rt.signingKey)
+
+	pk, err := jwt.ParseECPrivateKeyFromPEM(decodedPrivateKey)
+
+	if err != nil {
+		glog.Errorf("Unable to parse provided signing key for access control signingKey=%s", rt.signingKey)
+	}
+
+	token, err := unsignedToken.SignedString(pk)
+
+	if err != nil {
+		glog.Errorf("Unable to sign JWT with provided private key for access control signingKey=%s", rt.signingKey)
+	}
+
+	return token, nil
 }
 
 func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDuration time.Duration, doubled bool) (int, error) {
