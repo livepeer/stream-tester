@@ -178,17 +178,13 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 	glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
 
-	if rt.accessControl {
-		if rt.signingKey == "" || rt.publicKey == "" {
-			return 2, errors.New("test access control is enabled but no signing key or public key is provided")
+	if rt.accessControl && (rt.signingKey != "" && rt.publicKey != "") {
+		token, err := rt.signJwt(stream)
+		if err != nil {
+			return 1, err
 		}
-
-		es, err := rt.testAccessControl(stream, mediaURL, fileName, rtmpURL, testDuration)
-		if err == nil {
-			rt.lapi.DeleteStream(stream.ID)
-		}
-
-		return es, err
+		mediaURL = fmt.Sprintf("%s?jwt=%s", mediaURL, token)
+		glog.V(model.VERBOSE).Infof("URL with access control for stream id=%s playbackId=%s name=%s mediaURL=", stream.ID, stream.PlaybackID, streamName, mediaURL)
 	}
 
 	if rt.useHTTP {
@@ -422,37 +418,6 @@ func (rt *recordTester) isCancelled() error {
 	default:
 	}
 	return nil
-}
-
-func (rt *recordTester) testAccessControl(stream *api.Stream, mediaURL string, fileName string, rtmpURL string, testDuration time.Duration) (int, error) {
-	testerFuncs := []testers.StartTestFunc{}
-	token, err := rt.signJwt(stream)
-
-	if err != nil {
-		return 1, err
-	}
-
-	sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{MistMode: true}, testerFuncs...)
-
-	go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
-	gatedMediaUrl := fmt.Sprintf("%s?jwt=%s", mediaURL, token)
-
-	// wait 15 seconds
-	time.Sleep(15 * time.Second)
-
-	_, err = rt.checkDown(stream, mediaURL, testDuration, false)
-
-	if err == nil {
-		return 2, errors.New("access should be denied for mediaURL=%s" + mediaURL)
-	}
-
-	_, err = rt.checkDown(stream, gatedMediaUrl, testDuration, false)
-
-	if err != nil {
-		return 2, fmt.Errorf("unable to playback gated mediaURL=%s", gatedMediaUrl)
-	}
-
-	return 0, nil
 }
 
 func (rt *recordTester) signJwt(stream *api.Stream) (string, error) {
