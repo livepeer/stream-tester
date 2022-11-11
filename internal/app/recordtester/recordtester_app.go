@@ -184,7 +184,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			return 1, err
 		}
 		mediaURL = fmt.Sprintf("%s?jwt=%s", mediaURL, token)
-		glog.V(model.VERBOSE).Infof("URL with access control for stream id=%s playbackId=%s name=%s mediaURL=", stream.ID, stream.PlaybackID, streamName, mediaURL)
+		glog.V(model.VERBOSE).Infof("URL with access control for stream id=%s playbackId=%s name=%s mediaURL=%s", stream.ID, stream.PlaybackID, streamName, mediaURL)
 	}
 
 	if rt.useHTTP {
