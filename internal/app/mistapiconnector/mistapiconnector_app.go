@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,9 +27,6 @@ import (
 )
 
 const streamPlaybackPrefix = "playback_"
-const traefikKeyPathRouters = `traefik/http/routers/`
-const traefikKeyPathServices = `traefik/http/services/`
-const traefikKeyPathMiddlewares = `traefik/http/middlewares/`
 const audioAlways = "always"
 const audioRecord = "record"
 const audioEnabledStreamSuffix = "rec"
@@ -42,8 +39,6 @@ const webhooksExchangeName = "webhook_default_exchange"
 const eventMultistreamConnected = "multistream.connected"
 const eventMultistreamError = "multistream.error"
 const eventMultistreamDisconnected = "multistream.disconnected"
-
-var playbackPrefixes = []string{"hls", "cmaf"}
 
 type (
 	// IMac creates new Mist API Connector application
@@ -630,7 +625,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		w.Write([]byte("false"))
 		return
 	}
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
@@ -836,14 +831,6 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 		err = mc.mapi.CreateStream(mc.baseStreamName+audioEnabledStreamSuffix, presets, nil, "1", apiURL, mc.mistStreamSource, mc.mistHardcodedBroadcasters, false, true, false)
 	}
 	return err
-}
-
-func serviceNameFromMistURL(murl string) string {
-	murl = strings.TrimPrefix(murl, "https://")
-	murl = strings.TrimPrefix(murl, "http://")
-	murl = strings.ReplaceAll(murl, ".", "-")
-	murl = strings.ReplaceAll(murl, "/", "-")
-	return murl
 }
 
 func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *streamInfo) {
