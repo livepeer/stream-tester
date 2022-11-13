@@ -940,6 +940,7 @@ func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 	info := mc.streamInfo[playbackID]
 	mc.mu.RUnlock()
 	if info == nil {
+		glog.Infof("getStreamInfo: Fetching stream not found in memory. playbackID=%s", playbackID)
 		stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
 		if err != nil {
 			return nil, fmt.Errorf("error getting stream by playback ID %s: %w", playbackID, err)
@@ -957,6 +958,7 @@ func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 				pushStartEmitted: true,
 			}
 		}
+		glog.Infof("getStreamInfo: Created info lazily for stream inherited from ancestor mapic. playbackID=%s id=%s numPushes=%d", playbackID, stream.ID, len(pushes))
 		mc.mu.Lock()
 		mc.streamInfo[playbackID] = &streamInfo{
 			id:         stream.ID,

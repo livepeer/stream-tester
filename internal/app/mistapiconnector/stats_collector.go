@@ -26,6 +26,7 @@ type metricsCollector struct {
 
 func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
 	mc := &metricsCollector{nodeID, ownRegion, mapi, producer, amqpExchange, infop}
+	mc.collectMetricsLogged(ctx, period)
 	go mc.mainLoop(ctx, period)
 }
 
@@ -37,12 +38,16 @@ func (c *metricsCollector) mainLoop(loopCtx context.Context, period time.Duratio
 		case <-loopCtx.Done():
 			return
 		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(loopCtx, period)
-			if err := c.collectMetrics(ctx); err != nil {
-				glog.Errorf("Error collecting mist metrics. err=%v", err)
-			}
-			cancel()
+			c.collectMetricsLogged(loopCtx, period)
 		}
+	}
+}
+
+func (c *metricsCollector) collectMetricsLogged(ctx context.Context, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if err := c.collectMetrics(ctx); err != nil {
+		glog.Errorf("Error collecting mist metrics. err=%v", err)
 	}
 }
 
