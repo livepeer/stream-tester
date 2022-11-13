@@ -242,7 +242,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 			info.mu.Lock()
 			info.stopped = true
 			info.mu.Unlock()
-			go mc.removeInfoAfter(playbackID, info)
+			mc.removeInfoDelayed(playbackID, info.done)
 			metrics.StopStream(true)
 		}
 	}
@@ -278,9 +278,7 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 					streamStopped := info.stopped
 					info.mu.Unlock()
 					if streamStopped {
-						mc.mu.Lock()
 						mc.removeInfo(playbackID)
-						mc.mu.Unlock()
 					} else {
 						// that means that RTMP stream is currently gets streamed into our Mist node
 						// and so no changes needed to the Mist configuration
@@ -410,7 +408,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			info.mu.Lock()
 			glog.Infof("Stream playbackID=%s stopped=%v already in map, removing its info", stream.PlaybackID, info.stopped)
 			info.mu.Unlock()
-			mc.removeInfo(stream.PlaybackID)
+			mc.removeInfoLocked(stream.PlaybackID)
 		}
 		info := &streamInfo{
 			id:         stream.ID,
@@ -436,9 +434,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 			glog.Error(err)
 		} else if !ok {
 			glog.Infof("Stream id=%s streamKey=%s playbackId=%s forbidden by webhook, rejecting", stream.ID, stream.StreamKey, stream.PlaybackID)
-			mc.mu.Lock()
 			mc.removeInfo(stream.PlaybackID)
-			mc.mu.Unlock()
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte("false"))
 			return true
@@ -669,19 +665,26 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (mc *mac) removeInfoAfter(playbackID string, info *streamInfo) {
-	select {
-	case <-info.done:
-		return
-	case <-time.After(keepStreamAfterEnd):
-	}
-	mc.mu.Lock()
-	mc.removeInfo(playbackID)
-	mc.mu.Unlock()
+func (mc *mac) removeInfoDelayed(playbackID string, done chan struct{}) {
+	go func() {
+		select {
+		case <-done:
+			return
+		case <-time.After(keepStreamAfterEnd):
+			mc.removeInfo(playbackID)
+		}
+	}()
 }
 
 // must be called inside mu.Lock
 func (mc *mac) removeInfo(playbackID string) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	mc.removeInfoLocked(playbackID)
+}
+
+// must be called inside mu.Lock
+func (mc *mac) removeInfoLocked(playbackID string) {
 	if info, ok := mc.streamInfo[playbackID]; ok {
 		close(info.done)
 		delete(mc.streamInfo, playbackID)
