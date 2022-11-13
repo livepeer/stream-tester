@@ -53,19 +53,24 @@ type (
 		profile          string
 		pushStartEmitted bool
 		pushStopped      bool
-		pushedBytes      int64
-		pushedMediaTime  time.Duration
+		metrics          *pushMetrics
+	}
+
+	pushMetrics struct {
+		pushedBytes     int64
+		pushedMediaTime time.Duration
 	}
 
 	streamInfo struct {
-		id                 string
+		id        string
+		stream    *livepeer.CreateStreamResp
+		startedAt time.Time
+
+		mu                 sync.Mutex
+		done               chan struct{}
 		stopped            bool
 		multistreamStarted bool
-		stream             *livepeer.CreateStreamResp
-		done               chan struct{}
-		mu                 sync.Mutex
 		pushStatus         map[string]*pushStatus
-		startedAt          time.Time
 	}
 
 	trackListDesc struct {
@@ -837,9 +842,9 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 	for i := range info.stream.Multistream.Targets {
 		go func(targetRef livepeer.MultistreamTargetRef) {
 			glog.Infof("==> starting multistream %s", targetRef.ID)
-			target, err := mc.lapi.GetMultistreamTargetR(targetRef.ID)
+			target, selectorURL, err := mc.getPushUrl(info.stream, &targetRef)
 			if err != nil {
-				glog.Errorf("Error fetching multistream target. targetId=%s stream=%s err=%v",
+				glog.Errorf("Error building multistream target push URL. targetId=%s stream=%s err=%v",
 					targetRef.ID, wildcardPlaybackID, err)
 				return
 			} else if target.Disabled {
@@ -847,36 +852,7 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 					targetRef.ID, wildcardPlaybackID)
 				return
 			}
-			// Find the actual parameters of the profile we're using
-			var videoSelector string
-			// Not actually the source. But the highest quality.
-			if targetRef.Profile == "source" {
-				videoSelector = "maxbps"
-			} else {
-				var prof *livepeer.Profile
-				for _, p := range info.stream.Profiles {
-					if p.Name == targetRef.Profile {
-						prof = &p
-						break
-					}
-				}
-				if prof == nil {
-					glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=couldn't find profile %s",
-						targetRef.ID, wildcardPlaybackID, targetRef.Profile)
-					return
-				}
-				videoSelector = fmt.Sprintf("~%dx%d", prof.Width, prof.Height)
-			}
-			join := "?"
-			if strings.Contains(target.URL, "?") {
-				join = "&"
-			}
-			audioSelector := "maxbps"
-			if targetRef.VideoOnly {
-				audioSelector = "silent"
-			}
-			// Inject ?video=~widthxheight to send the correct rendition
-			selectorURL := fmt.Sprintf("%s%svideo=%s&audio=%s", target.URL, join, videoSelector, audioSelector)
+
 			info.mu.Lock()
 			info.pushStatus[selectorURL] = &pushStatus{target: target, profile: targetRef.Profile}
 
@@ -909,6 +885,41 @@ func (mc *mac) startSignalHandler() {
 		}
 		mc.shutdown()
 	}()
+}
+
+func (mc *mac) getPushUrl(stream *livepeer.CreateStreamResp, targetRef *livepeer.MultistreamTargetRef) (*livepeer.MultistreamTarget, string, error) {
+	target, err := mc.lapi.GetMultistreamTargetR(targetRef.ID)
+	if err != nil {
+		return nil, "", fmt.Errorf("error fetching multistream target %s: %w", targetRef.ID, err)
+	}
+	// Find the actual parameters of the profile we're using
+	var videoSelector string
+	// Not actually the source. But the highest quality.
+	if targetRef.Profile == "source" {
+		videoSelector = "maxbps"
+	} else {
+		var prof *livepeer.Profile
+		for _, p := range stream.Profiles {
+			if p.Name == targetRef.Profile {
+				prof = &p
+				break
+			}
+		}
+		if prof == nil {
+			return nil, "", fmt.Errorf("profile not found: %s", targetRef.Profile)
+		}
+		videoSelector = fmt.Sprintf("~%dx%d", prof.Width, prof.Height)
+	}
+	join := "?"
+	if strings.Contains(target.URL, "?") {
+		join = "&"
+	}
+	audioSelector := "maxbps"
+	if targetRef.VideoOnly {
+		audioSelector = "silent"
+	}
+	// Inject ?video=~widthxheight to send the correct rendition
+	return target, fmt.Sprintf("%s%svideo=%s&audio=%s", target.URL, join, videoSelector, audioSelector), nil
 }
 
 func (mc *mac) shutdown() {
@@ -966,12 +977,41 @@ func (mc *mac) deactiveAllStreams(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 }
 
-func (mc *mac) getStreamInfo(mistID string) *streamInfo {
-	playbackID := mistStreamName2playbackID(mistID)
+func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
+	playbackID = mistStreamName2playbackID(playbackID)
 	mc.mu.RLock()
 	info := mc.pub2info[playbackID]
 	mc.mu.RUnlock()
-	return info
+	if info == nil {
+		stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
+		if err != nil {
+			return nil, fmt.Errorf("error getting stream by playback ID %s: %w", playbackID, err)
+		}
+		pushes := make(map[string]*pushStatus)
+		for _, ref := range stream.Multistream.Targets {
+			target, selectorURL, err := mc.getPushUrl(info.stream, &ref)
+			if err != nil {
+				return nil, err
+			}
+			pushes[selectorURL] = &pushStatus{
+				target:  target,
+				profile: ref.Profile,
+				// Assume setup was all successful
+				pushStartEmitted: true,
+			}
+		}
+		mc.mu.Lock()
+		mc.pub2info[playbackID] = &streamInfo{
+			id:         stream.ID,
+			stream:     stream,
+			done:       make(chan struct{}),
+			pushStatus: pushes,
+			// Assume setup was all successful
+			multistreamStarted: true,
+		}
+		mc.mu.Unlock()
+	}
+	return info, nil
 }
 
 func (mc *mac) SrvShutCh() chan error {

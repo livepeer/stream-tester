@@ -13,7 +13,7 @@ import (
 )
 
 type infoProvider interface {
-	getStreamInfo(mistID string) *streamInfo
+	getStreamInfo(mistID string) (*streamInfo, error)
 }
 
 type metricsCollector struct {
@@ -60,13 +60,16 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 	streamsMetrics := compileStreamMetrics(mistStats)
 
 	for streamID, metrics := range streamsMetrics {
-		info := c.getStreamInfo(streamID)
+		info, err := c.getStreamInfo(streamID)
+		if err != nil {
+			return fmt.Errorf("error getting stream info for %s: %w", streamID, err)
+		}
 		if info == nil {
 			glog.Infof("Mist exported metrics from unknown stream. streamId=%q metrics=%+v", streamID, metrics)
 			continue
 		}
 		mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)
-		err := c.producer.Publish(ctx, event.AMQPMessage{
+		err = c.producer.Publish(ctx, event.AMQPMessage{
 			Exchange: c.amqpExchange,
 			Key:      fmt.Sprintf("stream.metrics.%s", info.stream.ID),
 			Body:     mseEvent,
@@ -87,6 +90,10 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 	multistream := make([]*data.MultistreamTargetMetrics, len(metrics.pushes))
 	for i, push := range metrics.pushes {
 		pushInfo := info.pushStatus[push.OriginalURI]
+		if pushInfo == nil {
+			pushInfo = &pushStatus{}
+			info.pushStatus[push.OriginalURI] = pushInfo
+		}
 		var metrics *data.MultistreamMetrics
 		if push.Stats != nil {
 			metrics = &data.MultistreamMetrics{
@@ -94,13 +101,21 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 				Bytes:       push.Stats.Bytes,
 				MediaTimeMs: push.Stats.MediaTime,
 			}
-			if metrics.Bytes > pushInfo.pushedBytes {
-				census.IncMultistreamBytes(metrics.Bytes-pushInfo.pushedBytes, info.stream.PlaybackID) // manifestID === playbackID
-				pushInfo.pushedBytes = metrics.Bytes
-			}
-			if mediaTime := time.Duration(metrics.MediaTimeMs) * time.Millisecond; mediaTime > pushInfo.pushedMediaTime {
-				census.IncMultistreamTime(mediaTime-pushInfo.pushedMediaTime, info.stream.PlaybackID)
-				pushInfo.pushedMediaTime = mediaTime
+			mediaTime := time.Duration(metrics.MediaTimeMs) * time.Millisecond
+			if pushInfo.metrics == nil {
+				pushInfo.metrics = &pushMetrics{
+					pushedBytes:     push.Stats.Bytes,
+					pushedMediaTime: mediaTime,
+				}
+			} else {
+				if metrics.Bytes > pushInfo.metrics.pushedBytes {
+					census.IncMultistreamBytes(metrics.Bytes-pushInfo.metrics.pushedBytes, info.stream.PlaybackID) // manifestID === playbackID
+					pushInfo.metrics.pushedBytes = metrics.Bytes
+				}
+				if mediaTime > pushInfo.metrics.pushedMediaTime {
+					census.IncMultistreamTime(mediaTime-pushInfo.metrics.pushedMediaTime, info.stream.PlaybackID)
+					pushInfo.metrics.pushedMediaTime = mediaTime
+				}
 			}
 		}
 		multistream[i] = &data.MultistreamTargetMetrics{
