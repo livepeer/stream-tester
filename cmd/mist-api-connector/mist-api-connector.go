@@ -49,13 +49,15 @@ func main() {
 	playbackDomain := fs.String("playback-domain", "", "regex of domain to create routes for (ex: playback.livepeer.live)")
 	mistURL := fs.String("route-mist-url", "", "external URL of this Mist instance (used for routing) (ex: https://mist-server-0.livepeer.live)")
 	baseStreamName := fs.String("base-stream-name", "", "Base stream name to be used in wildcard-based routing scheme")
-	fEtcdEndpoints := fs.String("etcd-endpoints", "", "Comma-separated list of ETCD endpoints")
-	etcdCaCert := fs.String("etcd-cacert", "", "ETCD CA file name")
-	etcdCert := fs.String("etcd-cert", "", "ETCD client certificate file name")
-	etcdKey := fs.String("etcd-key", "", "ETCD client certificate key file name")
 	amqpUrl := fs.String("amqp-url", "", "RabbitMQ url")
 	ownRegion := fs.String("own-region", "", "Identifier of the region where the service is running, used for mapping external data back to current region")
 	_ = fs.String("config", "", "config file (optional)")
+	// Below are some deprecated flags.
+	// Keep them around for backward compatibility on deploys.
+	_ = fs.String("etcd-endpoints", "", "DEPRECATED")
+	_ = fs.String("etcd-cacert", "", "DEPRECATED")
+	_ = fs.String("etcd-cert", "", "DEPRECATED")
+	_ = fs.String("etcd-key", "", "DEPRECATED")
 
 	consulPrefix := fs.String("consul-prefix", "", "DEPRECATED - use --route-prefix")
 	consulMistURL := fs.String("consul-mist-url", "", "DEPRECATED - use --route-mist-url")
@@ -98,10 +100,6 @@ func main() {
 	mapi = mistapi.NewMist(*mistHost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 	ensureLoggedIn(mapi, *mistConnectTimeout)
 	metrics.InitCensus(hostName, model.Version, "mistconnector")
-	var etcdEndpoints []string
-	if len(*fEtcdEndpoints) > 0 {
-		etcdEndpoints = strings.Split(*fEtcdEndpoints, ",")
-	}
 
 	opts := mistapiconnector.MacOptions{
 		NodeID:                    hostName,
@@ -115,10 +113,6 @@ func main() {
 		BaseStreamName:            *baseStreamName,
 		CheckBandwidth:            false,
 		SendAudio:                 *sendAudio,
-		EtcdEndpoints:             etcdEndpoints,
-		EtcdCaCert:                *etcdCaCert,
-		EtcdCert:                  *etcdCert,
-		EtcdKey:                   *etcdKey,
 		AMQPUrl:                   *amqpUrl,
 		OwnRegion:                 *ownRegion,
 		MistStreamSource:          *mistStreamSource,

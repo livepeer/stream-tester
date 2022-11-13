@@ -2,16 +2,13 @@ package mistapiconnector
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -27,10 +24,6 @@ import (
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"go.etcd.io/etcd/client/pkg/v3/transport"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/client/v3/concurrency"
-	"google.golang.org/grpc"
 )
 
 const streamPlaybackPrefix = "playback_"
@@ -40,11 +33,6 @@ const traefikKeyPathMiddlewares = `traefik/http/middlewares/`
 const audioAlways = "always"
 const audioRecord = "record"
 const audioEnabledStreamSuffix = "rec"
-const etcdDialTimeout = 5 * time.Second
-const etcdAutoSyncInterval = 5 * time.Minute
-const etcdSessionTTL = 10 // in seconds
-const etcdSessionRecoverBackoff = 3 * time.Second
-const etcdSessionRecoverTimeout = 2 * time.Minute
 const waitForPushError = 7 * time.Second
 const keepStreamAfterEnd = 15 * time.Second
 const statsCollectionPeriod = 10 * time.Second
@@ -63,11 +51,6 @@ type (
 		SetupTriggers(ownURI string) error
 		StartServer(bindAddr string) error
 		SrvShutCh() chan error
-	}
-
-	etcdRevData struct {
-		revision int64
-		entries  []string
 	}
 
 	pushStatus struct {
@@ -119,12 +102,10 @@ type (
 		CheckBandwidth   bool
 		RoutePrefix, PlaybackDomain, MistURL,
 		SendAudio, BaseStreamName string
-		EtcdEndpoints                 []string
-		EtcdCaCert, EtcdCert, EtcdKey string
-		AMQPUrl, OwnRegion            string
-		MistStreamSource              string
-		MistHardcodedBroadcasters     string
-		NoMistScrapeMetrics           bool
+		AMQPUrl, OwnRegion        string
+		MistStreamSource          string
+		MistHardcodedBroadcasters string
+		NoMistScrapeMetrics       bool
 	}
 
 	trackList map[string]*trackListDesc
@@ -145,17 +126,12 @@ type (
 		playbackDomain            string
 		sendAudio                 string
 		baseStreamName            string
-		useEtcd                   bool
-		etcdClient                *clientv3.Client
-		etcdSession               *concurrency.Session
-		etcdPub2rev               map[string]etcdRevData // public key to revision of etcd keys
 		pub2info                  map[string]*streamInfo // public key to info
 		producer                  *event.AMQPProducer
 		nodeID                    string
 		ownRegion                 string
 		mistStreamSource          string
 		mistHardcodedBroadcasters string
-		// pub2id         map[string]string // public key to stream id
 	}
 )
 
@@ -164,12 +140,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 	if opts.BalancerHost != "" && !strings.Contains(opts.BalancerHost, ":") {
 		opts.BalancerHost = opts.BalancerHost + ":8042" // must set default port for Mist's Load Balancer
 	}
-	useEtcd := false
-	var cli *clientv3.Client
-	var sess *concurrency.Session
-	var err error
 	ctx, cancel := context.WithCancel(context.Background())
-
 	var producer *event.AMQPProducer
 	if opts.AMQPUrl != "" {
 		pu, err := url.Parse(opts.AMQPUrl)
@@ -193,49 +164,6 @@ func NewMac(opts MacOptions) (IMac, error) {
 	} else {
 		glog.Infof("AMQP url is empty!")
 	}
-
-	glog.Infof("etcd endpoints: %+v, len %d", opts.EtcdEndpoints, len(opts.EtcdEndpoints))
-	if len(opts.EtcdEndpoints) > 0 {
-		var tcfg *tls.Config
-		if opts.EtcdCaCert != "" || opts.EtcdCert != "" || opts.EtcdKey != "" {
-			tlsifo := transport.TLSInfo{
-				CertFile:      opts.EtcdCert,
-				KeyFile:       opts.EtcdKey,
-				TrustedCAFile: opts.EtcdCaCert,
-			}
-			tcfg, err = tlsifo.ClientConfig()
-			if err != nil {
-				cancel()
-				return nil, err
-			}
-		}
-		useEtcd = true
-		cli, err = clientv3.New(clientv3.Config{
-			Endpoints:        opts.EtcdEndpoints,
-			DialTimeout:      etcdDialTimeout,
-			AutoSyncInterval: etcdAutoSyncInterval,
-			TLS:              tcfg,
-			DialOptions:      []grpc.DialOption{grpc.WithBlock()},
-		})
-		if err != nil {
-			err = fmt.Errorf("mist-api-connector: Error connecting etcd err=%w", err)
-			cancel()
-			return nil, err
-		}
-		syncCtx, syncCancel := context.WithTimeout(ctx, etcdDialTimeout)
-		err = cli.Sync(syncCtx)
-		syncCancel()
-		if err != nil {
-			err = fmt.Errorf("mist-api-connector: Error syncing etcd endpoints err=%w", err)
-			cancel()
-			return nil, err
-		}
-		sess, err = newEtcdSession(cli)
-		if err != nil {
-			cancel()
-			return nil, err
-		}
-	}
 	mc := &mac{
 		nodeID:         opts.NodeID,
 		mistHot:        opts.MistHost,
@@ -250,10 +178,6 @@ func NewMac(opts MacOptions) (IMac, error) {
 		playbackDomain:            opts.PlaybackDomain,
 		sendAudio:                 opts.SendAudio,
 		baseStreamName:            opts.BaseStreamName,
-		useEtcd:                   useEtcd,
-		etcdClient:                cli,
-		etcdSession:               sess,
-		etcdPub2rev:               make(map[string]etcdRevData), // public key to revision of etcd keys
 		srvShutCh:                 make(chan error),
 		ctx:                       ctx,
 		cancel:                    cancel,
@@ -262,7 +186,6 @@ func NewMac(opts MacOptions) (IMac, error) {
 		mistStreamSource:          opts.MistStreamSource,
 		mistHardcodedBroadcasters: opts.MistHardcodedBroadcasters,
 	}
-	go mc.recoverSessionLoop()
 	if producer != nil && !opts.NoMistScrapeMetrics {
 		startMetricsCollector(ctx, statsCollectionPeriod, opts.NodeID, opts.OwnRegion, opts.MistAPI, producer, ownExchangeName, mc)
 	}
@@ -431,54 +354,6 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 	return true
 }
 
-func (mc *mac) generateRouteKeys(stream *livepeer.CreateStreamResp) []string {
-	serviceName := mc.routePrefix + serviceNameFromMistURL(mc.mistURL)
-	wildcardPlaybackID := mc.wildcardPlaybackID(stream)
-	playbackID := mc.routePrefix + stream.PlaybackID
-
-	keys := []string{
-		traefikKeyPathServices + serviceName + "/loadbalancer/servers/0/url",
-		mc.mistURL,
-		traefikKeyPathServices + serviceName + "/loadbalancer/passhostheader",
-		"false",
-	}
-
-	// Add a millisecond timestamp as the priority so new streams always win over old, stale streams
-	priority := strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10)
-
-	for _, prefix := range playbackPrefixes {
-		playbackIDPrefix := fmt.Sprintf("%s-%s", playbackID, prefix)
-		keys = append(keys,
-			traefikKeyPathRouters+playbackIDPrefix+"/service",
-			serviceName,
-			traefikKeyPathRouters+playbackIDPrefix+"/priority",
-			priority,
-		)
-		if mc.baseStreamName == "" {
-			rule := fmt.Sprintf("HostRegexp(`%s`) && PathPrefix(`/%s/%s/`)", mc.playbackDomain, prefix, stream.PlaybackID)
-			keys = append(keys, traefikKeyPathRouters+playbackIDPrefix+"/rule", rule)
-		} else {
-			rule := fmt.Sprintf("HostRegexp(`%s`) && (PathPrefix(`/%s/%s/`) || PathPrefix(`/%s/%s/`))", mc.playbackDomain, prefix, stream.PlaybackID, prefix, wildcardPlaybackID)
-			keys = append(keys,
-				traefikKeyPathRouters+playbackIDPrefix+"/rule",
-				rule,
-				traefikKeyPathRouters+playbackIDPrefix+"/middlewares/0",
-				playbackIDPrefix+"-1",
-				traefikKeyPathRouters+playbackIDPrefix+"/middlewares/1",
-				playbackIDPrefix+"-2",
-
-				traefikKeyPathMiddlewares+playbackIDPrefix+"-1/stripprefix/prefixes/0",
-				fmt.Sprintf(`/%s/%s`, prefix, stream.PlaybackID),
-				traefikKeyPathMiddlewares+playbackIDPrefix+"-1/stripprefix/prefixes/1",
-				fmt.Sprintf(`/%s/%s`, prefix, wildcardPlaybackID),
-				traefikKeyPathMiddlewares+playbackIDPrefix+"-2/addprefix/prefix",
-				fmt.Sprintf(`/%s/%s`, prefix, wildcardPlaybackID),
-			)
-		}
-	}
-	return keys
-}
-
 func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
 	if len(lines) != 3 {
 		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), rawRequest)
@@ -584,18 +459,6 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		err = mc.createMistStream(streamKey, stream, false)
 		if err != nil {
 			glog.Errorf("Error creating stream on the Mist server: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("false"))
-			return true
-		}
-	}
-	if mc.useEtcd {
-		// now create routing rule in the etcd for HLS playback
-		err = mc.putEtcdKeys(mc.etcdSession, stream.PlaybackID,
-			mc.generateRouteKeys(stream)...,
-		)
-		if err != nil {
-			glog.Errorf("Error creating etcd Traefik rule for playbackID=%s streamID=%s err=%v", stream.PlaybackID, stream.ID, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("false"))
 			return true
@@ -837,154 +700,7 @@ func (mc *mac) removeInfo(playbackID string) {
 	if info, ok := mc.pub2info[playbackID]; ok {
 		close(info.done)
 		delete(mc.pub2info, playbackID)
-		if mc.useEtcd {
-			mc.deleteEtcdKeys(playbackID)
-		}
 	}
-}
-
-// putEtcdKeys puts keys in one transaction
-func (mc *mac) putEtcdKeys(sess *concurrency.Session, playbackID string, kvs ...string) error {
-	if len(kvs) == 0 || len(kvs)%2 != 0 {
-		return errors.New("number of arguments should be even")
-	}
-	cmp := clientv3.Compare(clientv3.CreateRevision(kvs[0]), ">", -1) // basically noop - will always be true
-	thn := make([]clientv3.Op, 0, len(kvs)/2)
-	get := clientv3.OpGet(kvs[0])
-	for i := 0; i < len(kvs); i += 2 {
-		thn = append(thn, clientv3.OpPut(kvs[i], kvs[i+1], clientv3.WithLease(sess.Lease())))
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
-	resp, err := mc.etcdClient.Txn(ctx).If(cmp).Then(thn...).Else(get).Commit()
-	cancel()
-	if err != nil {
-		glog.Errorf("mist-api-connector: error putting keys for playbackID=%s err=%v", playbackID, err)
-		return err
-	}
-	if resp == nil {
-		return fmt.Errorf("mist-api-connector: error putting keys for playbackID=%s - nil response", playbackID)
-	}
-	if !resp.Succeeded {
-		panic("unexpected")
-	}
-	glog.Infof("for playbackID=%s created %d keys in etcd revision=%d", playbackID, len(kvs)/2, resp.Header.Revision)
-	mc.etcdPub2rev[playbackID] = etcdRevData{resp.Header.Revision, kvs}
-	return nil
-}
-
-func (mc *mac) deleteEtcdKeys(playbackID string) {
-	etcdPlaybackID := mc.routePrefix + playbackID
-	if rev, ok := mc.etcdPub2rev[playbackID]; ok {
-		pathKey := traefikKeyPathRouters + etcdPlaybackID
-		// Just need to check the revision on one rule, use the first playbackPrefix
-		ruleKey := fmt.Sprintf("%s-%s/rule", pathKey, playbackPrefixes[0])
-		cmp := clientv3.Compare(clientv3.ModRevision(ruleKey), "=", rev.revision)
-		ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
-		thn := []clientv3.Op{
-			clientv3.OpDelete(pathKey, clientv3.WithRange(pathKey+"~")),
-		}
-		if mc.baseStreamName != "" {
-			middleWaresKey := traefikKeyPathMiddlewares + etcdPlaybackID
-			thn = append(thn,
-				clientv3.OpDelete(middleWaresKey, clientv3.WithRange(middleWaresKey+"~")),
-			)
-		}
-		get := clientv3.OpGet(ruleKey)
-		resp, err := mc.etcdClient.Txn(ctx).If(cmp).Then(thn...).Else(get).Commit()
-		cancel()
-		delete(mc.etcdPub2rev, playbackID)
-		if err != nil || resp == nil {
-			glog.Errorf("mist-api-connector: error deleting keys for playbackID=%s err=%v", playbackID, err)
-		} else {
-			if resp.Succeeded {
-				glog.Errorf("mist-api-connector: success deleting keys for playbackID=%s rev=%d", playbackID, rev.revision)
-			} else {
-				var curRev int64
-				if len(resp.Responses) > 0 && len(resp.Responses[0].GetResponseRange().Kvs) > 0 {
-					curRev = resp.Responses[0].GetResponseRange().Kvs[0].CreateRevision
-				}
-				glog.Errorf("mist-api-connector: unsuccessful deleting keys for playbackID=%s myRev=%d curRev=%d pathKey=%s",
-					playbackID, rev.revision, curRev, pathKey)
-			}
-		}
-	} else {
-		glog.Errorf("mist-api-connector: etcd revision for stream playbackID=%s not found", playbackID)
-	}
-}
-
-func (mc *mac) recoverSessionLoop() {
-	if mc.etcdClient == nil {
-		return
-	}
-	clientCtx := mc.etcdClient.Ctx()
-	for clientCtx.Err() == nil {
-		select {
-		case <-clientCtx.Done():
-			// client closed, which means app shutted down
-			return
-		case <-mc.etcdSession.Done():
-		}
-		glog.Infof("etcd session with lease=%d is lost, trying to recover", mc.etcdSession.Lease())
-
-		ctx, cancel := context.WithTimeout(clientCtx, etcdSessionRecoverTimeout)
-		err := mc.recoverEtcdSession(ctx)
-		cancel()
-
-		if err != nil && clientCtx.Err() == nil {
-			glog.Errorf("mist-api-connector: unrecoverable etcd session. err=%q.", err)
-			return
-		}
-	}
-}
-
-func (mc *mac) recoverEtcdSession(ctx context.Context) error {
-	for {
-		err := mc.recoverEtcdSessionOnce()
-		if err == nil {
-			return nil
-		}
-
-		select {
-		case <-time.After(etcdSessionRecoverBackoff):
-			glog.Errorf("mist-api-connector: Retrying etcd session recover. err=%q", err)
-			continue
-		case <-ctx.Done():
-			return fmt.Errorf("mist-api-connector: Timeout recovering etcd session err=%w", err)
-		}
-	}
-}
-
-func (mc *mac) recoverEtcdSessionOnce() error {
-	sess, err := newEtcdSession(mc.etcdClient)
-	if err != nil {
-		return err
-	}
-
-	mc.mu.Lock()
-	defer mc.mu.Unlock()
-	for playbackId, rev := range mc.etcdPub2rev {
-		err := mc.putEtcdKeys(sess, playbackId, rev.entries...)
-		if err != nil {
-			sess.Close()
-			return fmt.Errorf("mist-api-connector: Error re-creating etcd keys. playbackId=%q, err=%w", playbackId, err)
-		}
-	}
-
-	mc.etcdSession.Close()
-	mc.etcdSession = sess
-	glog.Infof("Recovered etcd session. lease=%d", sess.Lease())
-	return nil
-}
-
-func newEtcdSession(etcdClient *clientv3.Client) (*concurrency.Session, error) {
-	glog.Infof("Starting new etcd session ttl=%d", etcdSessionTTL)
-	sess, err := concurrency.NewSession(etcdClient, concurrency.WithTTL(etcdSessionTTL))
-	if err != nil {
-		glog.Errorf("Failed to start etcd session err=%q", err)
-		return nil, fmt.Errorf("mist-api-connector: Error creating etcd session err=%w", err)
-	}
-	glog.Infof("etcd got lease %d", sess.Lease())
-	return sess, nil
 }
 
 func (mc *mac) wildcardPlaybackID(stream *livepeer.CreateStreamResp) string {
@@ -1025,28 +741,12 @@ func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStream
 }
 
 func (mc *mac) handleHealthcheck(w http.ResponseWriter, r *http.Request) {
-	if !mc.isEtcdSessionHealthy() {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
 	if config, err := mc.mapi.GetConfig(); err != nil || config == nil {
 		glog.Errorf("Error getting mist config on healthcheck. err=%q", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-}
-
-func (mc *mac) isEtcdSessionHealthy() bool {
-	if mc.etcdSession == nil {
-		return true
-	}
-	select {
-	case <-mc.etcdSession.Done():
-		return false
-	default:
-		return true
-	}
 }
 
 func (mc *mac) webServerHandlers() *http.ServeMux {
@@ -1234,9 +934,6 @@ func (mc *mac) shutdown() {
 
 	err := mc.srv.Shutdown(ctx)
 	glog.Infof("Done shutting down server with err=%v", err)
-	if mc.useEtcd {
-		mc.etcdClient.Close()
-	}
 	deactivateGroup.Wait()
 
 	mc.cancel()
