@@ -919,54 +919,11 @@ func (mc *mac) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// start calling /setactve/false and sending events on active connections eagerly
-	deactivateGroup := &sync.WaitGroup{}
-	mc.deactiveAllStreams(ctx, deactivateGroup)
-
 	err := mc.srv.Shutdown(ctx)
 	glog.Infof("Done shutting down server with err=%v", err)
-	deactivateGroup.Wait()
 
 	mc.cancel()
 	mc.srvShutCh <- err
-}
-
-// deactiveAllStreams sends /setactive/false for all the active streams as well
-// as AMQP events with the inactive state.
-func (mc *mac) deactiveAllStreams(ctx context.Context, wg *sync.WaitGroup) {
-	mc.mu.Lock()
-	ids := make([]string, 0, len(mc.streamInfo))
-	streams := make([]*livepeer.CreateStreamResp, 0, len(mc.streamInfo))
-	for _, info := range mc.streamInfo {
-		ids = append(ids, info.id)
-		streams = append(streams, info.stream)
-	}
-	mc.mu.Unlock()
-	if len(ids) == 0 {
-		return
-	}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for _, stream := range streams {
-			mc.emitStreamStateEvent(stream, data.StreamState{Active: false})
-		}
-		err := mc.producer.Shutdown(ctx)
-		if err != nil {
-			glog.Errorf("Error shutting down AMQP producer err=%v", err)
-		}
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		updated, err := mc.lapi.DeactivateMany(ids)
-		if err != nil {
-			glog.Errorf("Error setting many isActive to false ids=%+v err=%v", ids, err)
-		} else {
-			glog.Infof("Set many isActive to false ids=%+v rowCount=%d", ids, updated)
-		}
-	}()
 }
 
 func (mc *mac) getStreamInfoLogged(playbackID string) (*streamInfo, bool) {
