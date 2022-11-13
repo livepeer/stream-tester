@@ -383,14 +383,6 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	stream, err := mc.lapi.GetStreamByKey(streamKey)
 	if err != nil || stream == nil {
 		glog.Errorf("Error getting stream info from Livepeer API streamKey=%s err=%v", streamKey, err)
-		/*
-			if err == livepeer.ErrNotExists {
-				// mc.mapi.DeleteStreams(streamKey)
-				w.Write([]byte(lines[0]))
-			} else {
-				w.WriteHeader(http.StatusNotFound)
-			}
-		*/
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("false"))
 		return false
