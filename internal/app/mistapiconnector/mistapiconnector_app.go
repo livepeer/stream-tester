@@ -19,7 +19,6 @@ import (
 	"github.com/livepeer/livepeer-data/pkg/event"
 	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/apis/mist"
-	mistapi "github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
@@ -772,8 +771,8 @@ func (mc *mac) StartServer(bindAddr string) error {
 	return err
 }
 
-func (mc *mac) addTrigger(triggers mistapi.TriggersMap, name, ownURI, def, params string, sync bool) bool {
-	nt := mistapi.Trigger{
+func (mc *mac) addTrigger(triggers mist.TriggersMap, name, ownURI, def, params string, sync bool) bool {
+	nt := mist.Trigger{
 		Default: def,
 		Handler: ownURI,
 		Sync:    sync,
@@ -801,7 +800,7 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 		return err
 	}
 	if triggers == nil {
-		triggers = make(mistapi.TriggersMap)
+		triggers = make(mist.TriggersMap)
 	}
 	added := mc.addTrigger(triggers, "PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000", "", true)
 	// DEFAULT_STREAM needed when using Mist's load balancing
