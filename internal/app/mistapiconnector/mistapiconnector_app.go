@@ -119,6 +119,7 @@ type (
 		srv                       *http.Server
 		srvShutCh                 chan error
 		mu                        sync.RWMutex
+		createStreamLock          sync.Mutex
 		mistHot                   string
 		checkBandwidth            bool
 		routePrefix               string
@@ -126,7 +127,7 @@ type (
 		playbackDomain            string
 		sendAudio                 string
 		baseStreamName            string
-		pub2info                  map[string]*streamInfo // public key to info
+		streamInfo                map[string]*streamInfo // public key to info
 		producer                  *event.AMQPProducer
 		nodeID                    string
 		ownRegion                 string
@@ -165,14 +166,13 @@ func NewMac(opts MacOptions) (IMac, error) {
 		glog.Infof("AMQP url is empty!")
 	}
 	mc := &mac{
-		nodeID:         opts.NodeID,
-		mistHot:        opts.MistHost,
-		mapi:           opts.MistAPI,
-		lapi:           opts.LivepeerAPI,
-		checkBandwidth: opts.CheckBandwidth,
-		balancerHost:   opts.BalancerHost,
-		// pub2id:         make(map[string]string), // public key to stream id
-		pub2info:                  make(map[string]*streamInfo), // public key to info
+		nodeID:                    opts.NodeID,
+		mistHot:                   opts.MistHost,
+		mapi:                      opts.MistAPI,
+		lapi:                      opts.LivepeerAPI,
+		checkBandwidth:            opts.CheckBandwidth,
+		balancerHost:              opts.BalancerHost,
+		streamInfo:                make(map[string]*streamInfo),
 		routePrefix:               opts.RoutePrefix,
 		mistURL:                   opts.MistURL,
 		playbackDomain:            opts.PlaybackDomain,
@@ -233,8 +233,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 		if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
 			playbackID = strings.Split(playbackID, "+")[1]
 		}
-		mc.mu.Lock()
-		if info, has := mc.pub2info[playbackID]; has {
+		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			glog.Infof("Setting stream's protocol=%s manifestID=%s playbackID=%s active status to false", protocol, info.id, playbackID)
 			_, err := mc.lapi.SetActiveR(info.id, false, info.startedAt)
 			if err != nil {
@@ -246,10 +245,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 			info.mu.Unlock()
 			go mc.removeInfoAfter(playbackID, info)
 			metrics.StopStream(true)
-		} else {
-			glog.Warningf("%s conn close stream playbackID=%s not found", protocol, playbackID)
 		}
-		mc.mu.Unlock()
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("yes"))
@@ -273,16 +269,19 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 				// urip[2] = streamPlaybackPrefix + urip[2]
 				playbackID := urip[2]
 				streamNameInMist := streamPlaybackPrefix + playbackID
-				// check if stream is in our map of currently playing streams
-				mc.mu.Lock()
-				defer mc.mu.Unlock() // hold the lock until exit so that trigger to RTMP_REWRITE can't create
-				// another Mist stream in the same time
-				if info, has := mc.pub2info[playbackID]; has {
+				// hold the creation lock until exit so that another trigger to
+				// RTMP_REWRITE can't create a Mist stream at the same time
+				mc.createStreamLock.Lock()
+				defer mc.createStreamLock.Unlock()
+
+				if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 					info.mu.Lock()
 					streamStopped := info.stopped
 					info.mu.Unlock()
 					if streamStopped {
+						mc.mu.Lock()
 						mc.removeInfo(playbackID)
+						mc.mu.Unlock()
 					} else {
 						// that means that RTMP stream is currently gets streamed into our Mist node
 						// and so no changes needed to the Mist configuration
@@ -416,21 +415,21 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 
 	if stream.PlaybackID != "" {
 		mc.mu.Lock()
-		defer mc.mu.Unlock()
-		if info, has := mc.pub2info[stream.PlaybackID]; has {
+		if info, ok := mc.streamInfo[stream.PlaybackID]; ok {
 			info.mu.Lock()
-			streamStopped := info.stopped
+			glog.Infof("Stream playbackID=%s stopped=%v already in map, removing its info", stream.PlaybackID, info.stopped)
 			info.mu.Unlock()
-			glog.Infof("Stream playbackID=%s stopped=%v already in map, removing its info", stream.PlaybackID, streamStopped)
 			mc.removeInfo(stream.PlaybackID)
 		}
-		mc.pub2info[stream.PlaybackID] = &streamInfo{
+		info := &streamInfo{
 			id:         stream.ID,
 			stream:     stream,
 			done:       make(chan struct{}),
 			pushStatus: make(map[string]*pushStatus),
 			startedAt:  time.Now(),
 		}
+		mc.streamInfo[stream.PlaybackID] = info
+		mc.mu.Unlock()
 		streamKey = stream.PlaybackID
 		// streamKey = strings.ReplaceAll(streamKey, "-", "")
 		if mc.balancerHost != "" {
@@ -441,12 +440,14 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		} else {
 			responseName = mc.wildcardPlaybackID(stream)
 		}
-		ok, err := mc.lapi.SetActiveR(stream.ID, true, mc.pub2info[stream.PlaybackID].startedAt)
+		ok, err := mc.lapi.SetActiveR(stream.ID, true, info.startedAt)
 		if err != nil {
 			glog.Error(err)
 		} else if !ok {
 			glog.Infof("Stream id=%s streamKey=%s playbackId=%s forbidden by webhook, rejecting", stream.ID, stream.StreamKey, stream.PlaybackID)
+			mc.mu.Lock()
 			mc.removeInfo(stream.PlaybackID)
+			mc.mu.Unlock()
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte("false"))
 			return true
@@ -488,12 +489,12 @@ func (mc *mac) triggerLiveTrackList(w http.ResponseWriter, r *http.Request, line
 		videoTracksNum := tl.CountVideoTracks()
 		playbackID := mistStreamName2playbackID(lines[0])
 		glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
-		glog.Infof("===> pub %+v", mc.pub2info)
-		mc.mu.RLock()
-		defer mc.mu.RUnlock()
-		if info, ok := mc.pub2info[playbackID]; ok {
-			if len(info.stream.Multistream.Targets) > 0 && !info.multistreamStarted && videoTracksNum > 1 {
-				info.multistreamStarted = true
+		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
+			info.mu.Lock()
+			alreadyStarted := info.multistreamStarted
+			info.multistreamStarted = true
+			info.mu.Unlock()
+			if !alreadyStarted && len(info.stream.Multistream.Targets) > 0 && videoTracksNum > 1 {
 				mc.startMultistream(lines[0], playbackID, info)
 			}
 		}
@@ -510,11 +511,7 @@ func (mc *mac) triggerPushOutStart(w http.ResponseWriter, r *http.Request, lines
 	}
 	go func() {
 		playbackID := mistStreamName2playbackID(lines[0])
-		// glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
-		glog.Infof("===> pub %+v", mc.pub2info)
-		mc.mu.RLock()
-		defer mc.mu.RUnlock()
-		if info, ok := mc.pub2info[playbackID]; ok {
+		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			info.mu.Lock()
 			defer info.mu.Unlock()
 			if pushInfo, ok := info.pushStatus[lines[1]]; ok {
@@ -601,10 +598,7 @@ func (mc *mac) triggerPushEnd(w http.ResponseWriter, r *http.Request, lines []st
 	go func() {
 		playbackID := mistStreamName2playbackID(lines[1])
 		// glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
-		glog.Infof("===> pub %+v", mc.pub2info)
-		mc.mu.RLock()
-		defer mc.mu.RUnlock()
-		if info, ok := mc.pub2info[playbackID]; ok {
+		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			info.mu.Lock()
 			defer info.mu.Unlock()
 			if pushInfo, ok := info.pushStatus[lines[2]]; ok {
@@ -697,9 +691,9 @@ func (mc *mac) removeInfoAfter(playbackID string, info *streamInfo) {
 
 // must be called inside mu.Lock
 func (mc *mac) removeInfo(playbackID string) {
-	if info, ok := mc.pub2info[playbackID]; ok {
+	if info, ok := mc.streamInfo[playbackID]; ok {
 		close(info.done)
-		delete(mc.pub2info, playbackID)
+		delete(mc.streamInfo, playbackID)
 	}
 }
 
@@ -854,17 +848,16 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 			}
 
 			info.mu.Lock()
+			defer info.mu.Unlock()
 			info.pushStatus[selectorURL] = &pushStatus{target: target, profile: targetRef.Profile}
 
 			err = mc.mapi.StartPush(wildcardPlaybackID, selectorURL)
 			if err != nil {
 				glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=%v", targetRef.ID, wildcardPlaybackID, err)
 				delete(info.pushStatus, selectorURL)
-				info.mu.Unlock()
 				return
 			}
 			glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, selectorURL)
-			info.mu.Unlock()
 		}(info.stream.Multistream.Targets[i])
 	}
 }
@@ -942,13 +935,16 @@ func (mc *mac) shutdown() {
 // as AMQP events with the inactive state.
 func (mc *mac) deactiveAllStreams(ctx context.Context, wg *sync.WaitGroup) {
 	mc.mu.Lock()
-	ids := make([]string, 0, len(mc.pub2info))
-	streams := make([]*livepeer.CreateStreamResp, 0, len(mc.pub2info))
-	for _, info := range mc.pub2info {
+	ids := make([]string, 0, len(mc.streamInfo))
+	streams := make([]*livepeer.CreateStreamResp, 0, len(mc.streamInfo))
+	for _, info := range mc.streamInfo {
 		ids = append(ids, info.id)
 		streams = append(streams, info.stream)
 	}
 	mc.mu.Unlock()
+	if len(ids) == 0 {
+		return
+	}
 
 	wg.Add(1)
 	go func() {
@@ -961,10 +957,6 @@ func (mc *mac) deactiveAllStreams(ctx context.Context, wg *sync.WaitGroup) {
 			glog.Errorf("Error shutting down AMQP producer err=%v", err)
 		}
 	}()
-
-	if len(ids) == 0 {
-		return
-	}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -977,10 +969,19 @@ func (mc *mac) deactiveAllStreams(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 }
 
+func (mc *mac) getStreamInfoLogged(playbackID string) (*streamInfo, bool) {
+	info, err := mc.getStreamInfo(playbackID)
+	if err != nil {
+		glog.Errorf("Error getting stream info playbackID=%q err=%q", playbackID, err)
+		return nil, false
+	}
+	return info, true
+}
+
 func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 	playbackID = mistStreamName2playbackID(playbackID)
 	mc.mu.RLock()
-	info := mc.pub2info[playbackID]
+	info := mc.streamInfo[playbackID]
 	mc.mu.RUnlock()
 	if info == nil {
 		stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
@@ -1001,7 +1002,7 @@ func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 			}
 		}
 		mc.mu.Lock()
-		mc.pub2info[playbackID] = &streamInfo{
+		mc.streamInfo[playbackID] = &streamInfo{
 			id:         stream.ID,
 			stream:     stream,
 			done:       make(chan struct{}),
