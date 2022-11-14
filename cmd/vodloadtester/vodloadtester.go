@@ -27,12 +27,13 @@ type cliArguments struct {
 	ResumableUpload bool
 	Import          bool
 
-	TaskCheck   bool
-	APIServer   string
-	APIToken    string
-	Filename    string
-	VideoAmount uint
-	OutputPath  string
+	TaskCheck        bool
+	TaskCheckTimeout uint
+	APIServer        string
+	APIToken         string
+	Filename         string
+	VideoAmount      uint
+	OutputPath       string
 
 	TestDuration       time.Duration
 	StartDelayDuration time.Duration
@@ -70,6 +71,8 @@ func main() {
 	fs.IntVar(&cliFlags.Verbosity, "v", 3, "Log verbosity.  {4|5|6}")
 	fs.BoolVar(&cliFlags.Version, "version", false, "Print out the version")
 	fs.BoolVar(&cliFlags.TaskCheck, "task-check", false, "Check task processing")
+
+	fs.UintVar(&cliFlags.TaskCheckTimeout, "task-timeout", 500, "Task check timeout in seconds")
 
 	fs.BoolVar(&cliFlags.DirectUpload, "direct", false, "Launch direct upload test")
 	fs.BoolVar(&cliFlags.ResumableUpload, "resumable", false, "Launch tus upload test")
@@ -376,7 +379,7 @@ func (vt *vodLoadTester) uploadAsset(fileName string, uploadUrl string, resumabl
 
 func (vt *vodLoadTester) checkTaskProcessing(taskPollDuration time.Duration, processingTask api.TaskOnlyId) error {
 	startTime := time.Now()
-	timeout := 3 * time.Minute
+	timeout := time.Duration(vt.cliFlags.TaskCheckTimeout) * time.Second
 	for {
 		glog.Infof("Waiting %s for task id=%s to be processed, elapsed=%s", taskPollDuration, processingTask.ID, time.Since(startTime))
 		time.Sleep(taskPollDuration)
