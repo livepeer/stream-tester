@@ -52,12 +52,7 @@ type (
 		profile          string
 		pushStartEmitted bool
 		pushStopped      bool
-		metrics          *pushMetrics
-	}
-
-	pushMetrics struct {
-		pushedBytes     int64
-		pushedMediaTime time.Duration
+		metrics          *data.MultistreamMetrics
 	}
 
 	streamInfo struct {
@@ -841,7 +836,11 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 			}
 
 			info.mu.Lock()
-			info.pushStatus[pushURL] = &pushStatus{target: target, profile: targetRef.Profile}
+			info.pushStatus[pushURL] = &pushStatus{
+				target:  target,
+				profile: targetRef.Profile,
+				metrics: &data.MultistreamMetrics{},
+			}
 			info.mu.Unlock()
 
 			err = mc.mapi.StartPush(wildcardPlaybackID, pushURL)

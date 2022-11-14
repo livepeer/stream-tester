@@ -106,22 +106,16 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 				Bytes:       push.Stats.Bytes,
 				MediaTimeMs: push.Stats.MediaTime,
 			}
-			mediaTime := time.Duration(metrics.MediaTimeMs) * time.Millisecond
-			if pushInfo.metrics == nil {
-				pushInfo.metrics = &pushMetrics{
-					pushedBytes:     push.Stats.Bytes,
-					pushedMediaTime: mediaTime,
+			if last := pushInfo.metrics; last != nil {
+				if metrics.Bytes > last.Bytes {
+					census.IncMultistreamBytes(metrics.Bytes-last.Bytes, info.stream.PlaybackID) // manifestID === playbackID
 				}
-			} else {
-				if metrics.Bytes > pushInfo.metrics.pushedBytes {
-					census.IncMultistreamBytes(metrics.Bytes-pushInfo.metrics.pushedBytes, info.stream.PlaybackID) // manifestID === playbackID
-					pushInfo.metrics.pushedBytes = metrics.Bytes
-				}
-				if mediaTime > pushInfo.metrics.pushedMediaTime {
-					census.IncMultistreamTime(mediaTime-pushInfo.metrics.pushedMediaTime, info.stream.PlaybackID)
-					pushInfo.metrics.pushedMediaTime = mediaTime
+				if metrics.MediaTimeMs > last.MediaTimeMs {
+					diff := time.Duration(metrics.MediaTimeMs-last.MediaTimeMs) * time.Millisecond
+					census.IncMultistreamTime(diff, info.stream.PlaybackID)
 				}
 			}
+			pushInfo.metrics = metrics
 		}
 		multistream[i] = &data.MultistreamTargetMetrics{
 			Target:  pushToMultistreamTargetInfo(pushInfo),
