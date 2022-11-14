@@ -740,7 +740,6 @@ func (mc *mac) handleHealthcheck(w http.ResponseWriter, r *http.Request) {
 func (mc *mac) webServerHandlers() *http.ServeMux {
 	mux := http.NewServeMux()
 	utils.AddPProfHandlers(mux)
-	// mux.Handle("/metrics", utils.InitPrometheusExporter("mistconnector"))
 	mux.Handle("/metrics", metrics.Exporter)
 
 	mux.HandleFunc("/_healthz", mc.handleHealthcheck)
@@ -830,7 +829,7 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 	for i := range info.stream.Multistream.Targets {
 		go func(targetRef livepeer.MultistreamTargetRef) {
 			glog.Infof("==> starting multistream %s", targetRef.ID)
-			target, selectorURL, err := mc.getPushUrl(info.stream, &targetRef)
+			target, pushURL, err := mc.getPushUrl(info.stream, &targetRef)
 			if err != nil {
 				glog.Errorf("Error building multistream target push URL. targetId=%s stream=%s err=%v",
 					targetRef.ID, wildcardPlaybackID, err)
@@ -842,23 +841,24 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 			}
 
 			info.mu.Lock()
-			defer info.mu.Unlock()
-			info.pushStatus[selectorURL] = &pushStatus{target: target, profile: targetRef.Profile}
+			info.pushStatus[pushURL] = &pushStatus{target: target, profile: targetRef.Profile}
+			info.mu.Unlock()
 
-			err = mc.mapi.StartPush(wildcardPlaybackID, selectorURL)
+			err = mc.mapi.StartPush(wildcardPlaybackID, pushURL)
 			if err != nil {
 				glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=%v", targetRef.ID, wildcardPlaybackID, err)
-				delete(info.pushStatus, selectorURL)
+				info.mu.Lock()
+				delete(info.pushStatus, pushURL)
+				info.mu.Unlock()
 				return
 			}
-			glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, selectorURL)
+			glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, pushURL)
 		}(info.stream.Multistream.Targets[i])
 	}
 }
 
 func (mc *mac) startSignalHandler() {
 	exitc := make(chan os.Signal, 1)
-	// signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	signal.Notify(exitc, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		gotSig := <-exitc
@@ -942,11 +942,11 @@ func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 		}
 		pushes := make(map[string]*pushStatus)
 		for _, ref := range stream.Multistream.Targets {
-			target, selectorURL, err := mc.getPushUrl(info.stream, &ref)
+			target, pushURL, err := mc.getPushUrl(info.stream, &ref)
 			if err != nil {
 				return nil, err
 			}
-			pushes[selectorURL] = &pushStatus{
+			pushes[pushURL] = &pushStatus{
 				target:  target,
 				profile: ref.Profile,
 				// Assume setup was all successful
