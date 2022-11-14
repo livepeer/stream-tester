@@ -96,8 +96,8 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 	for i, push := range metrics.pushes {
 		pushInfo := info.pushStatus[push.OriginalURI]
 		if pushInfo == nil {
-			pushInfo = &pushStatus{}
-			info.pushStatus[push.OriginalURI] = pushInfo
+			glog.Infof("Mist exported metrics from unknown push. streamId=%q pushURL=%q", info.id, push.OriginalURI)
+			continue
 		}
 		var metrics *data.MultistreamMetrics
 		if push.Stats != nil {
