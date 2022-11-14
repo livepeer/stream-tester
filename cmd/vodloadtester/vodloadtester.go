@@ -399,7 +399,7 @@ func (vt *vodLoadTester) checkTaskProcessing(taskPollDuration time.Duration, pro
 		}
 
 		if time.Since(startTime) > timeout {
-			glog.Errorf("Timeout processing task, taskId=%s", task.ID)
+			glog.Errorf("Internal timeout processing task, taskId=%s", task.ID)
 			return fmt.Errorf("timeout processing task, taskId=%s", task.ID)
 		}
 	}
