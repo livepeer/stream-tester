@@ -134,10 +134,11 @@ func main() {
 
 	if cliFlags.Import {
 		if cliFlags.DirectUpload || cliFlags.ResumableUpload {
-			glog.Fatal("Cannot use -import with either -direct or -resumable")
+			glog.Infof("Cannot use -import with either -direct or -resumable, doing only the import task")
 		}
 		fileName = cliFlags.Filename
 		vt.importFromUrlTest(fileName, runnerInfo)
+		return
 	}
 
 	if cliFlags.DirectUpload || cliFlags.ResumableUpload {
@@ -185,6 +186,7 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 				rndAssetName := fmt.Sprintf("load_test_direct_%s", randName())
 				requestedUpload, err := vt.requestUploadUrls(rndAssetName)
 				defer vt.lapi.DeleteAsset(requestedUpload.Asset.ID)
+				defer wg.Done()
 
 				if err != nil {
 					glog.Errorf("Error requesting upload urls: %v", err)
@@ -198,7 +200,7 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 					uploadTest.TaskID = requestedUpload.Task.ID
 				}
 
-				err = vt.uploadAsset(fileName, requestedUpload.Url)
+				err = vt.uploadAsset(fileName, requestedUpload.Url, false)
 
 				if err != nil {
 					glog.Errorf("Error uploading asset: %v", err)
@@ -217,7 +219,6 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 
 				}
 				vt.writeResultNdjson(uploadTest)
-				wg.Done()
 			}()
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
@@ -242,6 +243,7 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 				rndAssetName := fmt.Sprintf("load_test_resumable_%s", randName())
 				requestedUpload, err := vt.requestUploadUrls(rndAssetName)
 				defer vt.lapi.DeleteAsset(requestedUpload.Asset.ID)
+				defer wg.Done()
 
 				if err != nil {
 					glog.Errorf("Error requesting upload urls: %v", err)
@@ -257,7 +259,7 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 
 				uploadUrl := requestedUpload.TusEndpoint
 
-				err = vt.uploadAssetResumable(uploadUrl, fileName)
+				err = vt.uploadAsset(fileName, uploadUrl, true)
 
 				if err != nil {
 					glog.Errorf("Error on resumable upload: %v", err)
@@ -276,7 +278,6 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 
 				}
 				vt.writeResultNdjson(uploadTest)
-				wg.Done()
 			}()
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
@@ -303,6 +304,7 @@ func (vt *vodLoadTester) importFromUrlTest(url string, runnerInfo string) {
 				rndAssetName := fmt.Sprintf("load_test_import_%s", randName())
 				asset, task, err := vt.lapi.ImportAsset(url, rndAssetName)
 				defer vt.lapi.DeleteAsset(asset.ID)
+				defer wg.Done()
 
 				if err != nil {
 					glog.Errorf("Error importing asset: %v", err)
@@ -326,7 +328,6 @@ func (vt *vodLoadTester) importFromUrlTest(url string, runnerInfo string) {
 					uploadTest.EndTime = time.Now()
 				}
 				vt.writeResultNdjson(uploadTest)
-				wg.Done()
 			}()
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
@@ -350,7 +351,7 @@ func (vt *vodLoadTester) writeResultNdjson(uploadTest uploadTest) {
 	}
 }
 
-func (vt *vodLoadTester) uploadAsset(fileName string, uploadUrl string) error {
+func (vt *vodLoadTester) uploadAsset(fileName string, uploadUrl string, resumable bool) error {
 
 	file, err := os.Open(fileName)
 
@@ -359,28 +360,15 @@ func (vt *vodLoadTester) uploadAsset(fileName string, uploadUrl string) error {
 		return err
 	}
 
-	err = vt.lapi.UploadAsset(vt.ctx, uploadUrl, file)
+	if resumable {
+		err = vt.lapi.ResumableUpload(uploadUrl, file)
+	} else {
+		err = vt.lapi.UploadAsset(vt.ctx, uploadUrl, file)
+	}
+
 	if err != nil {
 		fmt.Printf("error uploading asset: %v\n", err)
 		return err
-	}
-
-	return err
-}
-
-func (vt *vodLoadTester) uploadAssetResumable(url string, fileName string) error {
-
-	file, err := os.Open(fileName)
-
-	if err != nil {
-		fmt.Printf("error opening file %s: %v\n", fileName, err)
-		return err
-	}
-
-	err = vt.lapi.ResumableUpload(url, file)
-
-	if err != nil {
-		fmt.Printf("error on resumable upload asset: %v", err)
 	}
 
 	return err
