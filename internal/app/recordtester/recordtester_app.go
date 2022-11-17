@@ -165,6 +165,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	apiTry = 0
 	rt.streamID = stream.ID
 	rt.stream = stream
+	defer rt.lapi.DeleteStream(stream.ID)
 	messenger.SendMessage(fmt.Sprintf(":information_source: Created stream id=%s", stream.ID))
 	// createdAPIStreams = append(createdAPIStreams, stream.ID)
 	glog.V(model.VERBOSE).Infof("Created Livepeer stream id=%s streamKey=%s playbackId=%s name=%s", stream.ID, stream.StreamKey, stream.PlaybackID, streamName)
@@ -335,28 +336,26 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			return 249, err
 		}
 		glog.Infof("recordingURL=%s downloading now", sess.RecordingURL)
-	}
-	glog.Info("Done Record Test")
+		if err = rt.isCancelled(); err != nil {
+			return 0, err
+		}
+		if rt.mp4 {
+			es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration, pauseDuration > 0)
+			if err != nil {
+				return es, err
+			}
+		}
 
-	if err = rt.isCancelled(); err != nil {
-		return 0, err
-	}
-	if rt.mp4 {
-		es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration, pauseDuration > 0)
+		es, err := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
+
 		if err != nil {
 			return es, err
 		}
 	}
 
-	es, err := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
-	if es == 0 {
-		rt.lapi.DeleteStream(stream.ID)
-		// exit(0, fileName, *fileArg, err)
-	}
+	glog.Info("Done Record Test")
 
-	// uploader := testers.NewRtmpStreamer(gctx, rtmpURL)
-	// uploader.StartUpload(fileName, rtmpURL, -1, 30*time.Second)
-	return es, err
+	return 0, err
 }
 
 func (rt *recordTester) getIngestInfo() (*api.Ingest, error) {
