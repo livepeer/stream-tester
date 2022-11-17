@@ -45,6 +45,7 @@ type (
 		TestMP4             bool
 		TestStreamHealth    bool
 		TestAccessControl   bool
+		TestRecording       bool
 		SigningKey          string
 		PublicKey           string
 	}
@@ -61,6 +62,7 @@ type (
 		mp4                 bool
 		streamHealth        bool
 		accessControl       bool
+		testRecording       bool
 		signingKey          string
 		publicKey           string
 
@@ -86,6 +88,7 @@ func NewRecordTester(gctx context.Context, opts RecordTesterOptions) IRecordTest
 		mp4:                 opts.TestMP4,
 		streamHealth:        opts.TestStreamHealth,
 		accessControl:       opts.TestAccessControl,
+		testRecording:       opts.TestRecording,
 		signingKey:          opts.SigningKey,
 		publicKey:           opts.PublicKey,
 	}
@@ -134,14 +137,17 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	var stream *api.Stream
 	for {
-		streamOptions := api.CreateStreamReq{Name: streamName, Record: true, RecordObjectStoreId: rt.recordObjectStoreId}
+		streamOptions := api.CreateStreamReq{Name: streamName, Record: rt.testRecording, RecordObjectStoreId: rt.recordObjectStoreId}
 
 		if rt.accessControl {
 			streamOptions.PlaybackPolicy = api.PlaybackPolicy{
 				Type: "jwt",
 			}
-			streamOptions.Record = false
 			glog.Infof("Creating stream with access control")
+		}
+
+		if rt.testRecording {
+			glog.Infof("Creating stream with recording enabled")
 		}
 
 		stream, err = rt.lapi.CreateStream(streamOptions)
@@ -185,6 +191,9 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		}
 		mediaURL = fmt.Sprintf("%s?jwt=%s", mediaURL, token)
 		glog.V(model.VERBOSE).Infof("URL with access control for stream id=%s playbackId=%s name=%s mediaURL=%s", stream.ID, stream.PlaybackID, streamName, mediaURL)
+	} else {
+		glog.Warningf("No access control for stream id=%s playbackId=%s name=%s mediaURL=%s", stream.ID, stream.PlaybackID, streamName, mediaURL)
+		return 2, nil
 	}
 
 	if rt.useHTTP {
@@ -311,32 +320,24 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 0, err
 	}
 
-	sess = sessions[0]
-	statusShould := livepeer.RecordingStatusReady
-	if rt.useForceURL {
-		statusShould = livepeer.RecordingStatusWaiting
+	if rt.testRecording {
+		sess = sessions[0]
+		statusShould := livepeer.RecordingStatusReady
+		if rt.useForceURL {
+			statusShould = livepeer.RecordingStatusWaiting
+		}
+		if sess.RecordingStatus != statusShould {
+			err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
+			return 240, err
+		}
+		if sess.RecordingURL == "" {
+			err := fmt.Errorf("recording URL should appear by now")
+			return 249, err
+		}
+		glog.Infof("recordingURL=%s downloading now", sess.RecordingURL)
 	}
-	if sess.RecordingStatus != statusShould {
-		err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
-		return 240, err
-		// exit(250, fileName, *fileArg, err)
-	}
-	if sess.RecordingURL == "" {
-		err := fmt.Errorf("recording URL should appear by now")
-		return 249, err
-		// exit(249, fileName, *fileArg, err)
-	}
-	glog.Infof("recordingURL=%s downloading now", sess.RecordingURL)
-
-	// started := time.Now()
-	// downloader := testers.NewM3utester2(gctx, sess.RecordingURL, false, false, false, false, 5*time.Second, nil)
-	// <-downloader.Done()
-	// glog.Infof(`Pulling stopped after %s`, time.Since(started))
-	// exit(55, fileName, *fileArg, err)
 	glog.Info("Done Record Test")
 
-	// lapi.DeleteStream(stream.ID)
-	// exit(0, fileName, *fileArg, err)
 	if err = rt.isCancelled(); err != nil {
 		return 0, err
 	}
