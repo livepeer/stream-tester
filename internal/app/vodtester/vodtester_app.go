@@ -3,7 +3,9 @@ package vodtester
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -189,7 +191,7 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 		return fmt.Errorf("error requesting upload for assetName=%s: %w", assetName, err)
 	}
 
-	tusUploadEndpoint := requestUpload.TusEndpoint
+	tusUploadEndpoint := patchURLHost(requestUpload.TusEndpoint, vt.lapi.GetServer())
 	uploadAsset := requestUpload.Asset
 	uploadTask := api.Task{
 		ID: requestUpload.Task.ID,
@@ -242,6 +244,29 @@ func (vt *vodTester) checkTaskProcessing(taskPollDuration time.Duration, process
 			return fmt.Errorf("error processing task, taskId=%s status=%s error=%v", task.ID, task.Status.Phase, task.Status.ErrorMessage)
 		}
 	}
+}
+
+// Patches the target URL with the source URL host, only if the latter is not
+// contained in the first. Used for doing resumable uploads to the same region
+// under test.
+func patchURLHost(target, src string) string {
+	targetURL, err := url.Parse(target)
+	if err != nil {
+		return target
+	}
+	srcURL, err := url.Parse(src)
+	if err != nil {
+		return target
+	}
+
+	// Only patch the host if the target doesn't arleady contain the source host,
+	// which would mean we are using a global endpoint for the API as well (e.g.
+	// API server is livepeer.com and tus endpoint is origin.livepeer.com).
+	if !strings.Contains(targetURL.Host, srcURL.Host) {
+		targetURL.Scheme = srcURL.Scheme
+		targetURL.Host = srcURL.Host
+	}
+	return targetURL.String()
 }
 
 func (vt *vodTester) isCancelled() error {
