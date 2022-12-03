@@ -12,7 +12,7 @@ require (
 	github.com/golang/glog v1.0.0
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
-	github.com/livepeer/go-api-client v0.2.9-0.20220916171125-c13c05817515
+	github.com/livepeer/go-api-client v0.3.2-0.20221111121231-26895f4f5e47
 	github.com/livepeer/go-livepeer v0.5.31
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
@@ -53,6 +53,7 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt/v4 v4.4.2
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/mock v1.5.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect

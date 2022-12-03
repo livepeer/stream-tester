@@ -60,6 +60,10 @@ func main() {
 	testMP4 := fs.Bool("mp4", false, "Download MP4 of recording")
 	testStreamHealth := fs.Bool("stream-health", false, "Check stream health during test")
 	testVod := fs.Bool("vod", false, "Check VOD workflow")
+	testAccessControl := fs.Bool("access-control", false, "Test access control")
+	testRecording := fs.Bool("recording", true, "Test recordings")
+	signingKey := fs.String("signing-key", "", "Signing key for access control")
+	publicKey := fs.String("public-key", "", "Public key for access control")
 	recordObjectStoreId := fs.String("record-object-store-id", "", "ID for the Object Store to use for recording storage. Forwarded to the streams created in the API")
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
@@ -216,6 +220,10 @@ func main() {
 		UseHTTP:             *useHttp,
 		TestMP4:             *testMP4,
 		TestStreamHealth:    *testStreamHealth,
+		TestAccessControl:   *testAccessControl,
+		TestRecording:       *testRecording,
+		SigningKey:          *signingKey,
+		PublicKey:           *publicKey,
 	}
 	vtOpts := vodtester.VodTesterOptions{
 		API: lapi,

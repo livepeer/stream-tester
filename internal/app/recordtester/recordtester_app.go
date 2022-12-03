@@ -3,6 +3,7 @@ package recordtester
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/glog"
 	api "github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format/mp4"
@@ -42,6 +44,10 @@ type (
 		UseHTTP             bool
 		TestMP4             bool
 		TestStreamHealth    bool
+		TestAccessControl   bool
+		TestRecording       bool
+		SigningKey          string
+		PublicKey           string
 	}
 
 	recordTester struct {
@@ -55,6 +61,10 @@ type (
 		useHTTP             bool
 		mp4                 bool
 		streamHealth        bool
+		accessControl       bool
+		testRecording       bool
+		signingKey          string
+		publicKey           string
 
 		// mutable fields
 		streamID string
@@ -77,6 +87,10 @@ func NewRecordTester(gctx context.Context, opts RecordTesterOptions) IRecordTest
 		useHTTP:             opts.UseHTTP,
 		mp4:                 opts.TestMP4,
 		streamHealth:        opts.TestStreamHealth,
+		accessControl:       opts.TestAccessControl,
+		testRecording:       opts.TestRecording,
+		signingKey:          opts.SigningKey,
+		publicKey:           opts.PublicKey,
 	}
 	return rt
 }
@@ -123,7 +137,20 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	var stream *api.Stream
 	for {
-		stream, err = rt.lapi.CreateStream(api.CreateStreamReq{Name: streamName, Record: true, RecordObjectStoreId: rt.recordObjectStoreId})
+		streamOptions := api.CreateStreamReq{Name: streamName, Record: rt.testRecording, RecordObjectStoreId: rt.recordObjectStoreId}
+
+		if rt.accessControl {
+			streamOptions.PlaybackPolicy = api.PlaybackPolicy{
+				Type: "jwt",
+			}
+			glog.Infof("Creating stream with access control")
+		}
+
+		if rt.testRecording {
+			glog.Infof("Creating stream with recording enabled")
+		}
+
+		stream, err = rt.lapi.CreateStream(streamOptions)
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -138,6 +165,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	apiTry = 0
 	rt.streamID = stream.ID
 	rt.stream = stream
+	defer rt.lapi.DeleteStream(stream.ID)
 	messenger.SendMessage(fmt.Sprintf(":information_source: Created stream id=%s", stream.ID))
 	// createdAPIStreams = append(createdAPIStreams, stream.ID)
 	glog.V(model.VERBOSE).Infof("Created Livepeer stream id=%s streamKey=%s playbackId=%s name=%s", stream.ID, stream.StreamKey, stream.PlaybackID, streamName)
@@ -156,6 +184,19 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingest.Playback, stream.PlaybackID)
 	glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 	glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
+
+	if rt.accessControl && (rt.signingKey != "" && rt.publicKey != "") {
+		token, err := rt.signJwt(stream)
+		if err != nil {
+			return 1, err
+		}
+		mediaURL = fmt.Sprintf("%s?jwt=%s", mediaURL, token)
+		glog.V(model.VERBOSE).Infof("URL with access control for stream id=%s playbackId=%s name=%s mediaURL=%s", stream.ID, stream.PlaybackID, streamName, mediaURL)
+	} else {
+		glog.Warningf("No access control for stream id=%s playbackId=%s name=%s mediaURL=%s", stream.ID, stream.PlaybackID, streamName, mediaURL)
+		return 2, nil
+	}
+
 	if rt.useHTTP {
 		sterr := rt.doOneHTTPStream(fileName, streamName, broadcasters[0], testDuration, stream)
 		if sterr != nil {
@@ -280,51 +321,41 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 0, err
 	}
 
-	sess = sessions[0]
-	statusShould := livepeer.RecordingStatusReady
-	if rt.useForceURL {
-		statusShould = livepeer.RecordingStatusWaiting
-	}
-	if sess.RecordingStatus != statusShould {
-		err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
-		return 240, err
-		// exit(250, fileName, *fileArg, err)
-	}
-	if sess.RecordingURL == "" {
-		err := fmt.Errorf("recording URL should appear by now")
-		return 249, err
-		// exit(249, fileName, *fileArg, err)
-	}
-	glog.Infof("recordingURL=%s downloading now", sess.RecordingURL)
+	if rt.testRecording {
+		sess = sessions[0]
+		statusShould := livepeer.RecordingStatusReady
+		if rt.useForceURL {
+			statusShould = livepeer.RecordingStatusWaiting
+		}
+		if sess.RecordingStatus != statusShould {
+			err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
+			return 240, err
+		}
+		if sess.RecordingURL == "" {
+			err := fmt.Errorf("recording URL should appear by now")
+			return 249, err
+		}
+		glog.Infof("recordingURL=%s downloading now", sess.RecordingURL)
+		if err = rt.isCancelled(); err != nil {
+			return 0, err
+		}
+		if rt.mp4 {
+			es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration, pauseDuration > 0)
+			if err != nil {
+				return es, err
+			}
+		}
 
-	// started := time.Now()
-	// downloader := testers.NewM3utester2(gctx, sess.RecordingURL, false, false, false, false, 5*time.Second, nil)
-	// <-downloader.Done()
-	// glog.Infof(`Pulling stopped after %s`, time.Since(started))
-	// exit(55, fileName, *fileArg, err)
-	glog.Info("Done Record Test")
+		es, err := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
 
-	// lapi.DeleteStream(stream.ID)
-	// exit(0, fileName, *fileArg, err)
-	if err = rt.isCancelled(); err != nil {
-		return 0, err
-	}
-	if rt.mp4 {
-		es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration, pauseDuration > 0)
 		if err != nil {
 			return es, err
 		}
 	}
 
-	es, err := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
-	if es == 0 {
-		rt.lapi.DeleteStream(stream.ID)
-		// exit(0, fileName, *fileArg, err)
-	}
+	glog.Info("Done Record Test")
 
-	// uploader := testers.NewRtmpStreamer(gctx, rtmpURL)
-	// uploader.StartUpload(fileName, rtmpURL, -1, 30*time.Second)
-	return es, err
+	return 0, err
 }
 
 func (rt *recordTester) getIngestInfo() (*api.Ingest, error) {
@@ -387,6 +418,31 @@ func (rt *recordTester) isCancelled() error {
 	default:
 	}
 	return nil
+}
+
+func (rt *recordTester) signJwt(stream *api.Stream) (string, error) {
+	expiration := time.Now().Add(time.Minute * 5).Unix()
+	unsignedToken := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
+		"sub": stream.PlaybackID,
+		"pub": rt.publicKey,
+		"exp": expiration,
+	})
+
+	decodedPrivateKey, _ := base64.StdEncoding.DecodeString(rt.signingKey)
+
+	pk, err := jwt.ParseECPrivateKeyFromPEM(decodedPrivateKey)
+
+	if err != nil {
+		glog.Errorf("Unable to parse provided signing key for access control signingKey=%s", rt.signingKey)
+	}
+
+	token, err := unsignedToken.SignedString(pk)
+
+	if err != nil {
+		glog.Errorf("Unable to sign JWT with provided private key for access control signingKey=%s", rt.signingKey)
+	}
+
+	return token, nil
 }
 
 func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDuration time.Duration, doubled bool) (int, error) {
