@@ -201,50 +201,7 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 			fmt.Printf("Uploading video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
 			wg.Add(1)
 			go func() {
-				uploadTest := uploadTest{
-					StartTime:  time.Now(),
-					RunnerInfo: runnerInfo,
-					Kind:       "directUpload",
-				}
-				rndAssetName := fmt.Sprintf("load_test_direct_%s", randName())
-				requestedUpload, err := vt.requestUploadUrls(rndAssetName)
-				if !vt.cliFlags.KeepAssets {
-					defer vt.lapi.DeleteAsset(requestedUpload.Asset.ID)
-				}
-
-				defer wg.Done()
-
-				if err != nil {
-					glog.Errorf("Error requesting upload urls: %v", err)
-					uploadTest.RequestUploadSuccess = 0
-					uploadTest.ErrorMessage = err.Error()
-					vt.writeResultNdjson(uploadTest)
-					return
-				} else {
-					uploadTest.RequestUploadSuccess = 1
-					uploadTest.AssetID = requestedUpload.Asset.ID
-					uploadTest.TaskID = requestedUpload.Task.ID
-				}
-
-				err = vt.uploadAsset(fileName, requestedUpload.Url, false)
-
-				if err != nil {
-					glog.Errorf("Error uploading asset: %v", err)
-					uploadTest.UploadSuccess = 0
-				} else {
-					uploadTest.UploadSuccess = 1
-					if vt.cliFlags.TaskCheck {
-						err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
-						if err != nil {
-							uploadTest.TaskCheckSuccess = 0
-							uploadTest.ErrorMessage = err.Error()
-						} else {
-							uploadTest.TaskCheckSuccess = 1
-						}
-					}
-
-				}
-				vt.writeResultNdjson(uploadTest)
+				vt.doUpload(fileName, runnerInfo, wg, false)
 			}()
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
@@ -258,55 +215,10 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 
 	for i := 0; i < int(vt.cliFlags.VideoAmount); i += int(vt.cliFlags.Simultaneous) {
 		for j := 0; j < int(vt.cliFlags.Simultaneous); j++ {
-			fmt.Printf("rUpload video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
+			fmt.Printf("Uploading resumable video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
 			wg.Add(1)
 			go func() {
-				uploadTest := uploadTest{
-					StartTime:  time.Now(),
-					RunnerInfo: runnerInfo,
-					Kind:       "resumable",
-				}
-				rndAssetName := fmt.Sprintf("load_test_resumable_%s", randName())
-				requestedUpload, err := vt.requestUploadUrls(rndAssetName)
-				if !vt.cliFlags.KeepAssets {
-					defer vt.lapi.DeleteAsset(requestedUpload.Asset.ID)
-				}
-
-				defer wg.Done()
-
-				if err != nil {
-					glog.Errorf("Error requesting upload urls: %v", err)
-					uploadTest.RequestUploadSuccess = 0
-					uploadTest.ErrorMessage = err.Error()
-					vt.writeResultNdjson(uploadTest)
-					return
-				} else {
-					uploadTest.RequestUploadSuccess = 1
-					uploadTest.AssetID = requestedUpload.Asset.ID
-					uploadTest.TaskID = requestedUpload.Task.ID
-				}
-
-				uploadUrl := requestedUpload.TusEndpoint
-
-				err = vt.uploadAsset(fileName, uploadUrl, true)
-
-				if err != nil {
-					glog.Errorf("Error on resumable upload: %v", err)
-					uploadTest.UploadSuccess = 0
-				} else {
-					uploadTest.UploadSuccess = 1
-					if vt.cliFlags.TaskCheck {
-						err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
-						if err != nil {
-							uploadTest.TaskCheckSuccess = 0
-							uploadTest.ErrorMessage = err.Error()
-						} else {
-							uploadTest.TaskCheckSuccess = 1
-						}
-					}
-
-				}
-				vt.writeResultNdjson(uploadTest)
+				vt.doUpload(fileName, runnerInfo, wg, true)
 			}()
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
@@ -314,6 +226,66 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 
 	wg.Wait()
 
+}
+
+func (vt *vodLoadTester) doUpload(fileName, runnerInfo string, wg *sync.WaitGroup, resumable bool) {
+
+	uploadKind := "directUpload"
+
+	if resumable {
+		uploadKind = "resumableUpload"
+	}
+
+	uploadTest := uploadTest{
+		StartTime:  time.Now(),
+		RunnerInfo: runnerInfo,
+		Kind:       uploadKind,
+	}
+	rndAssetName := fmt.Sprintf("load_test_%s_%s", uploadKind, randName())
+	requestedUpload, err := vt.requestUploadUrls(rndAssetName)
+	if !vt.cliFlags.KeepAssets {
+		defer vt.lapi.DeleteAsset(requestedUpload.Asset.ID)
+	}
+
+	defer wg.Done()
+
+	if err != nil {
+		glog.Errorf("Error requesting upload urls: %v", err)
+		uploadTest.RequestUploadSuccess = 0
+		uploadTest.ErrorMessage = err.Error()
+		vt.writeResultNdjson(uploadTest)
+		return
+	} else {
+		uploadTest.RequestUploadSuccess = 1
+		uploadTest.AssetID = requestedUpload.Asset.ID
+		uploadTest.TaskID = requestedUpload.Task.ID
+	}
+
+	uploadUrl := requestedUpload.Url
+
+	if resumable {
+		uploadUrl = requestedUpload.TusEndpoint
+	}
+
+	err = vt.uploadAsset(fileName, uploadUrl, resumable)
+
+	if err != nil {
+		glog.Errorf("Error on %s: %v", uploadKind, err)
+		uploadTest.UploadSuccess = 0
+	} else {
+		uploadTest.UploadSuccess = 1
+		if vt.cliFlags.TaskCheck {
+			err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
+			if err != nil {
+				uploadTest.TaskCheckSuccess = 0
+				uploadTest.ErrorMessage = err.Error()
+			} else {
+				uploadTest.TaskCheckSuccess = 1
+			}
+		}
+
+	}
+	vt.writeResultNdjson(uploadTest)
 }
 
 func (vt *vodLoadTester) importFromJSONTest(jsonFile string, runnerInfo string) {
