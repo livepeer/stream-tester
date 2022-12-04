@@ -49,8 +49,8 @@ type vodLoadTester struct {
 }
 
 type uploadTest struct {
-	StartTime            time.Time `json:"start_time"`
-	EndTime              time.Time `json:"end_time"`
+	StartTime            time.Time `json:"startTime"`
+	EndTime              time.Time `json:"endTime"`
 	RunnerInfo           string    `json:"runnerInfo,omitempty"`
 	Kind                 string    `json:"kind,omitempty"`
 	AssetID              string    `json:"assetId,omitempty"`
@@ -92,7 +92,7 @@ func main() {
 	fs.UintVar(&cliFlags.Simultaneous, "sim", 1, "Number of simulteneous videos to upload")
 	fs.StringVar(&cliFlags.Filename, "file", "bbb_sunflower_1080p_30fps_normal_2min.mp4", "File to upload or url to import. Can be either a video or a .json array of objects with a url key")
 	fs.StringVar(&cliFlags.APIToken, "api-token", "", "Token of the Livepeer API to be used")
-	fs.StringVar(&cliFlags.APIServer, "api-server", "origin.livepeer.com", "Server of the Livepeer API to be used")
+	fs.StringVar(&cliFlags.APIServer, "api-server", "origin.livepeer.monster", "Server of the Livepeer API to be used")
 	fs.StringVar(&cliFlags.OutputPath, "output-path", "/tmp/results.ndjson", "Path to output result .ndjson file")
 
 	_ = fs.String("config", "", "config file (optional)")
@@ -492,7 +492,7 @@ func (vt *vodLoadTester) checkTaskProcessing(taskPollDuration time.Duration, pro
 		task, err := vt.lapi.GetTask(processingTask.ID)
 		if err != nil {
 			glog.Errorf("Error retrieving task id=%s err=%v", processingTask.ID, err)
-			if strings.Contains(err.Error(), "connection reset by peer") {
+			if strings.Contains(err.Error(), "connection reset by peer") || strings.Contains(err.Error(), "520") {
 				// Retry
 				continue
 			}
