@@ -28,14 +28,15 @@ type cliArguments struct {
 	ResumableUpload bool
 	Import          bool
 
-	TaskCheck        bool
-	TaskCheckTimeout uint
-	APIServer        string
-	APIToken         string
-	Filename         string
-	VideoAmount      uint
-	OutputPath       string
-	KeepAssets       bool
+	TaskCheck         bool
+	TaskCheckTimeout  uint
+	TaskCheckPollTime uint
+	APIServer         string
+	APIToken          string
+	Filename          string
+	VideoAmount       uint
+	OutputPath        string
+	KeepAssets        bool
 
 	TestDuration       time.Duration
 	StartDelayDuration time.Duration
@@ -80,6 +81,7 @@ func main() {
 	fs.BoolVar(&cliFlags.TaskCheck, "task-check", false, "Check task processing")
 
 	fs.UintVar(&cliFlags.TaskCheckTimeout, "task-timeout", 500, "Task check timeout in seconds")
+	fs.UintVar(&cliFlags.TaskCheckPollTime, "task-poll-time", 5, "Task check poll time in seconds")
 
 	fs.BoolVar(&cliFlags.DirectUpload, "direct", false, "Launch direct upload test")
 	fs.BoolVar(&cliFlags.ResumableUpload, "resumable", false, "Launch tus upload test")
@@ -275,7 +277,7 @@ func (vt *vodLoadTester) doUpload(fileName, runnerInfo string, wg *sync.WaitGrou
 	} else {
 		uploadTest.UploadSuccess = 1
 		if vt.cliFlags.TaskCheck {
-			err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
+			err := vt.checkTaskProcessing(api.TaskOnlyId{ID: uploadTest.TaskID})
 			if err != nil {
 				uploadTest.TaskCheckSuccess = 0
 				uploadTest.ErrorMessage = err.Error()
@@ -369,7 +371,7 @@ func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.W
 	}
 
 	if vt.cliFlags.TaskCheck {
-		err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
+		err := vt.checkTaskProcessing(api.TaskOnlyId{ID: uploadTest.TaskID})
 		if err != nil {
 			uploadTest.TaskCheckSuccess = 0
 			uploadTest.ErrorMessage = err.Error()
@@ -422,7 +424,8 @@ func (vt *vodLoadTester) uploadAsset(fileName string, uploadUrl string, resumabl
 	return err
 }
 
-func (vt *vodLoadTester) checkTaskProcessing(taskPollDuration time.Duration, processingTask api.TaskOnlyId) error {
+func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId) error {
+	taskPollDuration := time.Duration(vt.cliFlags.TaskCheckPollTime) * time.Second
 	startTime := time.Now()
 	timeout := time.Duration(vt.cliFlags.TaskCheckTimeout) * time.Second
 	for {
