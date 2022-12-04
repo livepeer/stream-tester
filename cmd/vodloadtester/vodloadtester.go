@@ -90,7 +90,7 @@ func main() {
 	fs.DurationVar(&cliFlags.StartDelayDuration, "delay-between-groups", 10*time.Second, "Delay between starting group of uploads")
 
 	fs.UintVar(&cliFlags.Simultaneous, "sim", 1, "Number of simulteneous videos to upload")
-	fs.StringVar(&cliFlags.Filename, "file", "bbb_sunflower_1080p_30fps_normal_2min.mp4", "File to upload or url to import. Can be either a video or a .json array of objects with a url key")
+	fs.StringVar(&cliFlags.Filename, "file", "", "File to upload or url to import. Can be either a video or a .json array of objects with a url key")
 	fs.StringVar(&cliFlags.APIToken, "api-token", "", "Token of the Livepeer API to be used")
 	fs.StringVar(&cliFlags.APIServer, "api-server", "origin.livepeer.monster", "Server of the Livepeer API to be used")
 	fs.StringVar(&cliFlags.OutputPath, "output-path", "/tmp/results.ndjson", "Path to output result .ndjson file")
@@ -145,17 +145,19 @@ func main() {
 
 	if cliFlags.Import {
 		if cliFlags.DirectUpload || cliFlags.ResumableUpload {
-			glog.Infof("Cannot use -import with either -direct or -resumable, doing only the import task")
+			glog.Fatalf("Cannot use -import with either -direct or -resumable")
+			return
 		}
 		fileName = cliFlags.Filename
 
 		if fileName == "" {
 			glog.Fatalf("No file name provided")
+			return
 		}
 
 		if strings.HasSuffix(fileName, ".json") {
 			glog.Infof("Importing from json file %s. Ignoring any -video-amount parameter provided.", fileName)
-			vt.importFromJSON(fileName, runnerInfo)
+			vt.importFromJSONTest(fileName, runnerInfo)
 		} else {
 			vt.importFromUrlTest(fileName, runnerInfo)
 		}
@@ -314,7 +316,7 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 
 }
 
-func (vt *vodLoadTester) importFromJSON(jsonFile string, runnerInfo string) {
+func (vt *vodLoadTester) importFromJSONTest(jsonFile string, runnerInfo string) {
 	data, err := ioutil.ReadFile(jsonFile)
 
 	if err != nil {
@@ -341,49 +343,7 @@ func (vt *vodLoadTester) importFromJSON(jsonFile string, runnerInfo string) {
 			wg.Add(1)
 			index := i + j
 			go func(i int) {
-
-				uploadTest := uploadTest{
-					StartTime:  time.Now(),
-					RunnerInfo: runnerInfo,
-					Kind:       "import",
-					UrlSource:  jsonData[index].Url,
-				}
-
-				rndAssetName := fmt.Sprintf("load_test_import_%s", randName())
-				fmt.Printf("Importing %s from %s", rndAssetName, jsonData[index].Url)
-				asset, task, err := vt.lapi.ImportAsset(jsonData[index].Url, rndAssetName)
-				if !vt.cliFlags.KeepAssets {
-					defer vt.lapi.DeleteAsset(asset.ID)
-				}
-
-				defer wg.Done()
-
-				if err != nil {
-					glog.Errorf("Error importing asset: %v", err)
-					uploadTest.ImportSuccess = 0
-					uploadTest.ErrorMessage = err.Error()
-					vt.writeResultNdjson(uploadTest)
-					return
-				} else {
-					uploadTest.ImportSuccess = 1
-					uploadTest.AssetID = asset.ID
-					uploadTest.TaskID = task.ID
-				}
-
-				if vt.cliFlags.TaskCheck {
-					err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
-					if err != nil {
-						uploadTest.TaskCheckSuccess = 0
-						uploadTest.ErrorMessage = err.Error()
-					} else {
-						uploadTest.TaskCheckSuccess = 1
-					}
-				}
-
-				uploadTest.EndTime = time.Now()
-
-				vt.writeResultNdjson(uploadTest)
-
+				vt.importFromUrl(jsonData[index].Url, runnerInfo, wg)
 			}(i + j)
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
@@ -399,48 +359,56 @@ func (vt *vodLoadTester) importFromUrlTest(url string, runnerInfo string) {
 			fmt.Printf("Importing video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
 			wg.Add(1)
 			go func() {
-				uploadTest := uploadTest{
-					StartTime:  time.Now(),
-					RunnerInfo: runnerInfo,
-					Kind:       "import",
-					UrlSource:  url,
-				}
-
-				rndAssetName := fmt.Sprintf("load_test_import_%s", randName())
-				asset, task, err := vt.lapi.ImportAsset(url, rndAssetName)
-				if !vt.cliFlags.KeepAssets {
-					defer vt.lapi.DeleteAsset(asset.ID)
-				}
-
-				defer wg.Done()
-
-				if err != nil {
-					glog.Errorf("Error importing asset: %v", err)
-					uploadTest.ImportSuccess = 0
-					uploadTest.ErrorMessage = err.Error()
-					uploadTest.EndTime = time.Now()
-				} else {
-					uploadTest.AssetID = asset.ID
-					uploadTest.TaskID = task.ID
-					uploadTest.ImportSuccess = 1
-					if vt.cliFlags.TaskCheck {
-						err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
-						if err != nil {
-							uploadTest.TaskCheckSuccess = 0
-							uploadTest.ErrorMessage = err.Error()
-						} else {
-							uploadTest.TaskCheckSuccess = 1
-						}
-					}
-
-					uploadTest.EndTime = time.Now()
-				}
-				vt.writeResultNdjson(uploadTest)
+				vt.importFromUrl(url, runnerInfo, wg)
 			}()
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
 	}
 	wg.Wait()
+}
+
+func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.WaitGroup) {
+	uploadTest := uploadTest{
+		StartTime:  time.Now(),
+		RunnerInfo: runnerInfo,
+		Kind:       "import",
+		UrlSource:  url,
+	}
+
+	rndAssetName := fmt.Sprintf("load_test_import_%s", randName())
+	fmt.Printf("Importing %s from %s", rndAssetName, url)
+	asset, task, err := vt.lapi.ImportAsset(url, rndAssetName)
+	if !vt.cliFlags.KeepAssets {
+		defer vt.lapi.DeleteAsset(asset.ID)
+	}
+
+	defer wg.Done()
+
+	if err != nil {
+		glog.Errorf("Error importing asset: %v", err)
+		uploadTest.ImportSuccess = 0
+		uploadTest.ErrorMessage = err.Error()
+		vt.writeResultNdjson(uploadTest)
+		return
+	} else {
+		uploadTest.ImportSuccess = 1
+		uploadTest.AssetID = asset.ID
+		uploadTest.TaskID = task.ID
+	}
+
+	if vt.cliFlags.TaskCheck {
+		err := vt.checkTaskProcessing(5*time.Second, api.TaskOnlyId{ID: uploadTest.TaskID})
+		if err != nil {
+			uploadTest.TaskCheckSuccess = 0
+			uploadTest.ErrorMessage = err.Error()
+		} else {
+			uploadTest.TaskCheckSuccess = 1
+		}
+	}
+
+	uploadTest.EndTime = time.Now()
+
+	vt.writeResultNdjson(uploadTest)
 }
 
 func (vt *vodLoadTester) writeResultNdjson(uploadTest uploadTest) {
