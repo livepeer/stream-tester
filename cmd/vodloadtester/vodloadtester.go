@@ -118,7 +118,7 @@ func main() {
 
 	hostName, _ := os.Hostname()
 	runnerInfo := fmt.Sprintf("Hostname %s OS %s", hostName, runtime.GOOS)
-	glog.V(logs.DEBUG).Infof("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
+	glog.V(logs.SHORT).Infof("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
 	glog.V(logs.DEBUG).Infof(runnerInfo)
 
 	if cliFlags.Version {
@@ -126,7 +126,8 @@ func main() {
 	}
 
 	if cliFlags.Filename == "" {
-		glog.Fatal("missing --file parameter")
+		glog.V(logs.SHORT).Infof("missing --file parameter")
+		return
 	}
 
 	var err error
@@ -135,7 +136,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	if cliFlags.APIToken == "" {
-		glog.V(logs.DEBUG).Infof("No API token provided")
+		glog.V(logs.SHORT).Infof("No API token provided")
+		return
 	}
 
 	apiToken := cliFlags.APIToken
@@ -156,13 +158,13 @@ func main() {
 
 	if cliFlags.Import {
 		if cliFlags.DirectUpload || cliFlags.ResumableUpload {
-			glog.V(logs.DEBUG).Infof("Cannot use -import with either -direct or -resumable")
+			glog.V(logs.SHORT).Infof("Cannot use -import with either -direct or -resumable")
 			return
 		}
 		fileName = cliFlags.Filename
 
 		if strings.HasSuffix(fileName, ".json") {
-			glog.V(logs.DEBUG).Infof("Importing from json file %s. Ignoring any -video-amount parameter provided.", fileName)
+			glog.V(logs.SHORT).Infof("Importing from json file %s. Ignoring any -video-amount parameter provided.", fileName)
 			vt.importFromJSONTest(fileName, runnerInfo)
 		} else {
 			vt.importFromUrlTest(fileName, runnerInfo)
@@ -173,9 +175,9 @@ func main() {
 	if cliFlags.DirectUpload || cliFlags.ResumableUpload {
 		if fileName, err = utils.GetFile(cliFlags.Filename, strings.ReplaceAll(hostName, ".", "_")); err != nil {
 			if err == utils.ErrNotFound {
-				glog.V(logs.DEBUG).Infof("file %s not found\n", cliFlags.Filename)
+				glog.V(logs.SHORT).Infof("file %s not found\n", cliFlags.Filename)
 			} else {
-				glog.V(logs.DEBUG).Infof("error getting file %s: %v\n", cliFlags.Filename, err)
+				glog.V(logs.SHORT).Infof("error getting file %s: %v\n", cliFlags.Filename, err)
 			}
 		}
 
@@ -204,7 +206,7 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 
 	for i := 0; i < int(vt.cliFlags.VideoAmount); i += int(vt.cliFlags.Simultaneous) {
 		for j := 0; j < int(vt.cliFlags.Simultaneous); j++ {
-			glog.V(logs.DEBUG).Infof("Uploading video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
+			glog.V(logs.SHORT).Infof("Uploading video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
 			wg.Add(1)
 			go func() {
 				vt.uploadFile(fileName, runnerInfo, wg, false)
@@ -221,7 +223,7 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 
 	for i := 0; i < int(vt.cliFlags.VideoAmount); i += int(vt.cliFlags.Simultaneous) {
 		for j := 0; j < int(vt.cliFlags.Simultaneous); j++ {
-			glog.V(logs.DEBUG).Infof("Uploading resumable video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
+			glog.V(logs.SHORT).Infof("Uploading resumable video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
 			wg.Add(1)
 			go func() {
 				vt.uploadFile(fileName, runnerInfo, wg, true)
@@ -256,7 +258,7 @@ func (vt *vodLoadTester) uploadFile(fileName, runnerInfo string, wg *sync.WaitGr
 	defer wg.Done()
 
 	if err != nil {
-		glog.V(logs.DEBUG).Infof("Error requesting upload urls: %v", err)
+		glog.V(logs.SHORT).Infof("Error requesting upload urls: %v", err)
 		uploadTest.RequestUploadSuccess = 0
 		uploadTest.ErrorMessage = err.Error()
 		vt.writeResultNdjson(uploadTest)
@@ -276,7 +278,7 @@ func (vt *vodLoadTester) uploadFile(fileName, runnerInfo string, wg *sync.WaitGr
 	err = vt.doUpload(fileName, uploadUrl, resumable)
 
 	if err != nil {
-		glog.V(logs.DEBUG).Infof("Error on %s: %v", uploadKind, err)
+		glog.V(logs.SHORT).Infof("Error on %s: %v", uploadKind, err)
 		uploadTest.UploadSuccess = 0
 	} else {
 		uploadTest.UploadSuccess = 1
@@ -298,7 +300,7 @@ func (vt *vodLoadTester) importFromJSONTest(jsonFile string, runnerInfo string) 
 	data, err := ioutil.ReadFile(jsonFile)
 
 	if err != nil {
-		glog.V(logs.DEBUG).Infof("Error reading json file: %v", err)
+		glog.V(logs.SHORT).Infof("Error reading json file: %v", err)
 		return
 	}
 
@@ -306,7 +308,7 @@ func (vt *vodLoadTester) importFromJSONTest(jsonFile string, runnerInfo string) 
 	err = json.Unmarshal(data, &jsonData)
 
 	if err != nil {
-		glog.V(logs.DEBUG).Infof("Error parsing json file: %v", err)
+		glog.V(logs.SHORT).Infof("Error parsing json file: %v", err)
 		return
 	}
 
@@ -317,7 +319,7 @@ func (vt *vodLoadTester) importFromJSONTest(jsonFile string, runnerInfo string) 
 			if i+j >= len(jsonData) {
 				break
 			}
-			glog.V(logs.DEBUG).Infof("Import video %d/%d\n", i+j+1, len(jsonData))
+			glog.V(logs.SHORT).Infof("Importing video from JSON, %d/%d\n", i+j+1, len(jsonData))
 			wg.Add(1)
 			index := i + j
 			go func(i int) {
@@ -334,7 +336,7 @@ func (vt *vodLoadTester) importFromUrlTest(url string, runnerInfo string) {
 
 	for i := 0; i < int(vt.cliFlags.VideoAmount); i += int(vt.cliFlags.Simultaneous) {
 		for j := 0; j < int(vt.cliFlags.Simultaneous); j++ {
-			glog.V(logs.DEBUG).Infof("Importing video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
+			glog.V(logs.SHORT).Infof("Importing video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
 			wg.Add(1)
 			go func() {
 				vt.importFromUrl(url, runnerInfo, wg)
@@ -363,7 +365,7 @@ func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.W
 	defer wg.Done()
 
 	if err != nil {
-		glog.V(logs.DEBUG).Infof("Error importing asset: %v", err)
+		glog.V(logs.SHORT).Infof("Error importing asset: %v", err)
 		uploadTest.ImportSuccess = 0
 		uploadTest.ErrorMessage = err.Error()
 		vt.writeResultNdjson(uploadTest)
@@ -393,15 +395,15 @@ func (vt *vodLoadTester) writeResultNdjson(uploadTest uploadTest) {
 	uploadTest.EndTime = time.Now()
 	jsonString, err := json.Marshal(uploadTest)
 	if err != nil {
-		glog.V(logs.DEBUG).Infof("Error converting runTests to json: %v", err)
+		glog.V(logs.SHORT).Infof("Error converting runTests to json: %v", err)
 	}
 	f, err := os.OpenFile(vt.cliFlags.OutputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		glog.V(logs.DEBUG).Infof("Error opening %s: %v", vt.cliFlags.OutputPath, err)
+		glog.V(logs.SHORT).Infof("Error opening %s: %v", vt.cliFlags.OutputPath, err)
 	}
 	defer f.Close()
 	if _, err := f.WriteString(string(jsonString) + "\n"); err != nil {
-		glog.V(logs.DEBUG).Infof("Error writing to %s: %v", vt.cliFlags.OutputPath, err)
+		glog.V(logs.SHORT).Infof("Error writing to %s: %v", vt.cliFlags.OutputPath, err)
 	}
 }
 
@@ -410,7 +412,7 @@ func (vt *vodLoadTester) doUpload(fileName string, uploadUrl string, resumable b
 	file, err := os.Open(fileName)
 
 	if err != nil {
-		glog.V(logs.DEBUG).Infof("error opening file %s: %v\n", fileName, err)
+		glog.V(logs.SHORT).Infof("error opening file %s: %v\n", fileName, err)
 		return err
 	}
 
@@ -421,7 +423,7 @@ func (vt *vodLoadTester) doUpload(fileName string, uploadUrl string, resumable b
 	}
 
 	if err != nil {
-		glog.V(logs.DEBUG).Infof("error uploading asset: %v\n", err)
+		glog.V(logs.SHORT).Infof("error uploading asset: %v\n", err)
 		return err
 	}
 
