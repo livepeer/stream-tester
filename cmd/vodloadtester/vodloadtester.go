@@ -405,6 +405,7 @@ func (vt *vodLoadTester) writeResultNdjson(uploadTest uploadTest) {
 	if _, err := f.WriteString(string(jsonString) + "\n"); err != nil {
 		glog.V(logs.SHORT).Infof("Error writing to %s: %v", vt.cliFlags.OutputPath, err)
 	}
+	glog.V(logs.SHORT).Infof("test results updated with new entry in %s", vt.cliFlags.OutputPath)
 }
 
 func (vt *vodLoadTester) doUpload(fileName string, uploadUrl string, resumable bool) error {
@@ -452,6 +453,7 @@ func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId) erro
 			glog.Errorf("Error retrieving task id=%s err=%v", processingTask.ID, err)
 			if strings.Contains(err.Error(), "connection reset by peer") || strings.Contains(err.Error(), "520") {
 				// Retry
+				glog.V(logs.SHORT).Infof("Livepeer Studio API unreachable, retrying getting task information.... ")
 				continue
 			}
 			return fmt.Errorf("error retrieving task id=%s: %w", processingTask.ID, err)
