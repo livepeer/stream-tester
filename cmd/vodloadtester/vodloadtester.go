@@ -39,6 +39,7 @@ type cliArguments struct {
 	VideoAmount       uint
 	OutputPath        string
 	KeepAssets        bool
+	ProbeData         bool
 
 	TestDuration       time.Duration
 	StartDelayDuration time.Duration
@@ -52,18 +53,39 @@ type vodLoadTester struct {
 }
 
 type uploadTest struct {
-	StartTime            time.Time `json:"startTime"`
-	EndTime              time.Time `json:"endTime"`
-	RunnerInfo           string    `json:"runnerInfo,omitempty"`
-	Kind                 string    `json:"kind,omitempty"`
-	AssetID              string    `json:"assetId,omitempty"`
-	TaskID               string    `json:"taskId,omitempty"`
-	RequestUploadSuccess uint      `json:"requestUploadSuccess,omitempty"`
-	UploadSuccess        uint      `json:"uploadSuccess,omitempty"`
-	ImportSuccess        uint      `json:"importSuccess,omitempty"`
-	TaskCheckSuccess     uint      `json:"taskCheckSuccess,omitempty"`
-	ErrorMessage         string    `json:"errorMessage,omitempty"`
-	UrlSource            string    `json:"urlSource,omitempty"`
+	StartTime            time.Time   `json:"startTime"`
+	EndTime              time.Time   `json:"endTime"`
+	RunnerInfo           string      `json:"runnerInfo,omitempty"`
+	Kind                 string      `json:"kind,omitempty"`
+	AssetID              string      `json:"assetId,omitempty"`
+	TaskID               string      `json:"taskId,omitempty"`
+	RequestUploadSuccess uint        `json:"requestUploadSuccess,omitempty"`
+	UploadSuccess        uint        `json:"uploadSuccess,omitempty"`
+	ImportSuccess        uint        `json:"importSuccess,omitempty"`
+	TaskCheckSuccess     uint        `json:"taskCheckSuccess,omitempty"`
+	ErrorMessage         string      `json:"errorMessage,omitempty"`
+	UrlSource            string      `json:"urlSource,omitempty"`
+	ProbeData            []ProbeData `json:"data,omitempty"`
+}
+
+// This is specifically for JSON imported files with these fields into the json objects
+// Probably temporary for the new pipeline VOD test, may be removed later or may be done in a different way (like ffprobe standard output)
+type ProbeData struct {
+	AssetName       string `json:"asset_name,omitempty"`
+	Size            string `json:"size,omitempty"`
+	ContainerFormat string `json:"container_format,omitempty"`
+	VideoTracks     string `json:"video_tracks,omitempty"`
+	AudioTracks     string `json:"audio_tracks,omitempty"`
+	SubtitleTracks  string `json:"subtitle_tracks,omitempty"`
+	OtherTracks     string `json:"other_tracks,omitempty"`
+	VideoCodec      string `json:"video_codec,omitempty"`
+	AudioCodec      string `json:"audio_codec,omitempty"`
+	PixelFormat     string `json:"pixel_format,omitempty"`
+	Duration        string `json:"duration,omitempty"`
+	Width           string `json:"width,omitempty"`
+	Height          string `json:"height,omitempty"`
+	Fps             string `json:"fps,omitempty"`
+	URL             string `json:"url,omitempty"`
 }
 
 type jsonImport struct {
@@ -93,6 +115,7 @@ func main() {
 	// Input files and results
 	fs.StringVar(&cliFlags.Filename, "file", "", "File to upload or url to import. Can be either a video or a .json array of objects with a url key")
 	fs.StringVar(&cliFlags.OutputPath, "output-path", "/tmp/results.ndjson", "Path to output result .ndjson file")
+	fs.BoolVar(&cliFlags.ProbeData, "probe-data", false, "Write object data in results when importing a JSON file")
 
 	// Test parameters
 	fs.UintVar(&cliFlags.VideoAmount, "video-amt", 1, "How many video to upload or import")
@@ -305,7 +328,15 @@ func (vt *vodLoadTester) importFromJSONTest(jsonFile string, runnerInfo string) 
 	}
 
 	var jsonData []jsonImport
+	var probeData []ProbeData
 	err = json.Unmarshal(data, &jsonData)
+
+	if err != nil {
+		glog.V(logs.SHORT).Infof("Error parsing json file: %v", err)
+		return
+	}
+
+	err = json.Unmarshal(data, &probeData)
 
 	if err != nil {
 		glog.V(logs.SHORT).Infof("Error parsing json file: %v", err)
@@ -323,7 +354,13 @@ func (vt *vodLoadTester) importFromJSONTest(jsonFile string, runnerInfo string) 
 			wg.Add(1)
 			index := i + j
 			go func(i int) {
-				vt.importFromUrl(jsonData[index].Url, runnerInfo, wg)
+				var probe *ProbeData
+
+				if index < len(probeData) {
+					probe = &probeData[index]
+				}
+
+				vt.importFromUrl(jsonData[index].Url, runnerInfo, wg, *probe)
 			}(i + j)
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
@@ -347,12 +384,16 @@ func (vt *vodLoadTester) importFromUrlTest(url string, runnerInfo string) {
 	wg.Wait()
 }
 
-func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.WaitGroup) {
+func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.WaitGroup, probeData ...ProbeData) {
 	uploadTest := uploadTest{
 		StartTime:  time.Now(),
 		RunnerInfo: runnerInfo,
 		Kind:       "import",
 		UrlSource:  url,
+	}
+
+	if probeData != nil && vt.cliFlags.ProbeData {
+		uploadTest.ProbeData = probeData
 	}
 
 	rndAssetName := fmt.Sprintf("load_test_import_%s", randName())
@@ -441,13 +482,6 @@ func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId) erro
 
 		task, err := vt.lapi.GetTask(processingTask.ID)
 		progress := ""
-		if task.Status.Phase == "running" {
-			percentage := task.Status.Progress * 100
-			stringPercentage := strconv.FormatFloat(percentage, 'f', 2, 64)
-			progress = fmt.Sprintf("progress=%s%%", stringPercentage)
-		}
-
-		glog.V(logs.DEBUG).Infof("Waiting %s for task id=%s to be processed, elapsed=%s %s", taskPollDuration, processingTask.ID, time.Since(startTime), progress)
 
 		if err != nil {
 			glog.Errorf("Error retrieving task id=%s err=%v", processingTask.ID, err)
@@ -471,6 +505,14 @@ func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId) erro
 			glog.Errorf("Internal timeout processing task, taskId=%s", task.ID)
 			return fmt.Errorf("timeout processing task, taskId=%s", task.ID)
 		}
+
+		if task.Status.Phase == "running" {
+			percentage := task.Status.Progress * 100
+			stringPercentage := strconv.FormatFloat(percentage, 'f', 2, 64)
+			progress = fmt.Sprintf("progress=%s%%", stringPercentage)
+		}
+
+		glog.V(logs.DEBUG).Infof("Waiting %s for task id=%s to be processed, elapsed=%s %s", taskPollDuration, processingTask.ID, time.Since(startTime), progress)
 
 	}
 }
