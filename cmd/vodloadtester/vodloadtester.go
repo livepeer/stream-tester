@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -36,6 +37,7 @@ type cliArguments struct {
 	APIServer         string
 	APIToken          string
 	Filename          string
+	Folder            string
 	VideoAmount       uint
 	OutputPath        string
 	KeepAssets        bool
@@ -53,6 +55,7 @@ type vodLoadTester struct {
 }
 
 type uploadTest struct {
+	ApiServer            string      `json:"apiServer"`
 	StartTime            time.Time   `json:"startTime"`
 	EndTime              time.Time   `json:"endTime"`
 	RunnerInfo           string      `json:"runnerInfo,omitempty"`
@@ -64,7 +67,7 @@ type uploadTest struct {
 	ImportSuccess        uint        `json:"importSuccess,omitempty"`
 	TaskCheckSuccess     uint        `json:"taskCheckSuccess,omitempty"`
 	ErrorMessage         string      `json:"errorMessage,omitempty"`
-	UrlSource            string      `json:"urlSource,omitempty"`
+	Source               string      `json:"source,omitempty"`
 	ProbeData            []ProbeData `json:"data,omitempty"`
 }
 
@@ -92,6 +95,10 @@ type jsonImport struct {
 	Url string `json:"url"`
 }
 
+var videoFormats = []string{
+	"mp4",
+}
+
 func main() {
 	var cliFlags = &cliArguments{}
 
@@ -114,6 +121,7 @@ func main() {
 
 	// Input files and results
 	fs.StringVar(&cliFlags.Filename, "file", "", "File to upload or url to import. Can be either a video or a .json array of objects with a url key")
+	fs.StringVar(&cliFlags.Folder, "folder", "", "Folder with files to upload. The tester will search in the folder for files with the following extensions: "+strings.Join(videoFormats, ", "))
 	fs.StringVar(&cliFlags.OutputPath, "output-path", "/tmp/results.ndjson", "Path to output result .ndjson file")
 	fs.BoolVar(&cliFlags.ProbeData, "probe-data", false, "Write object data in results when importing a JSON file")
 
@@ -148,8 +156,8 @@ func main() {
 		return
 	}
 
-	if cliFlags.Filename == "" {
-		glog.V(logs.SHORT).Infof("missing --file parameter")
+	if cliFlags.Filename == "" && cliFlags.Folder == "" {
+		glog.V(logs.SHORT).Infof("missing --file or --folder parameter")
 		return
 	}
 
@@ -179,15 +187,22 @@ func main() {
 		cliFlags: *cliFlags,
 	}
 
+	// Import from URL or JSON load test
 	if cliFlags.Import {
 		if cliFlags.DirectUpload || cliFlags.ResumableUpload {
 			glog.V(logs.SHORT).Infof("Cannot use -import with either -direct or -resumable")
 			return
 		}
+
+		if cliFlags.Filename == "" {
+			glog.V(logs.SHORT).Infof("Cannot use -import without specifying a -file $URL or -file $JSON_FILE")
+			return
+		}
+
 		fileName = cliFlags.Filename
 
 		if strings.HasSuffix(fileName, ".json") {
-			glog.V(logs.SHORT).Infof("Importing from json file %s. Ignoring any -video-amount parameter provided.", fileName)
+			glog.V(logs.SHORT).Infof("Importing from json file %s. Ignoring any -video-amt parameter provided.", fileName)
 			vt.importFromJSONTest(fileName, runnerInfo)
 		} else {
 			vt.importFromUrlTest(fileName, runnerInfo)
@@ -195,22 +210,38 @@ func main() {
 		return
 	}
 
+	// Upload tests
 	if cliFlags.DirectUpload || cliFlags.ResumableUpload {
-		if fileName, err = utils.GetFile(cliFlags.Filename, strings.ReplaceAll(hostName, ".", "_")); err != nil {
-			if err == utils.ErrNotFound {
-				glog.V(logs.SHORT).Infof("file %s not found\n", cliFlags.Filename)
-			} else {
-				glog.V(logs.SHORT).Infof("error getting file %s: %v\n", cliFlags.Filename, err)
-			}
-		}
 
-		if cliFlags.DirectUpload {
-			glog.V(logs.DEBUG).Infof("Launching direct upload load test for %q", fileName)
-			vt.directUploadLoadTest(fileName, runnerInfo)
-		}
-		if cliFlags.ResumableUpload {
-			glog.V(logs.DEBUG).Infof("Launching resumable upload load test for %q", fileName)
-			vt.resumableUploadLoadTest(fileName, runnerInfo)
+		// From folder
+		if cliFlags.Folder != "" {
+			glog.V(logs.SHORT).Infof("Uploading from folder %s. Ignoring any -video-amt and -file parameter provided.", cliFlags.Folder)
+			if cliFlags.DirectUpload {
+				glog.V(logs.DEBUG).Infof("Launching direct upload test for folder %s", cliFlags.Folder)
+				vt.directUploadFromFolderLoadTest(cliFlags.Folder, runnerInfo)
+			}
+			if cliFlags.ResumableUpload {
+				glog.V(logs.DEBUG).Infof("Launching resumable upload test for folder %s", cliFlags.Folder)
+				vt.resumableUploadFromFolderLoadTest(cliFlags.Folder, runnerInfo)
+			}
+		} else {
+			// From file
+			if fileName, err = utils.GetFile(cliFlags.Filename, strings.ReplaceAll(hostName, ".", "_")); err != nil {
+				if err == utils.ErrNotFound {
+					glog.V(logs.SHORT).Infof("file %s not found\n", cliFlags.Filename)
+				} else {
+					glog.V(logs.SHORT).Infof("error getting file %s: %v\n", cliFlags.Filename, err)
+				}
+			}
+
+			if cliFlags.DirectUpload {
+				glog.V(logs.DEBUG).Infof("Launching direct upload load test for %q", fileName)
+				vt.directUploadLoadTest(fileName, runnerInfo)
+			}
+			if cliFlags.ResumableUpload {
+				glog.V(logs.DEBUG).Infof("Launching resumable upload load test for %q", fileName)
+				vt.resumableUploadLoadTest(fileName, runnerInfo)
+			}
 		}
 	}
 
@@ -241,6 +272,33 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 	wg.Wait()
 }
 
+func (vt *vodLoadTester) directUploadFromFolderLoadTest(folderName string, runnerInfo string) {
+	wg := &sync.WaitGroup{}
+
+	filePaths := vt.getVideoFilesFromFolder(folderName)
+
+	if len(filePaths) == 0 {
+		glog.V(logs.SHORT).Infof("No files with extension %v found in folder %s\n", videoFormats, folderName)
+		return
+	}
+
+	for i := 0; i < len(filePaths); i += int(vt.cliFlags.Simultaneous) {
+		for j := 0; j < int(vt.cliFlags.Simultaneous); j++ {
+			if i+j >= len(filePaths) {
+				break
+			}
+			glog.V(logs.DEBUG).Infof("Uploading video from folder, %d/%d\n", i+j+1, len(filePaths))
+			wg.Add(1)
+			index := i + j
+			go func() {
+				vt.uploadFile(filePaths[index], runnerInfo, wg, false)
+			}()
+		}
+		time.Sleep(vt.cliFlags.StartDelayDuration)
+	}
+	wg.Wait()
+}
+
 func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 	wg := &sync.WaitGroup{}
 
@@ -259,6 +317,59 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 
 }
 
+func (vt *vodLoadTester) resumableUploadFromFolderLoadTest(folderName string, runnerInfo string) {
+	wg := &sync.WaitGroup{}
+
+	filePaths := vt.getVideoFilesFromFolder(folderName)
+
+	if len(filePaths) == 0 {
+		glog.V(logs.SHORT).Infof("No files with extension %v found in folder %s\n", videoFormats, folderName)
+		return
+	}
+
+	for i := 0; i < len(filePaths); i += int(vt.cliFlags.Simultaneous) {
+		for j := 0; j < int(vt.cliFlags.Simultaneous); j++ {
+			if i+j >= len(filePaths) {
+				break
+			}
+			glog.V(logs.DEBUG).Infof("Uploading video from folder, %d/%d\n", i+j+1, len(filePaths))
+			wg.Add(1)
+			index := i + j
+			go func() {
+				vt.uploadFile(filePaths[index], runnerInfo, wg, true)
+			}()
+		}
+		time.Sleep(vt.cliFlags.StartDelayDuration)
+	}
+	wg.Wait()
+}
+
+func (vt *vodLoadTester) getVideoFilesFromFolder(folderName string) []string {
+	files, err := ioutil.ReadDir(folderName)
+	var filePaths []string
+
+	if err != nil {
+		glog.V(logs.SHORT).Infof("Error reading folder %s: %v\n", folderName, err)
+		return filePaths
+	}
+
+	glog.V(logs.SHORT).Infof("Uploading %d videos from folder %s\n", len(files), folderName)
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		for _, format := range videoFormats {
+			if strings.HasSuffix(file.Name(), format) {
+				glog.V(logs.DEBUG).Infof("Uploading video %s\n", file.Name())
+				filePaths = append(filePaths, filepath.Join(folderName, file.Name()))
+			}
+		}
+	}
+
+	return filePaths
+}
+
 func (vt *vodLoadTester) uploadFile(fileName, runnerInfo string, wg *sync.WaitGroup, resumable bool) {
 
 	uploadKind := "directUpload"
@@ -268,15 +379,14 @@ func (vt *vodLoadTester) uploadFile(fileName, runnerInfo string, wg *sync.WaitGr
 	}
 
 	uploadTest := uploadTest{
+		ApiServer:  vt.cliFlags.APIServer,
 		StartTime:  time.Now(),
 		RunnerInfo: runnerInfo,
 		Kind:       uploadKind,
+		Source:     fileName,
 	}
 	rndAssetName := fmt.Sprintf("load_test_%s_%s", uploadKind, randName())
 	requestedUpload, err := vt.requestUploadUrls(rndAssetName)
-	if !vt.cliFlags.KeepAssets {
-		defer vt.lapi.DeleteAsset(requestedUpload.Asset.ID)
-	}
 
 	defer wg.Done()
 
@@ -290,6 +400,10 @@ func (vt *vodLoadTester) uploadFile(fileName, runnerInfo string, wg *sync.WaitGr
 		uploadTest.RequestUploadSuccess = 1
 		uploadTest.AssetID = requestedUpload.Asset.ID
 		uploadTest.TaskID = requestedUpload.Task.ID
+	}
+
+	if !vt.cliFlags.KeepAssets {
+		defer vt.lapi.DeleteAsset(requestedUpload.Asset.ID)
 	}
 
 	uploadUrl := requestedUpload.Url
@@ -386,10 +500,11 @@ func (vt *vodLoadTester) importFromUrlTest(url string, runnerInfo string) {
 
 func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.WaitGroup, probeData ...ProbeData) {
 	uploadTest := uploadTest{
+		ApiServer:  vt.cliFlags.APIServer,
 		StartTime:  time.Now(),
 		RunnerInfo: runnerInfo,
 		Kind:       "import",
-		UrlSource:  url,
+		Source:     url,
 	}
 
 	if probeData != nil && vt.cliFlags.ProbeData {
@@ -399,9 +514,6 @@ func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.W
 	rndAssetName := fmt.Sprintf("load_test_import_%s", randName())
 	glog.V(logs.DEBUG).Infof("Importing %s from %s", rndAssetName, url)
 	asset, task, err := vt.lapi.ImportAsset(url, rndAssetName)
-	if !vt.cliFlags.KeepAssets {
-		defer vt.lapi.DeleteAsset(asset.ID)
-	}
 
 	defer wg.Done()
 
@@ -415,6 +527,10 @@ func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.W
 		uploadTest.ImportSuccess = 1
 		uploadTest.AssetID = asset.ID
 		uploadTest.TaskID = task.ID
+	}
+
+	if !vt.cliFlags.KeepAssets {
+		defer vt.lapi.DeleteAsset(asset.ID)
 	}
 
 	if vt.cliFlags.TaskCheck {
@@ -485,7 +601,7 @@ func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId) erro
 
 		if err != nil {
 			glog.Errorf("Error retrieving task id=%s err=%v", processingTask.ID, err)
-			if strings.Contains(err.Error(), "connection reset by peer") || strings.Contains(err.Error(), "520") {
+			if strings.Contains(err.Error(), "connection reset by peer") || strings.Contains(err.Error(), "520") || strings.Contains(err.Error(), "no such host") {
 				// Retry
 				glog.V(logs.SHORT).Infof("Livepeer Studio API unreachable, retrying getting task information.... ")
 				continue
