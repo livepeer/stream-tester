@@ -78,24 +78,31 @@ func main() {
 
 	fs.IntVar(&cliFlags.Verbosity, "v", 3, "Log verbosity.  {4|5|6}")
 	fs.BoolVar(&cliFlags.Version, "version", false, "Print out the version")
-	fs.BoolVar(&cliFlags.TaskCheck, "task-check", false, "Check task processing")
 
-	fs.UintVar(&cliFlags.TaskCheckTimeout, "task-timeout", 500, "Task check timeout in seconds")
-	fs.UintVar(&cliFlags.TaskCheckPollTime, "task-poll-time", 5, "Task check poll time in seconds")
+	// Credentials
+	fs.StringVar(&cliFlags.APIToken, "api-token", "", "Token of the Livepeer API to be used")
+	fs.StringVar(&cliFlags.APIServer, "api-server", "origin.livepeer.monster", "Server of the Livepeer API to be used")
 
+	// Tests
 	fs.BoolVar(&cliFlags.DirectUpload, "direct", false, "Launch direct upload test")
 	fs.BoolVar(&cliFlags.ResumableUpload, "resumable", false, "Launch tus upload test")
 	fs.BoolVar(&cliFlags.Import, "import", false, "Launch import from url test")
-	fs.BoolVar(&cliFlags.KeepAssets, "keep-assets", false, "Keep assets after test")
 
-	fs.UintVar(&cliFlags.VideoAmount, "video-amt", 1, "How many video to upload")
+	// Input files and results
+	fs.StringVar(&cliFlags.Filename, "file", "", "File to upload or url to import. Can be either a video or a .json array of objects with a url key")
+	fs.StringVar(&cliFlags.OutputPath, "output-path", "/tmp/results.ndjson", "Path to output result .ndjson file")
+
+	// Test parameters
+	fs.UintVar(&cliFlags.VideoAmount, "video-amt", 1, "How many video to upload or import")
+	fs.UintVar(&cliFlags.Simultaneous, "sim", 1, "Number of simulteneous videos to upload or import (batch size)")
 	fs.DurationVar(&cliFlags.StartDelayDuration, "delay-between-groups", 10*time.Second, "Delay between starting group of uploads")
 
-	fs.UintVar(&cliFlags.Simultaneous, "sim", 1, "Number of simulteneous videos to upload")
-	fs.StringVar(&cliFlags.Filename, "file", "", "File to upload or url to import. Can be either a video or a .json array of objects with a url key")
-	fs.StringVar(&cliFlags.APIToken, "api-token", "", "Token of the Livepeer API to be used")
-	fs.StringVar(&cliFlags.APIServer, "api-server", "origin.livepeer.monster", "Server of the Livepeer API to be used")
-	fs.StringVar(&cliFlags.OutputPath, "output-path", "/tmp/results.ndjson", "Path to output result .ndjson file")
+	// Task check parameters
+	fs.BoolVar(&cliFlags.TaskCheck, "task-check", false, "Check task processing")
+	fs.UintVar(&cliFlags.TaskCheckTimeout, "task-timeout", 500, "Task check timeout in seconds")
+	fs.UintVar(&cliFlags.TaskCheckPollTime, "task-poll-time", 5, "Task check poll time in seconds")
+
+	fs.BoolVar(&cliFlags.KeepAssets, "keep-assets", false, "Keep assets after test")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -152,11 +159,6 @@ func main() {
 		}
 		fileName = cliFlags.Filename
 
-		if fileName == "" {
-			glog.Fatalf("No file name provided")
-			return
-		}
-
 		if strings.HasSuffix(fileName, ".json") {
 			glog.Infof("Importing from json file %s. Ignoring any -video-amount parameter provided.", fileName)
 			vt.importFromJSONTest(fileName, runnerInfo)
@@ -203,7 +205,7 @@ func (vt *vodLoadTester) directUploadLoadTest(fileName string, runnerInfo string
 			fmt.Printf("Uploading video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
 			wg.Add(1)
 			go func() {
-				vt.doUpload(fileName, runnerInfo, wg, false)
+				vt.uploadFile(fileName, runnerInfo, wg, false)
 			}()
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
@@ -220,7 +222,7 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 			fmt.Printf("Uploading resumable video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
 			wg.Add(1)
 			go func() {
-				vt.doUpload(fileName, runnerInfo, wg, true)
+				vt.uploadFile(fileName, runnerInfo, wg, true)
 			}()
 		}
 		time.Sleep(vt.cliFlags.StartDelayDuration)
@@ -230,7 +232,7 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 
 }
 
-func (vt *vodLoadTester) doUpload(fileName, runnerInfo string, wg *sync.WaitGroup, resumable bool) {
+func (vt *vodLoadTester) uploadFile(fileName, runnerInfo string, wg *sync.WaitGroup, resumable bool) {
 
 	uploadKind := "directUpload"
 
@@ -269,7 +271,7 @@ func (vt *vodLoadTester) doUpload(fileName, runnerInfo string, wg *sync.WaitGrou
 		uploadUrl = requestedUpload.TusEndpoint
 	}
 
-	err = vt.uploadAsset(fileName, uploadUrl, resumable)
+	err = vt.doUpload(fileName, uploadUrl, resumable)
 
 	if err != nil {
 		glog.Errorf("Error on %s: %v", uploadKind, err)
@@ -401,7 +403,7 @@ func (vt *vodLoadTester) writeResultNdjson(uploadTest uploadTest) {
 	}
 }
 
-func (vt *vodLoadTester) uploadAsset(fileName string, uploadUrl string, resumable bool) error {
+func (vt *vodLoadTester) doUpload(fileName string, uploadUrl string, resumable bool) error {
 
 	file, err := os.Open(fileName)
 
