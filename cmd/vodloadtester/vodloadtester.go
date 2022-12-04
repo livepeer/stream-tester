@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -431,10 +432,19 @@ func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId) erro
 	startTime := time.Now()
 	timeout := time.Duration(vt.cliFlags.TaskCheckTimeout) * time.Second
 	for {
-		glog.Infof("Waiting %s for task id=%s to be processed, elapsed=%s", taskPollDuration, processingTask.ID, time.Since(startTime))
+
 		time.Sleep(taskPollDuration)
 
 		task, err := vt.lapi.GetTask(processingTask.ID)
+		progress := ""
+		if task.Status.Phase == "running" {
+			percentage := task.Status.Progress * 100
+			stringPercentage := strconv.FormatFloat(percentage, 'f', 2, 64)
+			progress = fmt.Sprintf("progress=%s%%", stringPercentage)
+		}
+
+		glog.Infof("Waiting %s for task id=%s to be processed, elapsed=%s %s", taskPollDuration, processingTask.ID, time.Since(startTime), progress)
+
 		if err != nil {
 			glog.Errorf("Error retrieving task id=%s err=%v", processingTask.ID, err)
 			if strings.Contains(err.Error(), "connection reset by peer") || strings.Contains(err.Error(), "520") {
@@ -456,6 +466,7 @@ func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId) erro
 			glog.Errorf("Internal timeout processing task, taskId=%s", task.ID)
 			return fmt.Errorf("timeout processing task, taskId=%s", task.ID)
 		}
+
 	}
 }
 
