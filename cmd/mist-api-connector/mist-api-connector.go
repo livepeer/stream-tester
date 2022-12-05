@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/mistconnector"
-	"github.com/livepeer/stream-tester/apis/livepeer"
 	mistapi "github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/app/mistapiconnector"
 	"github.com/livepeer/stream-tester/internal/metrics"
@@ -44,7 +44,7 @@ func main() {
 	noMistScrapeMetrics := fs.Bool("no-mist-scrape-metrics", false, "Scrape statistics from MistServer and publish to RabbitMQ")
 	sendAudio := fs.String("send-audio", "record", "when should we send audio?  {always|never|record}")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used by the Mist server")
-	apiServer := fs.String("api-server", livepeer.ACServer, "Livepeer API server to use")
+	apiServer := fs.String("api-server", api.ProdServer, "Livepeer API server to use")
 	routePrefix := fs.String("route-prefix", "", "Prefix to be prepended to all created routes e.g. 'nyc-'")
 	playbackDomain := fs.String("playback-domain", "", "regex of domain to create routes for (ex: playback.livepeer.live)")
 	mistURL := fs.String("route-mist-url", "", "external URL of this Mist instance (used for routing) (ex: https://mist-server-0.livepeer.live)")
@@ -94,8 +94,10 @@ func main() {
 	if len(mcreds) != 2 {
 		glog.Fatal("Mist server's credentials should be in form 'login:password'")
 	}
-	lapi := livepeer.NewLivepeer(*apiToken, *apiServer, nil)
-	lapi.Init()
+	lapi, _ := api.NewAPIClientGeolocated(api.ClientOptions{
+		Server:      *apiServer,
+		AccessToken: *apiToken,
+	})
 
 	mapi = mistapi.NewMist(*mistHost, mcreds[0], mcreds[1], *apiToken, *mistPort)
 	ensureLoggedIn(mapi, *mistConnectTimeout)

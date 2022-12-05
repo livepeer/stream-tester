@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
-	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils"
@@ -48,7 +48,7 @@ type (
 	}
 
 	pushStatus struct {
-		target           *livepeer.MultistreamTarget
+		target           *api.MultistreamTarget
 		profile          string
 		pushStartEmitted bool
 		pushStopped      bool
@@ -57,7 +57,7 @@ type (
 
 	streamInfo struct {
 		id        string
-		stream    *livepeer.CreateStreamResp
+		stream    *api.Stream
 		startedAt time.Time
 
 		mu                 sync.Mutex
@@ -91,7 +91,7 @@ type (
 	MacOptions struct {
 		NodeID, MistHost string
 		MistAPI          *mist.API
-		LivepeerAPI      *livepeer.API
+		LivepeerAPI      *api.Client
 		BalancerHost     string
 		CheckBandwidth   bool
 		RoutePrefix, PlaybackDomain, MistURL,
@@ -108,7 +108,7 @@ type (
 		ctx                       context.Context
 		cancel                    context.CancelFunc
 		mapi                      *mist.API
-		lapi                      *livepeer.API
+		lapi                      *api.Client
 		balancerHost              string
 		srv                       *http.Server
 		srvShutCh                 chan error
@@ -187,7 +187,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 }
 
 // LivepeerProfiles2MistProfiles converts Livepeer's API profiles to Mist's ones
-func LivepeerProfiles2MistProfiles(lps []livepeer.Profile) []mist.Profile {
+func LivepeerProfiles2MistProfiles(lps []api.Profile) []mist.Profile {
 	var res []mist.Profile
 	for _, p := range lps {
 		mp := mist.Profile{
@@ -229,7 +229,7 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 		}
 		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			glog.Infof("Setting stream's protocol=%s manifestID=%s playbackID=%s active status to false", protocol, info.id, playbackID)
-			_, err := mc.lapi.SetActiveR(info.id, false, info.startedAt)
+			_, err := mc.lapi.SetActive(info.id, false, info.startedAt)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -424,7 +424,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		} else {
 			responseName = mc.wildcardPlaybackID(stream)
 		}
-		ok, err := mc.lapi.SetActiveR(stream.ID, true, info.startedAt)
+		ok, err := mc.lapi.SetActive(stream.ID, true, info.startedAt)
 		if err != nil {
 			glog.Error(err)
 		} else if !ok {
@@ -526,7 +526,7 @@ func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
 	}
 }
 
-func (mc *mac) emitStreamStateEvent(stream *livepeer.CreateStreamResp, state data.StreamState) {
+func (mc *mac) emitStreamStateEvent(stream *api.Stream, state data.StreamState) {
 	streamID := stream.ParentID
 	if streamID == "" {
 		streamID = stream.ID
@@ -535,7 +535,7 @@ func (mc *mac) emitStreamStateEvent(stream *livepeer.CreateStreamResp, state dat
 	mc.emitAmqpEvent(ownExchangeName, "stream.state."+streamID, stateEvt)
 }
 
-func (mc *mac) emitWebhookEvent(stream *livepeer.CreateStreamResp, pushInfo *pushStatus, eventKey string) {
+func (mc *mac) emitWebhookEvent(stream *api.Stream, pushInfo *pushStatus, eventKey string) {
 	streamID, sessionID := stream.ParentID, stream.ID
 	if streamID == "" {
 		streamID = sessionID
@@ -686,11 +686,11 @@ func (mc *mac) removeInfoLocked(playbackID string) {
 	}
 }
 
-func (mc *mac) wildcardPlaybackID(stream *livepeer.CreateStreamResp) string {
+func (mc *mac) wildcardPlaybackID(stream *api.Stream) string {
 	return mc.baseNameForStream(stream) + "+" + stream.PlaybackID
 }
 
-func (mc *mac) baseNameForStream(stream *livepeer.CreateStreamResp) string {
+func (mc *mac) baseNameForStream(stream *api.Stream) string {
 	baseName := mc.baseStreamName
 	if mc.shouldEnableAudio(stream) {
 		baseName += audioEnabledStreamSuffix
@@ -698,7 +698,7 @@ func (mc *mac) baseNameForStream(stream *livepeer.CreateStreamResp) string {
 	return baseName
 }
 
-func (mc *mac) shouldEnableAudio(stream *livepeer.CreateStreamResp) bool {
+func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 	audio := false
 	if mc.sendAudio == audioAlways {
 		audio = true
@@ -708,7 +708,7 @@ func (mc *mac) shouldEnableAudio(stream *livepeer.CreateStreamResp) bool {
 	return audio
 }
 
-func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStreamResp, skipTranscoding bool) error {
+func (mc *mac) createMistStream(streamName string, stream *api.Stream, skipTranscoding bool) error {
 	if len(stream.Presets) == 0 && len(stream.Profiles) == 0 {
 		stream.Presets = append(stream.Presets, "P144p30fps16x9")
 	}
@@ -822,7 +822,7 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 
 func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *streamInfo) {
 	for i := range info.stream.Multistream.Targets {
-		go func(targetRef livepeer.MultistreamTargetRef) {
+		go func(targetRef api.MultistreamTargetRef) {
 			glog.Infof("==> starting multistream %s", targetRef.ID)
 			target, pushURL, err := mc.getPushUrl(info.stream, &targetRef)
 			if err != nil {
@@ -873,8 +873,8 @@ func (mc *mac) startSignalHandler() {
 	}()
 }
 
-func (mc *mac) getPushUrl(stream *livepeer.CreateStreamResp, targetRef *livepeer.MultistreamTargetRef) (*livepeer.MultistreamTarget, string, error) {
-	target, err := mc.lapi.GetMultistreamTargetR(targetRef.ID)
+func (mc *mac) getPushUrl(stream *api.Stream, targetRef *api.MultistreamTargetRef) (*api.MultistreamTarget, string, error) {
+	target, err := mc.lapi.GetMultistreamTarget(targetRef.ID)
 	if err != nil {
 		return nil, "", fmt.Errorf("error fetching multistream target %s: %w", targetRef.ID, err)
 	}
@@ -884,7 +884,7 @@ func (mc *mac) getPushUrl(stream *livepeer.CreateStreamResp, targetRef *livepeer
 	if targetRef.Profile == "source" {
 		videoSelector = "maxbps"
 	} else {
-		var prof *livepeer.Profile
+		var prof *api.Profile
 		for _, p := range stream.Profiles {
 			if p.Name == targetRef.Profile {
 				prof = &p

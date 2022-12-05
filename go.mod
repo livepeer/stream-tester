@@ -32,7 +32,7 @@ require (
 	golang.org/x/net v0.0.0-20220607020251-c690dde0001d
 	golang.org/x/text v0.3.7
 	google.golang.org/api v0.46.0
-	google.golang.org/grpc v1.38.0
+	google.golang.org/grpc v1.38.0 // indirect
 )
 
 require (
