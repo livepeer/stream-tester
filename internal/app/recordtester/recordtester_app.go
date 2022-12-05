@@ -14,7 +14,6 @@ import (
 	api "github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format/mp4"
 	"github.com/livepeer/joy4/format/mp4/mp4io"
-	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/messenger"
 	"github.com/livepeer/stream-tester/model"
@@ -250,8 +249,8 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 251, err
 		// exit(251, fileName, *fileArg, err)
 	}
-	if sess.RecordingStatus != livepeer.RecordingStatusWaiting {
-		err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, livepeer.RecordingStatusWaiting)
+	if sess.RecordingStatus != api.RecordingStatusWaiting {
+		err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, api.RecordingStatusWaiting)
 		return 250, err
 		// exit(250, fileName, *fileArg, err)
 	}
@@ -281,9 +280,9 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	}
 
 	sess = sessions[0]
-	statusShould := livepeer.RecordingStatusReady
+	statusShould := api.RecordingStatusReady
 	if rt.useForceURL {
-		statusShould = livepeer.RecordingStatusWaiting
+		statusShould = api.RecordingStatusWaiting
 	}
 	if sess.RecordingStatus != statusShould {
 		err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
