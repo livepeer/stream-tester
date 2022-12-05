@@ -230,7 +230,8 @@ func (vt *vodTester) checkTaskProcessing(taskPollDuration time.Duration, process
 			return err
 		}
 
-		task, err := vt.lapi.GetTask(processingTask.ID)
+		// we already sleep before the first check, so no need for strong consistency
+		task, err := vt.lapi.GetTask(processingTask.ID, false)
 		if err != nil {
 			glog.Errorf("Error retrieving task id=%s err=%v", processingTask.ID, err)
 			return fmt.Errorf("error retrieving task id=%s: %w", processingTask.ID, err)

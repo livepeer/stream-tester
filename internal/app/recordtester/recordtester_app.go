@@ -230,7 +230,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	glog.Infof("Waiting 10 seconds")
 	time.Sleep(10 * time.Second)
 	// now get sessions
-	sessions, err := rt.lapi.GetSessionsNewR(stream.ID, false)
+	sessions, err := rt.lapi.GetSessionsNew(stream.ID, false)
 	if err != nil {
 		glog.Errorf("Error getting sessions for stream id=%s err=%v", stream.ID, err)
 		// exit(252, fileName, *fileArg, err)
@@ -269,7 +269,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 0, err
 	}
 
-	sessions, err = rt.lapi.GetSessionsNewR(stream.ID, rt.useForceURL)
+	sessions, err = rt.lapi.GetSessionsNew(stream.ID, rt.useForceURL)
 	if err != nil {
 		err := fmt.Errorf("error getting sessions for stream id=%s err=%v", stream.ID, err)
 		return 252, err
