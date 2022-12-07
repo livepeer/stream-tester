@@ -58,9 +58,7 @@ func NewContinuousVodTester(gctx context.Context, opts ContinuousVodTesterOption
 
 func (cvt *continuousVodTester) Start(fileName string, vodImportUrl string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error {
 	messenger.SendMessage(fmt.Sprintf("Starting continuous vod test of %s", cvt.host))
-	ticker := time.NewTicker(testDuration)
-	defer ticker.Stop()
-	for range ticker.C {
+	for {
 		msg := fmt.Sprintf(":arrow_right: Starting %s vod test to %s", testDuration, cvt.host)
 		messenger.SendMessage(msg)
 

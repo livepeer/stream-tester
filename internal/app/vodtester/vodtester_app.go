@@ -23,13 +23,15 @@ type (
 	}
 
 	VodTesterOptions struct {
-		API *api.Client
+		API                      *api.Client
+		CatalystPipelineStrategy string
 	}
 
 	vodTester struct {
-		ctx    context.Context
-		cancel context.CancelFunc
-		lapi   *api.Client
+		ctx                      context.Context
+		cancel                   context.CancelFunc
+		lapi                     *api.Client
+		catalystPipelineStrategy string
 	}
 )
 
@@ -127,7 +129,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 
 func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration time.Duration, assetName string) (*api.Asset, error) {
 
-	importAsset, importTask, err := vt.lapi.ImportAsset(vodImportUrl, assetName)
+	importAsset, importTask, err := vt.lapi.UploadViaURL(vodImportUrl, assetName, vt.catalystPipelineStrategy)
 	if err != nil {
 		glog.Errorf("Error importing asset err=%v", err)
 		return nil, fmt.Errorf("error importing asset: %w", err)
@@ -145,7 +147,7 @@ func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration ti
 func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.Duration) error {
 	hostName, _ := os.Hostname()
 	assetName := fmt.Sprintf("vod_test_upload_direct_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	requestUpload, err := vt.lapi.RequestUpload(assetName)
+	requestUpload, err := vt.lapi.RequestUpload(assetName, vt.catalystPipelineStrategy)
 
 	if err != nil {
 		glog.Errorf("Error requesting upload for assetName=%s err=%v", assetName, err)
@@ -184,7 +186,7 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 
 	hostName, _ := os.Hostname()
 	assetName := fmt.Sprintf("vod_test_upload_resumable_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
-	requestUpload, err := vt.lapi.RequestUpload(assetName)
+	requestUpload, err := vt.lapi.RequestUpload(assetName, vt.catalystPipelineStrategy)
 
 	if err != nil {
 		glog.Errorf("Error requesting upload for assetName=%s err=%v", assetName, err)
@@ -223,7 +225,6 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 func (vt *vodTester) checkTaskProcessing(taskPollDuration time.Duration, processingTask api.Task) error {
 	startTime := time.Now()
 	for {
-		glog.Infof("Waiting %s for task id=%s to be processed, elapsed=%s", taskPollDuration, processingTask.ID, time.Since(startTime))
 		time.Sleep(taskPollDuration)
 
 		if err := vt.isCancelled(); err != nil {
@@ -244,6 +245,8 @@ func (vt *vodTester) checkTaskProcessing(taskPollDuration time.Duration, process
 			glog.Errorf("Error processing task, taskId=%s status=%s error=%v", task.ID, task.Status.Phase, task.Status.ErrorMessage)
 			return fmt.Errorf("error processing task, taskId=%s status=%s error=%v", task.ID, task.Status.Phase, task.Status.ErrorMessage)
 		}
+
+		glog.Infof("Waiting for task to be processed id=%s pollWait=%s elapsed=%s progressPct=%.1f%%", task.ID, taskPollDuration, time.Since(startTime), 100*task.Status.Progress)
 	}
 }
 
