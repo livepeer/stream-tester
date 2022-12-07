@@ -59,6 +59,7 @@ func main() {
 	useHttp := fs.Bool("http", false, "Do HTTP tests instead of RTMP")
 	testMP4 := fs.Bool("mp4", false, "Download MP4 of recording")
 	testStreamHealth := fs.Bool("stream-health", false, "Check stream health during test")
+	testLive := fs.Bool("live", false, "Check Live workflow")
 	testVod := fs.Bool("vod", false, "Check VOD workflow")
 	catalystPipelineStrategy := fs.String("catalyst-pipeline-strategy", "", "Which catalyst pipeline strategy to use regarding. The appropriate values are defined by catalyst-api itself.")
 	recordObjectStoreId := fs.String("record-object-store-id", "", "ID for the Object Store to use for recording storage. Forwarded to the streams created in the API")
@@ -266,16 +267,18 @@ func main() {
 		metricServer := server.NewMetricsServer()
 		go metricServer.Start(gctx, *bind)
 		eg, egCtx := errgroup.WithContext(gctx)
-		eg.Go(func() error {
-			crtOpts := recordtester.ContinuousRecordTesterOptions{
-				PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
-				PagerDutyComponent:      *pagerDutyComponent,
-				PagerDutyLowUrgency:     *pagerDutyLowUrgency,
-				RecordTesterOptions:     rtOpts,
-			}
-			crt := recordtester.NewContinuousRecordTester(egCtx, crtOpts)
-			return crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
-		})
+		if *testLive {
+			eg.Go(func() error {
+				crtOpts := recordtester.ContinuousRecordTesterOptions{
+					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
+					PagerDutyComponent:      *pagerDutyComponent,
+					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
+					RecordTesterOptions:     rtOpts,
+				}
+				crt := recordtester.NewContinuousRecordTester(egCtx, crtOpts)
+				return crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
+			})
+		}
 		if *testVod {
 			eg.Go(func() error {
 				cvtOpts := vodtester.ContinuousVodTesterOptions{
