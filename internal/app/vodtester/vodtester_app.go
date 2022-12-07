@@ -225,7 +225,6 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 func (vt *vodTester) checkTaskProcessing(taskPollDuration time.Duration, processingTask api.Task) error {
 	startTime := time.Now()
 	for {
-		glog.Infof("Waiting %s for task id=%s to be processed, elapsed=%s", taskPollDuration, processingTask.ID, time.Since(startTime))
 		time.Sleep(taskPollDuration)
 
 		if err := vt.isCancelled(); err != nil {
@@ -246,6 +245,8 @@ func (vt *vodTester) checkTaskProcessing(taskPollDuration time.Duration, process
 			glog.Errorf("Error processing task, taskId=%s status=%s error=%v", task.ID, task.Status.Phase, task.Status.ErrorMessage)
 			return fmt.Errorf("error processing task, taskId=%s status=%s error=%v", task.ID, task.Status.Phase, task.Status.ErrorMessage)
 		}
+
+		glog.Infof("Waiting for task to be processed id=%s pollWait=%s elapsed=%s progressPct=%.1f%%", taskPollDuration, task.ID, time.Since(startTime), 100*task.Status.Progress)
 	}
 }
 
