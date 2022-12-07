@@ -60,6 +60,7 @@ func main() {
 	testMP4 := fs.Bool("mp4", false, "Download MP4 of recording")
 	testStreamHealth := fs.Bool("stream-health", false, "Check stream health during test")
 	testVod := fs.Bool("vod", false, "Check VOD workflow")
+	catalystPipelineStrategy := fs.String("catalyst-pipeline-strategy", "", "Which catalyst pipeline strategy to use regarding. The appropriate values are defined by catalyst-api itself.")
 	recordObjectStoreId := fs.String("record-object-store-id", "", "ID for the Object Store to use for recording storage. Forwarded to the streams created in the API")
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
@@ -218,7 +219,8 @@ func main() {
 		TestStreamHealth:    *testStreamHealth,
 	}
 	vtOpts := vodtester.VodTesterOptions{
-		API: lapi,
+		API:                      lapi,
+		CatalystPipelineStrategy: *catalystPipelineStrategy,
 	}
 	if *sim > 1 {
 		var testers []recordtester.IRecordTester
