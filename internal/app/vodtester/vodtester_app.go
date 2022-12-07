@@ -246,7 +246,7 @@ func (vt *vodTester) checkTaskProcessing(taskPollDuration time.Duration, process
 			return fmt.Errorf("error processing task, taskId=%s status=%s error=%v", task.ID, task.Status.Phase, task.Status.ErrorMessage)
 		}
 
-		glog.Infof("Waiting for task to be processed id=%s pollWait=%s elapsed=%s progressPct=%.1f%%", taskPollDuration, task.ID, time.Since(startTime), 100*task.Status.Progress)
+		glog.Infof("Waiting for task to be processed id=%s pollWait=%s elapsed=%s progressPct=%.1f%%", task.ID, taskPollDuration, time.Since(startTime), 100*task.Status.Progress)
 	}
 }
 
