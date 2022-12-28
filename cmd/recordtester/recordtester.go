@@ -174,7 +174,7 @@ func main() {
 
 	serfMembers, err := getSerfMembers(*serfRPCAddr)
 	if err != nil {
-		glog.Fatalf("failed to process serf members: %w", err)
+		glog.Fatalf("failed to process serf members: %v", err)
 	}
 	serfOptions := recordtester.SerfOptions{
 		UseSerf:          *useSerf,
