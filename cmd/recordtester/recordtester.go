@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	serfClient "github.com/hashicorp/serf/client"
 	api "github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/livepeer-data/pkg/client"
@@ -36,6 +37,23 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+func getSerfMembers(serfRPCAddr string) ([]serfClient.Member, error) {
+	if serfRPCAddr == "" {
+		return nil, nil
+	}
+	rpcClient, err := serfClient.NewRPCClient(serfRPCAddr)
+	if err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+	members, err := rpcClient.Members()
+	if err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+	return members, nil
+}
+
 func main() {
 	flag.Set("logtostderr", "true")
 	vFlag := flag.Lookup("v")
@@ -51,6 +69,7 @@ func main() {
 	taskPollDuration := fs.Duration("task-poll-dur", 15*time.Second, "How long to wait between polling for task status")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
+	serfRPCAddr := fs.String("serf-rpc-addr", "", "Serf RPC address for fetching serf members (replaces `--ingest` flag)")
 	ingestStr := fs.String("ingest", "", "Ingest server info in JSON format including ingest and playback URLs. Should follow Livepeer API schema")
 	analyzerServers := fs.String("analyzer-servers", "", "Comma-separated list of base URLs to connect for the Stream Health Analyzer API (defaults to --api-server)")
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
@@ -125,10 +144,10 @@ func main() {
 	// model.ProfilesNum = int(*profiles)
 
 	if *testDuration == 0 {
-		glog.Fatalf("-test-dur should be specified")
+		glog.Fatal("--test-dur should be specified")
 	}
 	if *apiToken == "" {
-		glog.Fatalf("-api-token should be specified")
+		glog.Fatal("--api-token should be specified")
 	}
 
 	if fileName, err = utils.GetFile(*fileArg, strings.ReplaceAll(hostName, ".", "_")); err != nil {
@@ -143,8 +162,20 @@ func main() {
 	var ingest *api.Ingest
 	if *ingestStr != "" {
 		if err := json.Unmarshal([]byte(*ingestStr), &ingest); err != nil {
-			glog.Fatalf("Error parsing -ingest argument: %v", err)
+			glog.Fatalf("Error parsing --ingest argument: %v", err)
 		}
+	}
+
+	serfMembers, err := getSerfMembers(*serfRPCAddr)
+	if err != nil {
+		glog.Fatalf("failed to process serf members: %w", err)
+	}
+	serfOptions := &recordtester.SerfOptions{
+		UseSerf:     false,
+		SerfMembers: serfMembers,
+	}
+	if serfMembers != nil {
+		serfOptions.UseSerf = true
 	}
 
 	var lapi *api.Client
@@ -232,7 +263,7 @@ func main() {
 		start := time.Now()
 
 		for i := 0; i < *sim; i++ {
-			rt := recordtester.NewRecordTester(gctx, rtOpts)
+			rt := recordtester.NewRecordTester(gctx, rtOpts, serfOptions)
 			eses = append(eses, 0)
 			testers = append(testers, rt)
 			wg.Add(1)
@@ -287,7 +318,7 @@ func main() {
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
 					VodTesterOptions:        vtOpts,
 				}
-				cvt := vodtester.NewContinuousVodTester(egCtx, cvtOpts)
+				cvt := vodtester.NewContinuousVodTester(egCtx, cvtOpts, serfOptions)
 				return cvt.Start(fileName, *vodImportUrl, *testDuration, *taskPollDuration, *continuousTest)
 			})
 		}
@@ -298,7 +329,7 @@ func main() {
 		return
 	}
 	// just one stream
-	rt := recordtester.NewRecordTester(gctx, rtOpts)
+	rt := recordtester.NewRecordTester(gctx, rtOpts, serfOptions)
 	es, err := rt.Start(fileName, *testDuration, *pauseDuration)
 	exit(es, fileName, *fileArg, err)
 }

@@ -39,6 +39,7 @@ type (
 		pagerDutyComponent      string
 		pagerDutyLowUrgency     bool
 		rtOpts                  RecordTesterOptions
+		serfOpts                SerfOptions
 	}
 
 	pagerDutyLink struct {
@@ -48,7 +49,7 @@ type (
 )
 
 // NewContinuousRecordTester returns new object
-func NewContinuousRecordTester(gctx context.Context, opts ContinuousRecordTesterOptions) IContinuousRecordTester {
+func NewContinuousRecordTester(gctx context.Context, opts ContinuousRecordTesterOptions, serfOpts SerfOptions) IContinuousRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	server := opts.API.GetServer()
 	u, _ := url.Parse(server)
@@ -60,6 +61,7 @@ func NewContinuousRecordTester(gctx context.Context, opts ContinuousRecordTester
 		pagerDutyComponent:      opts.PagerDutyComponent,
 		pagerDutyLowUrgency:     opts.PagerDutyLowUrgency,
 		rtOpts:                  opts.RecordTesterOptions,
+		serfOpts:                serfOpts,
 	}
 	return crt
 }
@@ -74,7 +76,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		messenger.SendMessage(msg)
 
 		ctx, cancel := context.WithTimeout(crt.ctx, maxTestDuration)
-		rt := NewRecordTester(ctx, crt.rtOpts)
+		rt := NewRecordTester(ctx, crt.rtOpts, crt.serfOpts)
 		es, err := rt.Start(fileName, testDuration, pauseDuration)
 		rt.Clean()
 		ctxErr := ctx.Err()

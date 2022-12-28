@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/golang/glog"
+	serfClient "github.com/hashicorp/serf/client"
 	api "github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format/mp4"
 	"github.com/livepeer/joy4/format/mp4/mp4io"
@@ -30,6 +32,11 @@ type (
 		Clean()
 		StreamID() string
 		Stream() *api.Stream
+	}
+
+	SerfOptions struct {
+		UseSerf     bool
+		SerfMembers []serfClient.Member
 	}
 
 	RecordTesterOptions struct {
@@ -54,6 +61,7 @@ type (
 		useHTTP             bool
 		mp4                 bool
 		streamHealth        bool
+		serfOpts            SerfOptions
 
 		// mutable fields
 		streamID string
@@ -63,7 +71,7 @@ type (
 )
 
 // NewRecordTester ...
-func NewRecordTester(gctx context.Context, opts RecordTesterOptions) IRecordTester {
+func NewRecordTester(gctx context.Context, opts RecordTesterOptions, serfOpts SerfOptions) IRecordTester {
 	ctx, cancel := context.WithCancel(gctx)
 	rt := &recordTester{
 		lapi:                opts.API,
@@ -76,6 +84,7 @@ func NewRecordTester(gctx context.Context, opts RecordTesterOptions) IRecordTest
 		useHTTP:             opts.UseHTTP,
 		mp4:                 opts.TestMP4,
 		streamHealth:        opts.TestStreamHealth,
+		serfOpts:            serfOpts,
 	}
 	return rt
 }
@@ -153,6 +162,10 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	}
 
 	mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingest.Playback, stream.PlaybackID)
+	if rt.serfOpts.UseSerf {
+		serfMember := rt.serfOpts.SerfMembers[rand.Intn(len(rt.serfOpts.SerfMembers))]
+		mediaURL = fmt.Sprintf("%s/hls/%s/index.m3u8", serfMember.Tags["https"], stream.PlaybackID)
+	}
 	glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
 	glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
 	if rt.useHTTP {
