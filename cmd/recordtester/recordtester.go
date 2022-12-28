@@ -69,7 +69,6 @@ func main() {
 	taskPollDuration := fs.Duration("task-poll-dur", 15*time.Second, "How long to wait between polling for task status")
 	apiToken := fs.String("api-token", "", "Token of the Livepeer API to be used")
 	apiServer := fs.String("api-server", "livepeer.com", "Server of the Livepeer API to be used")
-	serfRPCAddr := fs.String("serf-rpc-addr", "", "Serf RPC address for fetching serf members (replaces `--ingest` flag)")
 	ingestStr := fs.String("ingest", "", "Ingest server info in JSON format including ingest and playback URLs. Should follow Livepeer API schema")
 	analyzerServers := fs.String("analyzer-servers", "", "Comma-separated list of base URLs to connect for the Stream Health Analyzer API (defaults to --api-server)")
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
@@ -89,6 +88,10 @@ func main() {
 	pagerDutyComponent := fs.String("pagerduty-component", "", "PagerDuty component")
 	pagerDutyLowUrgency := fs.Bool("pagerduty-low-urgency", false, "Whether to send only low-urgency PagerDuty alerts")
 	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
+
+	serfRPCAddr := fs.String("serf-rpc-addr", "", "Serf RPC address for fetching serf members (replaces `--ingest` flag)")
+	useSerf := fs.Bool("use-serf", false, "Use serf playback URLs")
+	useRandomSerfMember := fs.Bool("random-serf-member", false, "Use a random member from serf member list")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -149,6 +152,9 @@ func main() {
 	if *apiToken == "" {
 		glog.Fatal("--api-token should be specified")
 	}
+	if *useSerf && *serfRPCAddr == "" {
+		glog.Fatal("--serf-rpc-addr needed with --use-serf option")
+	}
 
 	if fileName, err = utils.GetFile(*fileArg, strings.ReplaceAll(hostName, ".", "_")); err != nil {
 		if err == utils.ErrNotFound {
@@ -170,12 +176,10 @@ func main() {
 	if err != nil {
 		glog.Fatalf("failed to process serf members: %w", err)
 	}
-	serfOptions := &recordtester.SerfOptions{
-		UseSerf:     false,
-		SerfMembers: serfMembers,
-	}
-	if serfMembers != nil {
-		serfOptions.UseSerf = true
+	serfOptions := recordtester.SerfOptions{
+		UseSerf:          *useSerf,
+		SerfMembers:      serfMembers,
+		RandomSerfMember: *useRandomSerfMember,
 	}
 
 	var lapi *api.Client
@@ -306,7 +310,7 @@ func main() {
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
 					RecordTesterOptions:     rtOpts,
 				}
-				crt := recordtester.NewContinuousRecordTester(egCtx, crtOpts)
+				crt := recordtester.NewContinuousRecordTester(egCtx, crtOpts, serfOptions)
 				return crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 			})
 		}
@@ -318,7 +322,7 @@ func main() {
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
 					VodTesterOptions:        vtOpts,
 				}
-				cvt := vodtester.NewContinuousVodTester(egCtx, cvtOpts, serfOptions)
+				cvt := vodtester.NewContinuousVodTester(egCtx, cvtOpts)
 				return cvt.Start(fileName, *vodImportUrl, *testDuration, *taskPollDuration, *continuousTest)
 			})
 		}

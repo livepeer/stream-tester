@@ -35,8 +35,9 @@ type (
 	}
 
 	SerfOptions struct {
-		UseSerf     bool
-		SerfMembers []serfClient.Member
+		UseSerf          bool
+		SerfMembers      []serfClient.Member
+		RandomSerfMember bool
 	}
 
 	RecordTesterOptions struct {
@@ -163,7 +164,11 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 
 	mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingest.Playback, stream.PlaybackID)
 	if rt.serfOpts.UseSerf {
-		serfMember := rt.serfOpts.SerfMembers[rand.Intn(len(rt.serfOpts.SerfMembers))]
+		index := 0
+		if rt.serfOpts.RandomSerfMember {
+			index = rand.Intn(len(rt.serfOpts.SerfMembers))
+		}
+		serfMember := rt.serfOpts.SerfMembers[index]
 		mediaURL = fmt.Sprintf("%s/hls/%s/index.m3u8", serfMember.Tags["https"], stream.PlaybackID)
 	}
 	glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
