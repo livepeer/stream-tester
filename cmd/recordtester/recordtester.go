@@ -89,7 +89,7 @@ func main() {
 	pagerDutyLowUrgency := fs.Bool("pagerduty-low-urgency", false, "Whether to send only low-urgency PagerDuty alerts")
 	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
 
-	serfRPCAddr := fs.String("serf-rpc-addr", "", "Serf RPC address for fetching serf members (replaces `--ingest` flag)")
+	serfRPCAddr := fs.String("serf-rpc-addr", "", "Serf RPC address for fetching serf members")
 	useSerf := fs.Bool("use-serf", false, "Use serf playback URLs")
 	useRandomSerfMember := fs.Bool("random-serf-member", false, "Use a random member from serf member list")
 
