@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	serfClient "github.com/hashicorp/serf/client"
 	api "github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/livepeer-data/pkg/client"
@@ -34,6 +35,23 @@ import (
 func init() {
 	format.RegisterAll()
 	rand.Seed(time.Now().UnixNano())
+}
+
+func getSerfMembers(serfRPCAddr string) ([]serfClient.Member, error) {
+	if serfRPCAddr == "" {
+		return nil, nil
+	}
+	rpcClient, err := serfClient.NewRPCClient(serfRPCAddr)
+	if err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+	members, err := rpcClient.Members()
+	if err != nil {
+		glog.Error(err)
+		return nil, err
+	}
+	return members, nil
 }
 
 func main() {
@@ -70,6 +88,11 @@ func main() {
 	pagerDutyComponent := fs.String("pagerduty-component", "", "PagerDuty component")
 	pagerDutyLowUrgency := fs.Bool("pagerduty-low-urgency", false, "Whether to send only low-urgency PagerDuty alerts")
 	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
+
+	serfRPCAddr := fs.String("serf-rpc-addr", "", "Serf RPC address for fetching serf members")
+	useSerf := fs.Bool("use-serf", false, "Use serf playback URLs")
+	useRandomSerfMember := fs.Bool("random-serf-member", false, "Use a random member from serf member list")
+	serfPullCount := fs.Int("pull-count", 1, "Number of serf nodes to pull playback from (requires `--use-serf`)")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -125,10 +148,13 @@ func main() {
 	// model.ProfilesNum = int(*profiles)
 
 	if *testDuration == 0 {
-		glog.Fatalf("-test-dur should be specified")
+		glog.Fatal("--test-dur should be specified")
 	}
 	if *apiToken == "" {
-		glog.Fatalf("-api-token should be specified")
+		glog.Fatal("--api-token should be specified")
+	}
+	if *useSerf && *serfRPCAddr == "" {
+		glog.Fatal("--serf-rpc-addr needed with --use-serf option")
 	}
 
 	if fileName, err = utils.GetFile(*fileArg, strings.ReplaceAll(hostName, ".", "_")); err != nil {
@@ -143,8 +169,19 @@ func main() {
 	var ingest *api.Ingest
 	if *ingestStr != "" {
 		if err := json.Unmarshal([]byte(*ingestStr), &ingest); err != nil {
-			glog.Fatalf("Error parsing -ingest argument: %v", err)
+			glog.Fatalf("Error parsing --ingest argument: %v", err)
 		}
+	}
+
+	serfMembers, err := getSerfMembers(*serfRPCAddr)
+	if err != nil {
+		glog.Fatalf("failed to process serf members: %v", err)
+	}
+	serfOptions := recordtester.SerfOptions{
+		UseSerf:          *useSerf,
+		SerfMembers:      serfMembers,
+		RandomSerfMember: *useRandomSerfMember,
+		SerfPullCount:    *serfPullCount,
 	}
 
 	var lapi *api.Client
@@ -232,7 +269,7 @@ func main() {
 		start := time.Now()
 
 		for i := 0; i < *sim; i++ {
-			rt := recordtester.NewRecordTester(gctx, rtOpts)
+			rt := recordtester.NewRecordTester(gctx, rtOpts, serfOptions)
 			eses = append(eses, 0)
 			testers = append(testers, rt)
 			wg.Add(1)
@@ -275,7 +312,7 @@ func main() {
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
 					RecordTesterOptions:     rtOpts,
 				}
-				crt := recordtester.NewContinuousRecordTester(egCtx, crtOpts)
+				crt := recordtester.NewContinuousRecordTester(egCtx, crtOpts, serfOptions)
 				return crt.Start(fileName, *testDuration, *pauseDuration, *continuousTest)
 			})
 		}
@@ -298,7 +335,7 @@ func main() {
 		return
 	}
 	// just one stream
-	rt := recordtester.NewRecordTester(gctx, rtOpts)
+	rt := recordtester.NewRecordTester(gctx, rtOpts, serfOptions)
 	es, err := rt.Start(fileName, *testDuration, *pauseDuration)
 	exit(es, fileName, *fileArg, err)
 }
