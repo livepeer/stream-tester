@@ -38,6 +38,10 @@ type (
 		UseSerf          bool
 		SerfMembers      []serfClient.Member
 		RandomSerfMember bool
+
+		// TODO: pull from multiple nodes; each one will need to
+		// trigger a separate playback
+		SerfPullCount int
 	}
 
 	RecordTesterOptions struct {

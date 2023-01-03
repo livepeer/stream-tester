@@ -92,6 +92,7 @@ func main() {
 	serfRPCAddr := fs.String("serf-rpc-addr", "", "Serf RPC address for fetching serf members")
 	useSerf := fs.Bool("use-serf", false, "Use serf playback URLs")
 	useRandomSerfMember := fs.Bool("random-serf-member", false, "Use a random member from serf member list")
+	serfPullCount := fs.Int("pull-count", 1, "Number of serf nodes to pull playback from (requires `--use-serf`)")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -180,6 +181,7 @@ func main() {
 		UseSerf:          *useSerf,
 		SerfMembers:      serfMembers,
 		RandomSerfMember: *useRandomSerfMember,
+		SerfPullCount:    *serfPullCount,
 	}
 
 	var lapi *api.Client
