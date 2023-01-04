@@ -671,14 +671,13 @@ func (mc *mac) removeInfoDelayed(playbackID string, done chan struct{}) {
 	}()
 }
 
-// must be called inside mu.Lock
 func (mc *mac) removeInfo(playbackID string) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 	mc.removeInfoLocked(playbackID)
 }
 
-// must be called inside mu.Lock
+// must be called inside mc.mu.Lock
 func (mc *mac) removeInfoLocked(playbackID string) {
 	if info, ok := mc.streamInfo[playbackID]; ok {
 		close(info.done)
