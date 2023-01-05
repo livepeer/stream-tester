@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/livepeer/stream-tester/internal/app/common"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -16,7 +17,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	api "github.com/livepeer/go-api-client"
+	"github.com/livepeer/go-api-client"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,16 +29,8 @@ type (
 		Done() <-chan struct{}
 	}
 
-	TranscodeTesterOptions struct {
-		API                      *api.Client
-		CatalystPipelineStrategy string
-	}
-
 	transcodeTester struct {
-		ctx                      context.Context
-		cancel                   context.CancelFunc
-		lapi                     *api.Client
-		catalystPipelineStrategy string
+		common.TesterApp
 	}
 
 	objectStore struct {
@@ -48,20 +41,22 @@ type (
 	}
 )
 
-func NewTranscodeTester(gctx context.Context, opts TranscodeTesterOptions) ITranscodeTester {
+func NewTranscodeTester(gctx context.Context, opts common.TesterOptions) ITranscodeTester {
 	ctx, cancel := context.WithCancel(gctx)
 	vt := &transcodeTester{
-		lapi:   opts.API,
-		ctx:    ctx,
-		cancel: cancel,
+		TesterApp: common.TesterApp{
+			Lapi:       opts.API,
+			Ctx:        ctx,
+			CancelFunc: cancel,
+		},
 	}
 	return vt
 }
 
 func (tt *transcodeTester) Start(fileName string, transcodeBucketUrl string, taskPollDuration time.Duration) (int, error) {
-	defer tt.cancel()
+	defer tt.Cancel()
 
-	eg, egCtx := errgroup.WithContext(tt.ctx)
+	eg, egCtx := errgroup.WithContext(tt.Ctx)
 
 	eg.Go(func() error {
 		if err := tt.transcodeFromUrlTester(fileName, transcodeBucketUrl, taskPollDuration); err != nil {
@@ -81,7 +76,7 @@ func (tt *transcodeTester) Start(fileName string, transcodeBucketUrl string, tas
 
 	go func() {
 		<-egCtx.Done()
-		tt.cancel()
+		tt.Cancel()
 	}()
 	if err := eg.Wait(); err != nil {
 		return 1, err
@@ -108,7 +103,7 @@ func (tt *transcodeTester) transcodeFromUrlTester(inUrl string, bucketUrl string
 }
 
 func (tt *transcodeTester) transcodeFromUrl(inUrl string, os objectStore, path string) (*api.Task, error) {
-	return tt.lapi.TranscodeFile(api.TranscodeFileReq{
+	return tt.Lapi.TranscodeFile(api.TranscodeFileReq{
 		Input: api.TranscodeFileReqInput{
 			Url: inUrl,
 		},
@@ -160,7 +155,7 @@ func (tt *transcodeTester) transcodeFromPrivateBucketTester(inUrl string, bucket
 }
 
 func (tt *transcodeTester) transcodeFromPrivateBucket(os objectStore, inPath, outPath string) (*api.Task, error) {
-	return tt.lapi.TranscodeFile(api.TranscodeFileReq{
+	return tt.Lapi.TranscodeFile(api.TranscodeFileReq{
 		Input: api.TranscodeFileReqInput{
 			Type:     "s3",
 			Endpoint: os.endpoint,
@@ -205,7 +200,7 @@ func (tt *transcodeTester) copyFileIntoInputBucket(inUrl string, os objectStore,
 }
 
 func (tt *transcodeTester) checkTaskProcessingAndRenditionFiles(taskPollDuration time.Duration, task api.Task, os objectStore, path string) error {
-	if err := tt.checkTaskProcessing(taskPollDuration, task); err != nil {
+	if err := tt.CheckTaskProcessing(taskPollDuration, task); err != nil {
 		glog.Errorf("Error in transcoding task taskId=%s: err=%v", task.ID, err)
 		return fmt.Errorf("error in transcoding task taskId=%s: %w", task.ID, err)
 	}
@@ -216,58 +211,13 @@ func (tt *transcodeTester) checkTaskProcessingAndRenditionFiles(taskPollDuration
 	return nil
 }
 
-func (tt *transcodeTester) checkTaskProcessing(taskPollDuration time.Duration, processingTask api.Task) error {
-	startTime := time.Now()
-	for {
-		time.Sleep(taskPollDuration)
-
-		if err := tt.isCancelled(); err != nil {
-			return err
-		}
-
-		// we already sleep before the first check, so no need for strong consistency
-		task, err := tt.lapi.GetTask(processingTask.ID, false)
-		if err != nil {
-			glog.Errorf("Error retrieving task id=%s err=%v", processingTask.ID, err)
-			return fmt.Errorf("error retrieving task id=%s: %w", processingTask.ID, err)
-		}
-		if task.Status.Phase == "completed" {
-			glog.Infof("Task success, taskId=%s", task.ID)
-			return nil
-		}
-		if task.Status.Phase != "pending" && task.Status.Phase != "running" && task.Status.Phase != "waiting" {
-			glog.Errorf("Error processing task, taskId=%s status=%s error=%v", task.ID, task.Status.Phase, task.Status.ErrorMessage)
-			return fmt.Errorf("error processing task, taskId=%s status=%s error=%v", task.ID, task.Status.Phase, task.Status.ErrorMessage)
-		}
-
-		glog.Infof("Waiting for task to be processed id=%s pollWait=%s elapsed=%s progressPct=%.1f%%", task.ID, taskPollDuration, time.Since(startTime), 100*task.Status.Progress)
-	}
-}
-
 func (tt *transcodeTester) checkRenditionFiles(os objectStore, path string) error {
 	svc := s3.New(newAwsSession(os))
-	_, err := svc.GetObjectWithContext(tt.ctx, &s3.GetObjectInput{
+	_, err := svc.GetObjectWithContext(tt.Ctx, &s3.GetObjectInput{
 		Bucket: aws.String(os.bucket),
 		Key:    aws.String(path2.Join(path, "index.m3u8")),
 	})
 	return err
-}
-
-func (tt *transcodeTester) isCancelled() error {
-	select {
-	case <-tt.ctx.Done():
-		return context.Canceled
-	default:
-	}
-	return nil
-}
-
-func (tt *transcodeTester) Cancel() {
-	tt.cancel()
-}
-
-func (tt *transcodeTester) Done() <-chan struct{} {
-	return tt.ctx.Done()
 }
 
 func parseObjectStore(bucketUrl string) (objectStore, error) {

@@ -20,6 +20,7 @@ import (
 	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/livepeer-data/pkg/client"
+	"github.com/livepeer/stream-tester/internal/app/common"
 	"github.com/livepeer/stream-tester/internal/app/recordtester"
 	"github.com/livepeer/stream-tester/internal/app/transcodetester"
 	"github.com/livepeer/stream-tester/internal/app/vodtester"
@@ -316,7 +317,7 @@ func main() {
 			})
 		}
 		if *testVod {
-			vtOpts := vodtester.VodTesterOptions{
+			vtOpts := common.TesterOptions{
 				API:                      lapi,
 				CatalystPipelineStrategy: *catalystPipelineStrategy,
 			}
@@ -325,14 +326,14 @@ func main() {
 					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
 					PagerDutyComponent:      *pagerDutyComponent,
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
-					VodTesterOptions:        vtOpts,
+					TesterOptions:           vtOpts,
 				}
 				cvt := vodtester.NewContinuousVodTester(egCtx, cvtOpts)
 				return cvt.Start(fileName, *vodImportUrl, *testDuration, *taskPollDuration, *continuousTest)
 			})
 		}
 		if *testTranscode {
-			ttOpts := transcodetester.TranscodeTesterOptions{
+			ttOpts := common.TesterOptions{
 				API:                      lapi,
 				CatalystPipelineStrategy: *catalystPipelineStrategy,
 			}
@@ -341,7 +342,7 @@ func main() {
 					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
 					PagerDutyComponent:      *pagerDutyComponent,
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
-					TranscodeTesterOptions:  ttOpts,
+					TesterOptions:           ttOpts,
 				}
 				ctt := transcodetester.NewContinuousTransTester(egCtx, cttOpts)
 				return ctt.Start(*fileArg, *transcodeBucketUrl, *testDuration, *taskPollDuration, *continuousTest)

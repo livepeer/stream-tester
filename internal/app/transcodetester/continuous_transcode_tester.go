@@ -9,6 +9,7 @@ import (
 	"github.com/PagerDuty/go-pagerduty"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/internal/app/common"
 	"github.com/livepeer/stream-tester/messenger"
 )
 
@@ -24,7 +25,7 @@ type (
 		PagerDutyIntegrationKey string
 		PagerDutyComponent      string
 		PagerDutyLowUrgency     bool
-		TranscodeTesterOptions
+		common.TesterOptions
 	}
 
 	continuousTranscodeTester struct {
@@ -34,7 +35,7 @@ type (
 		pagerDutyIntegrationKey string
 		pagerDutyComponent      string
 		pagerDutyLowUrgency     bool
-		ttOpts                  TranscodeTesterOptions
+		ttOpts                  common.TesterOptions
 	}
 )
 
@@ -49,7 +50,7 @@ func NewContinuousTransTester(gctx context.Context, opts ContinuousTranscodeTest
 		pagerDutyIntegrationKey: opts.PagerDutyIntegrationKey,
 		pagerDutyComponent:      opts.PagerDutyComponent,
 		pagerDutyLowUrgency:     opts.PagerDutyLowUrgency,
-		ttOpts:                  opts.TranscodeTesterOptions,
+		ttOpts:                  opts.TesterOptions,
 	}
 	return ctt
 }

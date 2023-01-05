@@ -9,6 +9,7 @@ import (
 	"github.com/PagerDuty/go-pagerduty"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/internal/app/common"
 	"github.com/livepeer/stream-tester/messenger"
 )
 
@@ -25,7 +26,7 @@ type (
 		PagerDutyIntegrationKey string
 		PagerDutyComponent      string
 		PagerDutyLowUrgency     bool
-		VodTesterOptions
+		common.TesterOptions
 	}
 
 	continuousVodTester struct {
@@ -35,7 +36,7 @@ type (
 		pagerDutyIntegrationKey string
 		pagerDutyComponent      string
 		pagerDutyLowUrgency     bool
-		vtOpts                  VodTesterOptions
+		vtOpts                  common.TesterOptions
 	}
 )
 
@@ -51,7 +52,7 @@ func NewContinuousVodTester(gctx context.Context, opts ContinuousVodTesterOption
 		pagerDutyIntegrationKey: opts.PagerDutyIntegrationKey,
 		pagerDutyComponent:      opts.PagerDutyComponent,
 		pagerDutyLowUrgency:     opts.PagerDutyLowUrgency,
-		vtOpts:                  opts.VodTesterOptions,
+		vtOpts:                  opts.TesterOptions,
 	}
 	return cvt
 }
