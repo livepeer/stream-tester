@@ -15,7 +15,7 @@ import (
 type (
 	// IContinuousVodTester ...
 	IContinuousVodTester interface {
-		// Start start test. Blocks until error.
+		// Start test. Blocks until error.
 		Start(fileName string, vodImportUrl string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error
 		Cancel()
 		Done() <-chan struct{}

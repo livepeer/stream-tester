@@ -12,7 +12,7 @@ require (
 	github.com/golang/glog v1.0.0
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
-	github.com/livepeer/go-api-client v0.4.1-0.20221207101406-c3675c55eed5
+	github.com/livepeer/go-api-client v0.4.2-0.20230105141727-2a1044f1eb2e
 	github.com/livepeer/go-livepeer v0.5.31
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
@@ -39,7 +39,7 @@ require (
 	cloud.google.com/go v0.81.0 // indirect
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
-	github.com/aws/aws-sdk-go v1.34.28 // indirect
+	github.com/aws/aws-sdk-go v1.34.28
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/btcsuite/btcd v0.22.0-beta // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect

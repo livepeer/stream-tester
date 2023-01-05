@@ -16,7 +16,7 @@ import (
 type (
 	// IVodTester ...
 	IVodTester interface {
-		// Start start test. Blocks until finished.
+		// Start test. Blocks until finished.
 		Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) (int, error)
 		Cancel()
 		Done() <-chan struct{}
@@ -73,7 +73,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 		err = vt.checkTaskProcessing(taskPollDuration, *transcodeTask)
 
 		if err != nil {
-			glog.Errorf("Error in trasncoding task taskId=%s", transcodeTask.ID)
+			glog.Errorf("Error in transcoding task taskId=%s", transcodeTask.ID)
 			return fmt.Errorf("error in transcoding task taskId=%s: %w", transcodeTask.ID, err)
 		}
 
