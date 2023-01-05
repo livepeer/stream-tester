@@ -322,7 +322,7 @@ func main() {
 				CatalystPipelineStrategy: *catalystPipelineStrategy,
 			}
 			eg.Go(func() error {
-				cvtOpts := vodtester.ContinuousVodTesterOptions{
+				cvtOpts := common.ContinuousTesterOptions{
 					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
 					PagerDutyComponent:      *pagerDutyComponent,
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
@@ -338,13 +338,13 @@ func main() {
 				CatalystPipelineStrategy: *catalystPipelineStrategy,
 			}
 			eg.Go(func() error {
-				cttOpts := transcodetester.ContinuousTranscodeTesterOptions{
+				cttOpts := common.ContinuousTesterOptions{
 					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
 					PagerDutyComponent:      *pagerDutyComponent,
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
 					TesterOptions:           ttOpts,
 				}
-				ctt := transcodetester.NewContinuousTransTester(egCtx, cttOpts)
+				ctt := transcodetester.NewContinuousTranscodeTester(egCtx, cttOpts)
 				return ctt.Start(*fileArg, *transcodeBucketUrl, *testDuration, *taskPollDuration, *continuousTest)
 			})
 		}
