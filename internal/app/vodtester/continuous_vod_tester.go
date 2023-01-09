@@ -29,7 +29,7 @@ func NewContinuousVodTester(gctx context.Context, opts common.ContinuousTesterOp
 }
 
 func (cvt *continuousVodTester) Start(fileName string, vodImportUrl string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error {
-	start := func(ctx context.Context) (int, error) {
+	start := func(ctx context.Context) error {
 		vt := NewVodTester(ctx, cvt.opts)
 		return vt.Start(fileName, vodImportUrl, taskPollDuration)
 	}

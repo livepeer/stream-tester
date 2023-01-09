@@ -24,7 +24,7 @@ import (
 type (
 	ITranscodeTester interface {
 		// Start test. Blocks until finished.
-		Start(fileName string, transcodeBucketUrl string, taskPollDuration time.Duration) (int, error)
+		Start(fileName string, transcodeBucketUrl string, taskPollDuration time.Duration) error
 		Cancel()
 		Done() <-chan struct{}
 	}
@@ -53,7 +53,7 @@ func NewTranscodeTester(gctx context.Context, opts common.TesterOptions) ITransc
 	return vt
 }
 
-func (tt *transcodeTester) Start(fileName string, transcodeBucketUrl string, taskPollDuration time.Duration) (int, error) {
+func (tt *transcodeTester) Start(fileName string, transcodeBucketUrl string, taskPollDuration time.Duration) error {
 	defer tt.Cancel()
 
 	eg, egCtx := errgroup.WithContext(tt.Ctx)
@@ -79,11 +79,11 @@ func (tt *transcodeTester) Start(fileName string, transcodeBucketUrl string, tas
 		tt.Cancel()
 	}()
 	if err := eg.Wait(); err != nil {
-		return 1, err
+		return err
 	}
 
 	glog.Info("Done Transcode API Test")
-	return 0, nil
+	return nil
 }
 
 func (tt *transcodeTester) transcodeFromUrlTester(inUrl string, bucketUrl string, taskPollDuration time.Duration) error {

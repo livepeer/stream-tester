@@ -18,7 +18,7 @@ type (
 	// IVodTester ...
 	IVodTester interface {
 		// Start test. Blocks until finished.
-		Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) (int, error)
+		Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) error
 		Cancel()
 		Done() <-chan struct{}
 	}
@@ -41,7 +41,7 @@ func NewVodTester(gctx context.Context, opts common.TesterOptions) IVodTester {
 	return vt
 }
 
-func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) (int, error) {
+func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) error {
 	defer vt.Cancel()
 
 	eg, egCtx := errgroup.WithContext(vt.Ctx)
@@ -115,11 +115,11 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 		vt.Cancel()
 	}()
 	if err := eg.Wait(); err != nil {
-		return 1, err
+		return err
 	}
 
 	glog.Info("Done VOD Test")
-	return 0, nil
+	return nil
 }
 
 func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration time.Duration, assetName string) (*api.Asset, error) {

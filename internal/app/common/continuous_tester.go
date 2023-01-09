@@ -15,7 +15,7 @@ import (
 type (
 	IContinuousTester interface {
 		// Start test. Blocks until error.
-		Start(start func(ctx context.Context) (int, error), testDuration, pauseBetweenTests time.Duration) error
+		Start(start func(ctx context.Context) error, testDuration, pauseBetweenTests time.Duration) error
 		Cancel()
 		Done() <-chan struct{}
 	}
@@ -54,14 +54,14 @@ func NewContinuousTester(gctx context.Context, opts ContinuousTesterOptions, tes
 	return ct
 }
 
-func (ct *continuousTester) Start(start func(ctx context.Context) (int, error), testDuration, pauseBetweenTests time.Duration) error {
+func (ct *continuousTester) Start(start func(ctx context.Context) error, testDuration, pauseBetweenTests time.Duration) error {
 	messenger.SendMessage(fmt.Sprintf("Starting continuous %s test of %s", ct.name, ct.host))
 	for {
 		msg := fmt.Sprintf(":arrow_right: Starting %s %s test to %s", testDuration, ct.name, ct.host)
 		messenger.SendMessage(msg)
 
 		ctx, cancel := context.WithTimeout(ct.ctx, testDuration)
-		es, err := start(ctx)
+		err := start(ctx)
 		ctxErr := ctx.Err()
 		cancel()
 
@@ -71,8 +71,8 @@ func (ct *continuousTester) Start(start func(ctx context.Context) (int, error), 
 		} else if ctxErr != nil {
 			msg := fmt.Sprintf("Test of %s on %s timed out, potential deadlock! ctxErr=%q err=%q", ct.name, ct.host, ctxErr, err)
 			messenger.SendFatalMessage(msg)
-		} else if err != nil || es != 0 {
-			msg := fmt.Sprintf(":rotating_light: Test of %s on %s ended with err=%v errCode=%v", ct.name, ct.host, err, es)
+		} else if err != nil {
+			msg := fmt.Sprintf(":rotating_light: Test of %s on %s ended with err=%v", ct.name, ct.host, err)
 			messenger.SendFatalMessage(msg)
 			glog.Warning(msg)
 			ct.sendPagerdutyEvent(err)

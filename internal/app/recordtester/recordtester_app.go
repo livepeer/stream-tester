@@ -24,7 +24,7 @@ import (
 type (
 	// IRecordTester ...
 	IRecordTester interface {
-		// Start start test. Blocks until finished.
+		// Start test. Blocks until finished.
 		Start(fileName string, testDuration, pauseDuration time.Duration) (int, error)
 		Cancel()
 		Done() <-chan struct{}
