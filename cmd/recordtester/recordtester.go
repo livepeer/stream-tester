@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/signal"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -34,13 +37,36 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type geolocateSerfNodes struct {
+	Key       string
+	Latitude  float64
+	Longitude float64
+	Distance  float64
+	Nodes     []serfClient.Member
+}
+
 func init() {
 	format.RegisterAll()
 	rand.Seed(time.Now().UnixNano())
 }
 
-func getSerfMembers(serfRPCAddr string) ([]serfClient.Member, error) {
-	if serfRPCAddr == "" {
+func findInSlice(slice []geolocateSerfNodes, key string) int {
+	for i, v := range slice {
+		if v.Key == key {
+			return i
+		}
+	}
+	return -1
+}
+
+func getDistance(x1, y1, x2, y2 float64) float64 {
+	dx := x1 - x2
+	dy := y1 - y2
+	return math.Sqrt((dx * dx) + (dy * dy))
+}
+
+func getSerfMembers(useSerf bool, serfRPCAddr string) ([]serfClient.Member, error) {
+	if !useSerf || serfRPCAddr == "" {
 		return nil, nil
 	}
 	rpcClient, err := serfClient.NewRPCClient(serfRPCAddr)
@@ -54,6 +80,52 @@ func getSerfMembers(serfRPCAddr string) ([]serfClient.Member, error) {
 		return nil, err
 	}
 	return members, nil
+}
+
+func getMemberLocation(member serfClient.Member) (string, string) {
+	return member.Tags["latitude"], member.Tags["longitude"]
+}
+
+func getClosestSerfNodes(serfMembers []serfClient.Member, lat, long float64) []serfClient.Member {
+	locationKey := func(x, y string) string {
+		return fmt.Sprintf("%s-%s", x, y)
+	}
+	if serfMembers == nil {
+		return nil
+	}
+	var nodeDistances []geolocateSerfNodes
+	for _, member := range serfMembers {
+		x2, y2 := getMemberLocation(member)
+		key := locationKey(x2, y2)
+		index := findInSlice(nodeDistances, key)
+		if index == -1 {
+			lat2, _ := strconv.ParseFloat(x2, 64)
+			long2, _ := strconv.ParseFloat(y2, 64)
+			distance := getDistance(lat, long, lat2, long2)
+			node := geolocateSerfNodes{
+				Key:       key,
+				Latitude:  lat2,
+				Longitude: long2,
+				Distance:  distance,
+				Nodes:     []serfClient.Member{member},
+			}
+			nodeDistances = append(nodeDistances, node)
+		} else {
+			node := nodeDistances[index]
+			node.Nodes = append(node.Nodes, member)
+			nodeDistances[index] = node
+		}
+	}
+	sort.Slice(nodeDistances, func(i, j int) bool {
+		return nodeDistances[i].Distance <= nodeDistances[j].Distance
+	})
+	var returnMembers []serfClient.Member
+	index := 0
+	for (len(returnMembers) < 5) && (index < len(nodeDistances)) {
+		returnMembers = append(returnMembers, nodeDistances[index].Nodes...)
+		index++
+	}
+	return returnMembers
 }
 
 func main() {
@@ -97,6 +169,8 @@ func main() {
 	useSerf := fs.Bool("use-serf", false, "Use serf playback URLs")
 	useRandomSerfMember := fs.Bool("random-serf-member", false, "Use a random member from serf member list")
 	serfPullCount := fs.Int("pull-count", 1, "Number of serf nodes to pull playback from (requires `--use-serf`)")
+	latitude := fs.Float64("latitude", 0, "latitude/geolocation of this record testing instance")
+	longitude := fs.Float64("longitude", 0, "longitude/geolocation of this record testing instance")
 
 	_ = fs.String("config", "", "config file (optional)")
 
@@ -177,13 +251,13 @@ func main() {
 		}
 	}
 
-	serfMembers, err := getSerfMembers(*serfRPCAddr)
+	serfMembers, err := getSerfMembers(*useSerf, *serfRPCAddr)
 	if err != nil {
 		glog.Fatalf("failed to process serf members: %v", err)
 	}
 	serfOptions := recordtester.SerfOptions{
 		UseSerf:          *useSerf,
-		SerfMembers:      serfMembers,
+		SerfMembers:      getClosestSerfNodes(serfMembers, *latitude, *longitude),
 		RandomSerfMember: *useRandomSerfMember,
 		SerfPullCount:    *serfPullCount,
 	}
