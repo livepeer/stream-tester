@@ -18,7 +18,7 @@ import (
 type (
 	// IContinuousRecordTester ...
 	IContinuousRecordTester interface {
-		// Start start test. Blocks until error.
+		// Start test. Blocks until error.
 		Start(fileName string, testDuration, pauseDuration, pauseBetweenTests time.Duration) error
 		Cancel()
 		Done() <-chan struct{}

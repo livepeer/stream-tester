@@ -17,10 +17,12 @@ import (
 
 	"github.com/golang/glog"
 	serfClient "github.com/hashicorp/serf/client"
-	api "github.com/livepeer/go-api-client"
+	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/livepeer-data/pkg/client"
+	"github.com/livepeer/stream-tester/internal/app/common"
 	"github.com/livepeer/stream-tester/internal/app/recordtester"
+	"github.com/livepeer/stream-tester/internal/app/transcodetester"
 	"github.com/livepeer/stream-tester/internal/app/vodtester"
 	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/server"
@@ -79,6 +81,8 @@ func main() {
 	testStreamHealth := fs.Bool("stream-health", false, "Check stream health during test")
 	testLive := fs.Bool("live", false, "Check Live workflow")
 	testVod := fs.Bool("vod", false, "Check VOD workflow")
+	transcodeBucketUrl := fs.String("transcode-bucket-url", "", "Object Store URL to test Transcode API in the format 's3+http(s)://<access-key-id>:<secret-access-key>@<endpoint>/<bucket>'")
+	testTranscode := fs.Bool("transcode", false, "Check Transcode API workflow")
 	catalystPipelineStrategy := fs.String("catalyst-pipeline-strategy", "", "Which catalyst pipeline strategy to use regarding. The appropriate values are defined by catalyst-api itself.")
 	recordObjectStoreId := fs.String("record-object-store-id", "", "ID for the Object Store to use for recording storage. Forwarded to the streams created in the API")
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
@@ -256,10 +260,6 @@ func main() {
 		TestMP4:             *testMP4,
 		TestStreamHealth:    *testStreamHealth,
 	}
-	vtOpts := vodtester.VodTesterOptions{
-		API:                      lapi,
-		CatalystPipelineStrategy: *catalystPipelineStrategy,
-	}
 	if *sim > 1 {
 		var testers []recordtester.IRecordTester
 		var eses []int
@@ -317,15 +317,35 @@ func main() {
 			})
 		}
 		if *testVod {
+			vtOpts := common.TesterOptions{
+				API:                      lapi,
+				CatalystPipelineStrategy: *catalystPipelineStrategy,
+			}
 			eg.Go(func() error {
-				cvtOpts := vodtester.ContinuousVodTesterOptions{
+				cvtOpts := common.ContinuousTesterOptions{
 					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
 					PagerDutyComponent:      *pagerDutyComponent,
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
-					VodTesterOptions:        vtOpts,
+					TesterOptions:           vtOpts,
 				}
 				cvt := vodtester.NewContinuousVodTester(egCtx, cvtOpts)
 				return cvt.Start(fileName, *vodImportUrl, *testDuration, *taskPollDuration, *continuousTest)
+			})
+		}
+		if *testTranscode {
+			ttOpts := common.TesterOptions{
+				API:                      lapi,
+				CatalystPipelineStrategy: *catalystPipelineStrategy,
+			}
+			eg.Go(func() error {
+				cttOpts := common.ContinuousTesterOptions{
+					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
+					PagerDutyComponent:      *pagerDutyComponent,
+					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
+					TesterOptions:           ttOpts,
+				}
+				ctt := transcodetester.NewContinuousTranscodeTester(egCtx, cttOpts)
+				return ctt.Start(*fileArg, *transcodeBucketUrl, *testDuration, *taskPollDuration, *continuousTest)
 			})
 		}
 		if err := eg.Wait(); err != nil {
