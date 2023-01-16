@@ -59,10 +59,26 @@ func findInSlice(slice []geolocateSerfNodes, key string) int {
 	return -1
 }
 
-func getDistance(x1, y1, x2, y2 float64) float64 {
-	dx := x1 - x2
-	dy := y1 - y2
-	return math.Sqrt((dx * dx) + (dy * dy))
+const (
+	earthRadius = 6371 // Earth's radius in kilometers
+)
+
+func getDistance(lat1, lon1, lat2, lon2 float64) float64 {
+	// convert to radians
+	lat1 = lat1 * math.Pi / 180
+	lon1 = lon1 * math.Pi / 180
+	lat2 = lat2 * math.Pi / 180
+	lon2 = lon2 * math.Pi / 180
+
+	// haversine formula
+	a := math.Sin(lat2-lat1)*math.Sin(lat2-lat1) +
+		math.Cos(lat1)*math.Cos(lat2)*
+		math.Sin(lon2-lon1)*math.Sin(lon2-lon1)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+
+	distance := earthRadius * c
+
+	return distance
 }
 
 func getSerfMembers(useSerf bool, serfRPCAddr string) ([]serfClient.Member, error) {
