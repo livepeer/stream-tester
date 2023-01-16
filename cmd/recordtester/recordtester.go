@@ -86,7 +86,7 @@ func getMemberLocation(member serfClient.Member) (string, string) {
 	return member.Tags["latitude"], member.Tags["longitude"]
 }
 
-func getClosestSerfNodes(serfMembers []serfClient.Member, lat, long float64) []serfClient.Member {
+func getClosestSerfNodes(serfMembers []serfClient.Member, selectNodeCount int, lat, long float64) []serfClient.Member {
 	locationKey := func(x, y string) string {
 		return fmt.Sprintf("%s-%s", x, y)
 	}
@@ -121,7 +121,7 @@ func getClosestSerfNodes(serfMembers []serfClient.Member, lat, long float64) []s
 	})
 	var returnMembers []serfClient.Member
 	index := 0
-	for (len(returnMembers) < 5) && (index < len(nodeDistances)) {
+	for (len(returnMembers) < selectNodeCount) && (index < len(nodeDistances)) {
 		returnMembers = append(returnMembers, nodeDistances[index].Nodes...)
 		index++
 	}
@@ -169,6 +169,7 @@ func main() {
 	useSerf := fs.Bool("use-serf", false, "Use serf playback URLs")
 	useRandomSerfMember := fs.Bool("random-serf-member", false, "Use a random member from serf member list")
 	serfPullCount := fs.Int("pull-count", 1, "Number of serf nodes to pull playback from (requires `--use-serf`)")
+	serfNodeCount := fs.Int("serf-node-count", 5, "Count of serf nodes when selecting nearest members")
 	latitude := fs.Float64("latitude", 0, "latitude/geolocation of this record testing instance")
 	longitude := fs.Float64("longitude", 0, "longitude/geolocation of this record testing instance")
 
@@ -257,7 +258,7 @@ func main() {
 	}
 	serfOptions := recordtester.SerfOptions{
 		UseSerf:          *useSerf,
-		SerfMembers:      getClosestSerfNodes(serfMembers, *latitude, *longitude),
+		SerfMembers:      getClosestSerfNodes(serfMembers, *serfNodeCount, *latitude, *longitude),
 		RandomSerfMember: *useRandomSerfMember,
 		SerfPullCount:    *serfPullCount,
 	}
