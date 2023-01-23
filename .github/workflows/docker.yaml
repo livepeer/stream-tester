@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build and publish docker images
+    name: Build and publish ${{ matrix.build.name }} docker images
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -79,7 +79,7 @@ jobs:
           platforms: linux/amd64
           push: true
           build-args: |
-            version=${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+            version=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
           tags: ${{ steps.meta.outputs.tags }}
           file: 'docker/${{ matrix.build.file }}'
           labels: ${{ steps.meta.outputs.labels }}
