@@ -6,16 +6,17 @@ ENV	GOARCH="${TARGETARCH}"
 WORKDIR	/root
 
 ENV	GOFLAGS "-mod=readonly"
-ARG	version
 
 COPY	go.mod go.sum	./
 
 RUN	go mod download
 
+ARG	version
+
 COPY	.	.
 
-RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/streamtester/streamtester.go
-RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/recordtester/recordtester.go
+RUN	CGO_ENABLED=0 go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/streamtester/streamtester.go \
+	&& CGO_ENABLED=0 go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/recordtester/recordtester.go
 
 FROM --platform=$TARGETPLATFORM	debian:stretch-slim
 
@@ -25,7 +26,6 @@ RUN	apt update && \
 	apt install -yqq ca-certificates curl && \
 	apt clean
 
-COPY --from=builder	/root/streamtester	/usr/local/bin/streamtester
-COPY --from=builder	/root/recordtester	/usr/local/bin/recordtester
+COPY --from=builder	/root/streamtester	/root/recordtester	/usr/local/bin/
 
 RUN	for b in recordtester streamtester; do ln -s /usr/local/bin/$b ./$b; done

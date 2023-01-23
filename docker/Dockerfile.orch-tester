@@ -13,7 +13,9 @@ RUN	go mod download
 
 COPY	.	.
 
-RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" \
+ARG	version
+
+RUN	CGO_ENABLED=0 go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" \
 	-tags mainnet \
 	cmd/orch-tester/orch_tester.go cmd/orch-tester/broadcaster_metrics.go
 
@@ -30,7 +32,5 @@ WORKDIR /root
 
 COPY --from=builder	/root/official_test_source_2s_keys_24pfs_30s_hls	official_test_source_2s_keys_24pfs_30s_hls
 COPY --from=builder	/root/orch_tester	/usr/local/bin/orch_tester
-
-RUN	ln -s /usr/local/bin/orch_tester ./
 
 ENTRYPOINT ["/usr/local/bin/orch_tester"]
