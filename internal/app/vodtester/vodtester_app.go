@@ -129,7 +129,7 @@ func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration ti
 		glog.Errorf("Error importing asset err=%v", err)
 		return nil, fmt.Errorf("error importing asset: %w", err)
 	}
-	glog.Infof("Importing asset taskId=%s outputAssetId=%s", importTask.ID, importAsset.ID)
+	glog.Infof("Importing asset taskId=%s outputAssetId=%s pipelineStrategy=%s", importTask.ID, importAsset.ID, vt.CatalystPipelineStrategy)
 
 	err = vt.CheckTaskProcessing(taskPollDuration, *importTask)
 
