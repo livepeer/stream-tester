@@ -155,7 +155,7 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 		ID: requestUpload.Task.ID,
 	}
 
-	glog.Infof("Uploading to endpoint=%s", uploadEndpoint)
+	glog.Infof("Uploading to endpoint=%s pipelineStrategy=%s", uploadEndpoint, vt.CatalystPipelineStrategy)
 
 	file, err := os.Open(fileName)
 
@@ -194,6 +194,8 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 	uploadTask := api.Task{
 		ID: requestUpload.Task.ID,
 	}
+
+	glog.Infof("Uploading (resumable) to endpoint=%s pipelineStrategy=%s", requestUpload.Url, vt.CatalystPipelineStrategy)
 
 	file, err := os.Open(fileName)
 
