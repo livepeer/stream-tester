@@ -10,9 +10,13 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/go-api-client"
+
 	"github.com/livepeer/stream-tester/internal/app/common"
+	"github.com/livepeer/stream-tester/m3u8"
 	"golang.org/x/sync/errgroup"
 )
+
+const maxTimeToWaitForManifest = 20 * time.Second
 
 type (
 	// IVodTester ...
@@ -219,6 +223,34 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 	}
 
 	return err
+}
+
+func (vt *vodTester) checkPlayback(playbackID string, duration time.Duration) error {
+	pinfo, err := vt.Lapi.GetPlaybackInfo(playbackID)
+	if err != nil {
+		return fmt.Errorf("error getting playback info: %w", err)
+	}
+
+	var url string
+	for _, src := range pinfo.Meta.Source {
+		if src.Type == api.PlaybackInfoSourceTypeHLS {
+			url = src.Url
+			break
+		}
+	}
+	if url == "" {
+		return fmt.Errorf("no HLS source found in playback info")
+	}
+
+	stats, err := m3u8.CheckStats(vt.Ctx, url, 0, maxTimeToWaitForManifest)
+	if err != nil {
+		return err
+	}
+	if numRenditions := len(stats.SegmentsNum); numRenditions <= 1 {
+		return fmt.Errorf("no transcoded renditions found in playlist")
+	}
+
+	return nil
 }
 
 // Patches the target URL with the source URL host, only if the latter is not
