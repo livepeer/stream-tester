@@ -225,8 +225,16 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 	return err
 }
 
-func (vt *vodTester) checkPlayback(playbackID string, duration time.Duration) error {
-	pinfo, err := vt.Lapi.GetPlaybackInfo(playbackID)
+func (vt *vodTester) checkPlayback(assetID string) error {
+	asset, err := vt.Lapi.GetAsset(assetID, false)
+	if err != nil {
+		return fmt.Errorf("error getting asset: %w", err)
+	} else if asset.VideoSpec.DurationSec <= 0 {
+		return fmt.Errorf("missing asset duration (%f)", asset.VideoSpec.DurationSec)
+	}
+	duration := time.Duration(asset.VideoSpec.DurationSec * float64(time.Second))
+
+	pinfo, err := vt.Lapi.GetPlaybackInfo(asset.PlaybackID)
 	if err != nil {
 		return fmt.Errorf("error getting playback info: %w", err)
 	}
@@ -242,7 +250,7 @@ func (vt *vodTester) checkPlayback(playbackID string, duration time.Duration) er
 		return fmt.Errorf("no HLS source found in playback info")
 	}
 
-	stats, err := m3u8.CheckStats(vt.Ctx, url, 0, maxTimeToWaitForManifest)
+	stats, err := m3u8.CheckStats(vt.Ctx, url, duration, maxTimeToWaitForManifest)
 	if err != nil {
 		return err
 	}
