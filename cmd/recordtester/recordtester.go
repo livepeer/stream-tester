@@ -73,7 +73,7 @@ func getDistance(lat1, lon1, lat2, lon2 float64) float64 {
 	// haversine formula
 	a := math.Sin(lat2-lat1)*math.Sin(lat2-lat1) +
 		math.Cos(lat1)*math.Cos(lat2)*
-		math.Sin(lon2-lon1)*math.Sin(lon2-lon1)
+			math.Sin(lon2-lon1)*math.Sin(lon2-lon1)
 	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 
 	distance := earthRadius * c
@@ -206,6 +206,13 @@ func main() {
 	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
 	fmt.Printf("Production: %v\n", model.Production)
 
+	// Print out the args so that we know what the app is starting with after the various arg sources have been checked
+	var args = []string{}
+	fs.VisitAll(func(f *flag.Flag) {
+		args = append(args, fmt.Sprintf("%s=%s", f.Name, f.Value))
+	})
+	fmt.Printf("Starting up with arguments: %s\n", strings.Join(args, ", "))
+
 	if *version {
 		return
 	}
@@ -232,15 +239,6 @@ func main() {
 
 	gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
 	defer gcancel()
-	// es := checkDown(gctx, "https://fra-cdn.livepeer.monster/recordings/474a6bc4-94fd-469d-a8c4-ec94bceb0323/index.m3u8", *testDuration)
-	// os.Exit(es)
-	// return
-
-	// if *profiles == 0 {
-	// 	fmt.Println("Number of profiles couldn't be set to zero")
-	// 	os.Exit(1)
-	// }
-	// model.ProfilesNum = int(*profiles)
 
 	if *testDuration == 0 {
 		glog.Fatal("--test-dur should be specified")
@@ -280,15 +278,9 @@ func main() {
 	}
 
 	var lapi *api.Client
-	var createdAPIStreams []string
 	cleanup := func(fn, fa string) {
 		if fn != fa {
 			os.Remove(fn)
-		}
-		if lapi != nil && len(createdAPIStreams) > 0 {
-			// for _, sid := range createdAPIStreams {
-			// lapi.DeleteStream(sid)
-			// }
 		}
 	}
 	exit := func(exitCode int, fn, fa string, err error) {
@@ -319,15 +311,6 @@ func main() {
 	for _, url := range strings.Split(*analyzerServers, ",") {
 		lanalyzers[url] = client.NewAnalyzer(url, *apiToken, userAgent, 0)
 	}
-
-	/*
-		sessionsx, err := lapi.GetSessions("1f770f0a-9177-49bd-a848-023abee7c09b")
-		if err != nil {
-			glog.Errorf("Error getting sessions for stream id=%s err=%v", ".ID", err)
-			exit(252, fileName, *fileArg, err)
-		}
-		glog.Infof("Sessions: %+v", sessionsx)
-	*/
 
 	exitc := make(chan os.Signal, 1)
 	signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
