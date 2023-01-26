@@ -33,9 +33,10 @@ func NewVodTester(gctx context.Context, opts common.TesterOptions) IVodTester {
 	ctx, cancel := context.WithCancel(gctx)
 	vt := &vodTester{
 		TesterApp: common.TesterApp{
-			Lapi:       opts.API,
-			Ctx:        ctx,
-			CancelFunc: cancel,
+			Lapi:                     opts.API,
+			Ctx:                      ctx,
+			CancelFunc:               cancel,
+			CatalystPipelineStrategy: opts.CatalystPipelineStrategy,
 		},
 	}
 	return vt
