@@ -395,6 +395,7 @@ func main() {
 				API:                      lapi,
 				CatalystPipelineStrategy: *catalystPipelineStrategy,
 			}
+			glog.Warningf("vtOpts catalystPipelineStrategy=%v", *catalystPipelineStrategy)
 			eg.Go(func() error {
 				cvtOpts := common.ContinuousTesterOptions{
 					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,

@@ -38,6 +38,8 @@ func NewVodTester(gctx context.Context, opts common.TesterOptions) IVodTester {
 			CancelFunc: cancel,
 		},
 	}
+
+	glog.Warningf("NewVodTester pipelineStrategy=%s", opts.CatalystPipelineStrategy)
 	return vt
 }
 

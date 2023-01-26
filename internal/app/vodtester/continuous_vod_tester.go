@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/internal/app/common"
 )
 
@@ -29,6 +30,7 @@ func NewContinuousVodTester(gctx context.Context, opts common.ContinuousTesterOp
 }
 
 func (cvt *continuousVodTester) Start(fileName string, vodImportUrl string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error {
+	glog.Warningf("continuousVodTester.Start pipelineStrategy=%s", cvt.opts.CatalystPipelineStrategy)
 	start := func(ctx context.Context) error {
 		vt := NewVodTester(ctx, cvt.opts)
 		return vt.Start(fileName, vodImportUrl, taskPollDuration)
