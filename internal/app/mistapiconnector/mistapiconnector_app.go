@@ -471,12 +471,17 @@ func (mc *mac) triggerLiveTrackList(w http.ResponseWriter, r *http.Request, line
 		videoTracksNum := tl.CountVideoTracks()
 		playbackID := mistStreamName2playbackID(lines[0])
 		glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
+
 		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			info.mu.Lock()
-			alreadyStarted := info.multistreamStarted
-			info.multistreamStarted = true
+			shouldStart := !info.multistreamStarted &&
+				len(info.stream.Multistream.Targets) > 0 && videoTracksNum > 1
+			if shouldStart {
+				info.multistreamStarted = true
+			}
 			info.mu.Unlock()
-			if !alreadyStarted && len(info.stream.Multistream.Targets) > 0 && videoTracksNum > 1 {
+
+			if shouldStart {
 				mc.startMultistream(lines[0], playbackID, info)
 			}
 		}
