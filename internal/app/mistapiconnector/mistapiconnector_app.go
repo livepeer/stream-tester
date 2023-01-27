@@ -929,40 +929,49 @@ func (mc *mac) getStreamInfoLogged(playbackID string) (*streamInfo, bool) {
 
 func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 	playbackID = mistStreamName2playbackID(playbackID)
+
 	mc.mu.RLock()
 	info := mc.streamInfo[playbackID]
 	mc.mu.RUnlock()
-	if info == nil {
-		glog.Infof("getStreamInfo: Fetching stream not found in memory. playbackID=%s", playbackID)
-		stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
-		if err != nil {
-			return nil, fmt.Errorf("error getting stream by playback ID %s: %w", playbackID, err)
-		}
-		pushes := make(map[string]*pushStatus)
-		for _, ref := range stream.Multistream.Targets {
-			target, pushURL, err := mc.getPushUrl(info.stream, &ref)
-			if err != nil {
-				return nil, err
-			}
-			pushes[pushURL] = &pushStatus{
-				target:  target,
-				profile: ref.Profile,
-				// Assume setup was all successful
-				pushStartEmitted: true,
-			}
-		}
-		glog.Infof("getStreamInfo: Created info lazily for stream inherited from ancestor mapic. playbackID=%s id=%s numPushes=%d", playbackID, stream.ID, len(pushes))
-		mc.mu.Lock()
-		mc.streamInfo[playbackID] = &streamInfo{
-			id:         stream.ID,
-			stream:     stream,
-			done:       make(chan struct{}),
-			pushStatus: pushes,
-			// Assume setup was all successful
-			multistreamStarted: true,
-		}
-		mc.mu.Unlock()
+
+	if info != nil {
+		return info, nil
 	}
+
+	glog.Infof("getStreamInfo: Fetching stream not found in memory. playbackID=%s", playbackID)
+	stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting stream by playback ID %s: %w", playbackID, err)
+	}
+
+	pushes := make(map[string]*pushStatus)
+	for _, ref := range stream.Multistream.Targets {
+		target, pushURL, err := mc.getPushUrl(stream, &ref)
+		if err != nil {
+			return nil, err
+		}
+		pushes[pushURL] = &pushStatus{
+			target:  target,
+			profile: ref.Profile,
+			// Assume setup was all successful
+			pushStartEmitted: true,
+		}
+	}
+
+	info = &streamInfo{
+		id:         stream.ID,
+		stream:     stream,
+		done:       make(chan struct{}),
+		pushStatus: pushes,
+		// Assume setup was all successful
+		multistreamStarted: true,
+	}
+	glog.Infof("getStreamInfo: Created info lazily for stream. playbackID=%s id=%s numPushes=%d", playbackID, stream.ID, len(pushes))
+
+	mc.mu.Lock()
+	mc.streamInfo[playbackID] = info
+	mc.mu.Unlock()
+
 	return info, nil
 }
 
