@@ -269,7 +269,10 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 				mc.createStreamLock.Lock()
 				defer mc.createStreamLock.Unlock()
 
-				if info, ok := mc.getStreamInfoLogged(playbackID); ok {
+				mc.mu.RLock()
+				info := mc.streamInfo[playbackID]
+				mc.mu.RUnlock()
+				if info != nil {
 					info.mu.Lock()
 					streamStopped := info.stopped
 					info.mu.Unlock()
