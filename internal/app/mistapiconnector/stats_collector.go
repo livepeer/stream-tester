@@ -69,8 +69,11 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error getting stream info for %s: %w", streamID, err)
 		}
-		if info == nil {
-			glog.Infof("Mist exported metrics from unknown stream. streamId=%q metrics=%+v", streamID, metrics)
+		if info.isLazy {
+			// avoid spamming metrics for playback-only catalyst instances. This means
+			// that if mapic restarts we will stop sending metrics from previous
+			// streams as well, but that's a minor issue (curr stream health is dying).
+			glog.Infof("Skipping metrics for lazily created stream info. streamId=%q metrics=%+v", streamID, metrics)
 			continue
 		}
 		mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)

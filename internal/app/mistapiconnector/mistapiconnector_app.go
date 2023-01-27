@@ -57,6 +57,7 @@ type (
 
 	streamInfo struct {
 		id        string
+		isLazy    bool
 		stream    *api.Stream
 		startedAt time.Time
 
@@ -966,6 +967,7 @@ func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
 	info = &streamInfo{
 		id:         stream.ID,
 		stream:     stream,
+		isLazy:     true, // flag it as a lazy stream info to avoid sending metrics
 		done:       make(chan struct{}),
 		pushStatus: pushes,
 		// Assume setup was all successful
