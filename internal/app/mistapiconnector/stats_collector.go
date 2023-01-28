@@ -13,7 +13,7 @@ import (
 )
 
 type infoProvider interface {
-	getStreamInfo(mistID string) *streamInfo
+	getStreamInfo(mistID string) (*streamInfo, error)
 }
 
 type metricsCollector struct {
@@ -26,6 +26,7 @@ type metricsCollector struct {
 
 func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
 	mc := &metricsCollector{nodeID, ownRegion, mapi, producer, amqpExchange, infop}
+	mc.collectMetricsLogged(ctx, period)
 	go mc.mainLoop(ctx, period)
 }
 
@@ -37,12 +38,16 @@ func (c *metricsCollector) mainLoop(loopCtx context.Context, period time.Duratio
 		case <-loopCtx.Done():
 			return
 		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(loopCtx, period)
-			if err := c.collectMetrics(ctx); err != nil {
-				glog.Errorf("Error collecting mist metrics. err=%v", err)
-			}
-			cancel()
+			c.collectMetricsLogged(loopCtx, period)
 		}
+	}
+}
+
+func (c *metricsCollector) collectMetricsLogged(ctx context.Context, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if err := c.collectMetrics(ctx); err != nil {
+		glog.Errorf("Error collecting mist metrics. err=%v", err)
 	}
 }
 
@@ -60,13 +65,19 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 	streamsMetrics := compileStreamMetrics(mistStats)
 
 	for streamID, metrics := range streamsMetrics {
-		info := c.getStreamInfo(streamID)
-		if info == nil {
-			glog.Infof("Mist exported metrics from unknown stream. streamId=%q metrics=%+v", streamID, metrics)
+		info, err := c.getStreamInfo(streamID)
+		if err != nil {
+			return fmt.Errorf("error getting stream info for %s: %w", streamID, err)
+		}
+		if info.isLazy {
+			// avoid spamming metrics for playback-only catalyst instances. This means
+			// that if mapic restarts we will stop sending metrics from previous
+			// streams as well, but that's a minor issue (curr stream health is dying).
+			glog.Infof("Skipping metrics for lazily created stream info. streamId=%q metrics=%+v", streamID, metrics)
 			continue
 		}
 		mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)
-		err := c.producer.Publish(ctx, event.AMQPMessage{
+		err = c.producer.Publish(ctx, event.AMQPMessage{
 			Exchange: c.amqpExchange,
 			Key:      fmt.Sprintf("stream.metrics.%s", info.stream.ID),
 			Body:     mseEvent,
@@ -87,6 +98,10 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 	multistream := make([]*data.MultistreamTargetMetrics, len(metrics.pushes))
 	for i, push := range metrics.pushes {
 		pushInfo := info.pushStatus[push.OriginalURI]
+		if pushInfo == nil {
+			glog.Infof("Mist exported metrics from unknown push. streamId=%q pushURL=%q", info.id, push.OriginalURI)
+			continue
+		}
 		var metrics *data.MultistreamMetrics
 		if push.Stats != nil {
 			metrics = &data.MultistreamMetrics{
@@ -94,14 +109,16 @@ func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *stream
 				Bytes:       push.Stats.Bytes,
 				MediaTimeMs: push.Stats.MediaTime,
 			}
-			if metrics.Bytes > pushInfo.pushedBytes {
-				census.IncMultistreamBytes(metrics.Bytes-pushInfo.pushedBytes, info.stream.PlaybackID) // manifestID === playbackID
-				pushInfo.pushedBytes = metrics.Bytes
+			if last := pushInfo.metrics; last != nil {
+				if metrics.Bytes > last.Bytes {
+					census.IncMultistreamBytes(metrics.Bytes-last.Bytes, info.stream.PlaybackID) // manifestID === playbackID
+				}
+				if metrics.MediaTimeMs > last.MediaTimeMs {
+					diff := time.Duration(metrics.MediaTimeMs-last.MediaTimeMs) * time.Millisecond
+					census.IncMultistreamTime(diff, info.stream.PlaybackID)
+				}
 			}
-			if mediaTime := time.Duration(metrics.MediaTimeMs) * time.Millisecond; mediaTime > pushInfo.pushedMediaTime {
-				census.IncMultistreamTime(mediaTime-pushInfo.pushedMediaTime, info.stream.PlaybackID)
-				pushInfo.pushedMediaTime = mediaTime
-			}
+			pushInfo.metrics = metrics
 		}
 		multistream[i] = &data.MultistreamTargetMetrics{
 			Target:  pushToMultistreamTargetInfo(pushInfo),

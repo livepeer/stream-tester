@@ -2,49 +2,33 @@ package mistapiconnector
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
-	"github.com/livepeer/stream-tester/apis/livepeer"
 	"github.com/livepeer/stream-tester/apis/mist"
-	mistapi "github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"go.etcd.io/etcd/client/pkg/v3/transport"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/client/v3/concurrency"
-	"google.golang.org/grpc"
 )
 
 const streamPlaybackPrefix = "playback_"
-const traefikKeyPathRouters = `traefik/http/routers/`
-const traefikKeyPathServices = `traefik/http/services/`
-const traefikKeyPathMiddlewares = `traefik/http/middlewares/`
 const audioAlways = "always"
 const audioRecord = "record"
 const audioEnabledStreamSuffix = "rec"
-const etcdDialTimeout = 5 * time.Second
-const etcdAutoSyncInterval = 5 * time.Minute
-const etcdSessionTTL = 10 // in seconds
-const etcdSessionRecoverBackoff = 3 * time.Second
-const etcdSessionRecoverTimeout = 2 * time.Minute
 const waitForPushError = 7 * time.Second
 const keepStreamAfterEnd = 15 * time.Second
 const statsCollectionPeriod = 10 * time.Second
@@ -55,8 +39,6 @@ const eventMultistreamConnected = "multistream.connected"
 const eventMultistreamError = "multistream.error"
 const eventMultistreamDisconnected = "multistream.disconnected"
 
-var playbackPrefixes = []string{"hls", "cmaf"}
-
 type (
 	// IMac creates new Mist API Connector application
 	IMac interface {
@@ -65,29 +47,25 @@ type (
 		SrvShutCh() chan error
 	}
 
-	etcdRevData struct {
-		revision int64
-		entries  []string
-	}
-
 	pushStatus struct {
-		target           *livepeer.MultistreamTarget
+		target           *api.MultistreamTarget
 		profile          string
 		pushStartEmitted bool
 		pushStopped      bool
-		pushedBytes      int64
-		pushedMediaTime  time.Duration
+		metrics          *data.MultistreamMetrics
 	}
 
 	streamInfo struct {
-		id                 string
+		id        string
+		isLazy    bool
+		stream    *api.Stream
+		startedAt time.Time
+
+		mu                 sync.Mutex
+		done               chan struct{}
 		stopped            bool
 		multistreamStarted bool
-		stream             *livepeer.CreateStreamResp
-		done               chan struct{}
-		mu                 sync.Mutex
 		pushStatus         map[string]*pushStatus
-		startedAt          time.Time
 	}
 
 	trackListDesc struct {
@@ -114,17 +92,15 @@ type (
 	MacOptions struct {
 		NodeID, MistHost string
 		MistAPI          *mist.API
-		LivepeerAPI      *livepeer.API
+		LivepeerAPI      *api.Client
 		BalancerHost     string
 		CheckBandwidth   bool
 		RoutePrefix, PlaybackDomain, MistURL,
 		SendAudio, BaseStreamName string
-		EtcdEndpoints                 []string
-		EtcdCaCert, EtcdCert, EtcdKey string
-		AMQPUrl, OwnRegion            string
-		MistStreamSource              string
-		MistHardcodedBroadcasters     string
-		NoMistScrapeMetrics           bool
+		AMQPUrl, OwnRegion        string
+		MistStreamSource          string
+		MistHardcodedBroadcasters string
+		NoMistScrapeMetrics       bool
 	}
 
 	trackList map[string]*trackListDesc
@@ -133,11 +109,12 @@ type (
 		ctx                       context.Context
 		cancel                    context.CancelFunc
 		mapi                      *mist.API
-		lapi                      *livepeer.API
+		lapi                      *api.Client
 		balancerHost              string
 		srv                       *http.Server
 		srvShutCh                 chan error
 		mu                        sync.RWMutex
+		createStreamLock          sync.Mutex
 		mistHot                   string
 		checkBandwidth            bool
 		routePrefix               string
@@ -145,17 +122,12 @@ type (
 		playbackDomain            string
 		sendAudio                 string
 		baseStreamName            string
-		useEtcd                   bool
-		etcdClient                *clientv3.Client
-		etcdSession               *concurrency.Session
-		etcdPub2rev               map[string]etcdRevData // public key to revision of etcd keys
-		pub2info                  map[string]*streamInfo // public key to info
+		streamInfo                map[string]*streamInfo // public key to info
 		producer                  *event.AMQPProducer
 		nodeID                    string
 		ownRegion                 string
 		mistStreamSource          string
 		mistHardcodedBroadcasters string
-		// pub2id         map[string]string // public key to stream id
 	}
 )
 
@@ -164,12 +136,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 	if opts.BalancerHost != "" && !strings.Contains(opts.BalancerHost, ":") {
 		opts.BalancerHost = opts.BalancerHost + ":8042" // must set default port for Mist's Load Balancer
 	}
-	useEtcd := false
-	var cli *clientv3.Client
-	var sess *concurrency.Session
-	var err error
 	ctx, cancel := context.WithCancel(context.Background())
-
 	var producer *event.AMQPProducer
 	if opts.AMQPUrl != "" {
 		pu, err := url.Parse(opts.AMQPUrl)
@@ -193,67 +160,19 @@ func NewMac(opts MacOptions) (IMac, error) {
 	} else {
 		glog.Infof("AMQP url is empty!")
 	}
-
-	glog.Infof("etcd endpoints: %+v, len %d", opts.EtcdEndpoints, len(opts.EtcdEndpoints))
-	if len(opts.EtcdEndpoints) > 0 {
-		var tcfg *tls.Config
-		if opts.EtcdCaCert != "" || opts.EtcdCert != "" || opts.EtcdKey != "" {
-			tlsifo := transport.TLSInfo{
-				CertFile:      opts.EtcdCert,
-				KeyFile:       opts.EtcdKey,
-				TrustedCAFile: opts.EtcdCaCert,
-			}
-			tcfg, err = tlsifo.ClientConfig()
-			if err != nil {
-				cancel()
-				return nil, err
-			}
-		}
-		useEtcd = true
-		cli, err = clientv3.New(clientv3.Config{
-			Endpoints:        opts.EtcdEndpoints,
-			DialTimeout:      etcdDialTimeout,
-			AutoSyncInterval: etcdAutoSyncInterval,
-			TLS:              tcfg,
-			DialOptions:      []grpc.DialOption{grpc.WithBlock()},
-		})
-		if err != nil {
-			err = fmt.Errorf("mist-api-connector: Error connecting etcd err=%w", err)
-			cancel()
-			return nil, err
-		}
-		syncCtx, syncCancel := context.WithTimeout(ctx, etcdDialTimeout)
-		err = cli.Sync(syncCtx)
-		syncCancel()
-		if err != nil {
-			err = fmt.Errorf("mist-api-connector: Error syncing etcd endpoints err=%w", err)
-			cancel()
-			return nil, err
-		}
-		sess, err = newEtcdSession(cli)
-		if err != nil {
-			cancel()
-			return nil, err
-		}
-	}
 	mc := &mac{
-		nodeID:         opts.NodeID,
-		mistHot:        opts.MistHost,
-		mapi:           opts.MistAPI,
-		lapi:           opts.LivepeerAPI,
-		checkBandwidth: opts.CheckBandwidth,
-		balancerHost:   opts.BalancerHost,
-		// pub2id:         make(map[string]string), // public key to stream id
-		pub2info:                  make(map[string]*streamInfo), // public key to info
+		nodeID:                    opts.NodeID,
+		mistHot:                   opts.MistHost,
+		mapi:                      opts.MistAPI,
+		lapi:                      opts.LivepeerAPI,
+		checkBandwidth:            opts.CheckBandwidth,
+		balancerHost:              opts.BalancerHost,
+		streamInfo:                make(map[string]*streamInfo),
 		routePrefix:               opts.RoutePrefix,
 		mistURL:                   opts.MistURL,
 		playbackDomain:            opts.PlaybackDomain,
 		sendAudio:                 opts.SendAudio,
 		baseStreamName:            opts.BaseStreamName,
-		useEtcd:                   useEtcd,
-		etcdClient:                cli,
-		etcdSession:               sess,
-		etcdPub2rev:               make(map[string]etcdRevData), // public key to revision of etcd keys
 		srvShutCh:                 make(chan error),
 		ctx:                       ctx,
 		cancel:                    cancel,
@@ -262,7 +181,6 @@ func NewMac(opts MacOptions) (IMac, error) {
 		mistStreamSource:          opts.MistStreamSource,
 		mistHardcodedBroadcasters: opts.MistHardcodedBroadcasters,
 	}
-	go mc.recoverSessionLoop()
 	if producer != nil && !opts.NoMistScrapeMetrics {
 		startMetricsCollector(ctx, statsCollectionPeriod, opts.NodeID, opts.OwnRegion, opts.MistAPI, producer, ownExchangeName, mc)
 	}
@@ -270,7 +188,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 }
 
 // LivepeerProfiles2MistProfiles converts Livepeer's API profiles to Mist's ones
-func LivepeerProfiles2MistProfiles(lps []livepeer.Profile) []mist.Profile {
+func LivepeerProfiles2MistProfiles(lps []api.Profile) []mist.Profile {
 	var res []mist.Profile
 	for _, p := range lps {
 		mp := mist.Profile{
@@ -310,10 +228,9 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 		if mc.baseStreamName != "" && strings.Contains(playbackID, "+") {
 			playbackID = strings.Split(playbackID, "+")[1]
 		}
-		mc.mu.Lock()
-		if info, has := mc.pub2info[playbackID]; has {
+		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			glog.Infof("Setting stream's protocol=%s manifestID=%s playbackID=%s active status to false", protocol, info.id, playbackID)
-			_, err := mc.lapi.SetActiveR(info.id, false, info.startedAt)
+			_, err := mc.lapi.SetActive(info.id, false, info.startedAt)
 			if err != nil {
 				glog.Error(err)
 			}
@@ -321,12 +238,9 @@ func (mc *mac) triggerConnClose(w http.ResponseWriter, r *http.Request, lines []
 			info.mu.Lock()
 			info.stopped = true
 			info.mu.Unlock()
-			go mc.removeInfoAfter(playbackID, info)
+			mc.removeInfoDelayed(playbackID, info.done)
 			metrics.StopStream(true)
-		} else {
-			glog.Warningf("%s conn close stream playbackID=%s not found", protocol, playbackID)
 		}
-		mc.mu.Unlock()
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("yes"))
@@ -350,11 +264,15 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 				// urip[2] = streamPlaybackPrefix + urip[2]
 				playbackID := urip[2]
 				streamNameInMist := streamPlaybackPrefix + playbackID
-				// check if stream is in our map of currently playing streams
-				mc.mu.Lock()
-				defer mc.mu.Unlock() // hold the lock until exit so that trigger to RTMP_REWRITE can't create
-				// another Mist stream in the same time
-				if info, has := mc.pub2info[playbackID]; has {
+				// hold the creation lock until exit so that another trigger to
+				// RTMP_REWRITE can't create a Mist stream at the same time
+				mc.createStreamLock.Lock()
+				defer mc.createStreamLock.Unlock()
+
+				mc.mu.RLock()
+				info := mc.streamInfo[playbackID]
+				mc.mu.RUnlock()
+				if info != nil {
 					info.mu.Lock()
 					streamStopped := info.stopped
 					info.mu.Unlock()
@@ -431,54 +349,6 @@ func (mc *mac) triggerDefaultStream(w http.ResponseWriter, r *http.Request, line
 	return true
 }
 
-func (mc *mac) generateRouteKeys(stream *livepeer.CreateStreamResp) []string {
-	serviceName := mc.routePrefix + serviceNameFromMistURL(mc.mistURL)
-	wildcardPlaybackID := mc.wildcardPlaybackID(stream)
-	playbackID := mc.routePrefix + stream.PlaybackID
-
-	keys := []string{
-		traefikKeyPathServices + serviceName + "/loadbalancer/servers/0/url",
-		mc.mistURL,
-		traefikKeyPathServices + serviceName + "/loadbalancer/passhostheader",
-		"false",
-	}
-
-	// Add a millisecond timestamp as the priority so new streams always win over old, stale streams
-	priority := strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10)
-
-	for _, prefix := range playbackPrefixes {
-		playbackIDPrefix := fmt.Sprintf("%s-%s", playbackID, prefix)
-		keys = append(keys,
-			traefikKeyPathRouters+playbackIDPrefix+"/service",
-			serviceName,
-			traefikKeyPathRouters+playbackIDPrefix+"/priority",
-			priority,
-		)
-		if mc.baseStreamName == "" {
-			rule := fmt.Sprintf("HostRegexp(`%s`) && PathPrefix(`/%s/%s/`)", mc.playbackDomain, prefix, stream.PlaybackID)
-			keys = append(keys, traefikKeyPathRouters+playbackIDPrefix+"/rule", rule)
-		} else {
-			rule := fmt.Sprintf("HostRegexp(`%s`) && (PathPrefix(`/%s/%s/`) || PathPrefix(`/%s/%s/`))", mc.playbackDomain, prefix, stream.PlaybackID, prefix, wildcardPlaybackID)
-			keys = append(keys,
-				traefikKeyPathRouters+playbackIDPrefix+"/rule",
-				rule,
-				traefikKeyPathRouters+playbackIDPrefix+"/middlewares/0",
-				playbackIDPrefix+"-1",
-				traefikKeyPathRouters+playbackIDPrefix+"/middlewares/1",
-				playbackIDPrefix+"-2",
-
-				traefikKeyPathMiddlewares+playbackIDPrefix+"-1/stripprefix/prefixes/0",
-				fmt.Sprintf(`/%s/%s`, prefix, stream.PlaybackID),
-				traefikKeyPathMiddlewares+playbackIDPrefix+"-1/stripprefix/prefixes/1",
-				fmt.Sprintf(`/%s/%s`, prefix, wildcardPlaybackID),
-				traefikKeyPathMiddlewares+playbackIDPrefix+"-2/addprefix/prefix",
-				fmt.Sprintf(`/%s/%s`, prefix, wildcardPlaybackID),
-			)
-		}
-	}
-	return keys
-}
-
 func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines []string, rawRequest string) bool {
 	if len(lines) != 3 {
 		glog.Errorf("Expected 3 lines, got %d, request \n%s", len(lines), rawRequest)
@@ -510,14 +380,6 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 	stream, err := mc.lapi.GetStreamByKey(streamKey)
 	if err != nil || stream == nil {
 		glog.Errorf("Error getting stream info from Livepeer API streamKey=%s err=%v", streamKey, err)
-		/*
-			if err == livepeer.ErrNotExists {
-				// mc.mapi.DeleteStreams(streamKey)
-				w.Write([]byte(lines[0]))
-			} else {
-				w.WriteHeader(http.StatusNotFound)
-			}
-		*/
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("false"))
 		return false
@@ -541,21 +403,21 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 
 	if stream.PlaybackID != "" {
 		mc.mu.Lock()
-		defer mc.mu.Unlock()
-		if info, has := mc.pub2info[stream.PlaybackID]; has {
+		if info, ok := mc.streamInfo[stream.PlaybackID]; ok {
 			info.mu.Lock()
-			streamStopped := info.stopped
+			glog.Infof("Stream playbackID=%s stopped=%v already in map, removing its info", stream.PlaybackID, info.stopped)
 			info.mu.Unlock()
-			glog.Infof("Stream playbackID=%s stopped=%v already in map, removing its info", stream.PlaybackID, streamStopped)
-			mc.removeInfo(stream.PlaybackID)
+			mc.removeInfoLocked(stream.PlaybackID)
 		}
-		mc.pub2info[stream.PlaybackID] = &streamInfo{
+		info := &streamInfo{
 			id:         stream.ID,
 			stream:     stream,
 			done:       make(chan struct{}),
 			pushStatus: make(map[string]*pushStatus),
 			startedAt:  time.Now(),
 		}
+		mc.streamInfo[stream.PlaybackID] = info
+		mc.mu.Unlock()
 		streamKey = stream.PlaybackID
 		// streamKey = strings.ReplaceAll(streamKey, "-", "")
 		if mc.balancerHost != "" {
@@ -566,7 +428,7 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		} else {
 			responseName = mc.wildcardPlaybackID(stream)
 		}
-		ok, err := mc.lapi.SetActiveR(stream.ID, true, mc.pub2info[stream.PlaybackID].startedAt)
+		ok, err := mc.lapi.SetActive(stream.ID, true, info.startedAt)
 		if err != nil {
 			glog.Error(err)
 		} else if !ok {
@@ -584,18 +446,6 @@ func (mc *mac) triggerPushRewrite(w http.ResponseWriter, r *http.Request, lines 
 		err = mc.createMistStream(streamKey, stream, false)
 		if err != nil {
 			glog.Errorf("Error creating stream on the Mist server: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("false"))
-			return true
-		}
-	}
-	if mc.useEtcd {
-		// now create routing rule in the etcd for HLS playback
-		err = mc.putEtcdKeys(mc.etcdSession, stream.PlaybackID,
-			mc.generateRouteKeys(stream)...,
-		)
-		if err != nil {
-			glog.Errorf("Error creating etcd Traefik rule for playbackID=%s streamID=%s err=%v", stream.PlaybackID, stream.ID, err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("false"))
 			return true
@@ -625,12 +475,17 @@ func (mc *mac) triggerLiveTrackList(w http.ResponseWriter, r *http.Request, line
 		videoTracksNum := tl.CountVideoTracks()
 		playbackID := mistStreamName2playbackID(lines[0])
 		glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
-		glog.Infof("===> pub %+v", mc.pub2info)
-		mc.mu.RLock()
-		defer mc.mu.RUnlock()
-		if info, ok := mc.pub2info[playbackID]; ok {
-			if len(info.stream.Multistream.Targets) > 0 && !info.multistreamStarted && videoTracksNum > 1 {
+
+		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
+			info.mu.Lock()
+			shouldStart := !info.multistreamStarted &&
+				len(info.stream.Multistream.Targets) > 0 && videoTracksNum > 1
+			if shouldStart {
 				info.multistreamStarted = true
+			}
+			info.mu.Unlock()
+
+			if shouldStart {
 				mc.startMultistream(lines[0], playbackID, info)
 			}
 		}
@@ -647,11 +502,7 @@ func (mc *mac) triggerPushOutStart(w http.ResponseWriter, r *http.Request, lines
 	}
 	go func() {
 		playbackID := mistStreamName2playbackID(lines[0])
-		// glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
-		glog.Infof("===> pub %+v", mc.pub2info)
-		mc.mu.RLock()
-		defer mc.mu.RUnlock()
-		if info, ok := mc.pub2info[playbackID]; ok {
+		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			info.mu.Lock()
 			defer info.mu.Unlock()
 			if pushInfo, ok := info.pushStatus[lines[1]]; ok {
@@ -684,7 +535,7 @@ func (mc *mac) waitPush(info *streamInfo, pushInfo *pushStatus) {
 	}
 }
 
-func (mc *mac) emitStreamStateEvent(stream *livepeer.CreateStreamResp, state data.StreamState) {
+func (mc *mac) emitStreamStateEvent(stream *api.Stream, state data.StreamState) {
 	streamID := stream.ParentID
 	if streamID == "" {
 		streamID = stream.ID
@@ -693,7 +544,7 @@ func (mc *mac) emitStreamStateEvent(stream *livepeer.CreateStreamResp, state dat
 	mc.emitAmqpEvent(ownExchangeName, "stream.state."+streamID, stateEvt)
 }
 
-func (mc *mac) emitWebhookEvent(stream *livepeer.CreateStreamResp, pushInfo *pushStatus, eventKey string) {
+func (mc *mac) emitWebhookEvent(stream *api.Stream, pushInfo *pushStatus, eventKey string) {
 	streamID, sessionID := stream.ParentID, stream.ID
 	if streamID == "" {
 		streamID = sessionID
@@ -738,10 +589,7 @@ func (mc *mac) triggerPushEnd(w http.ResponseWriter, r *http.Request, lines []st
 	go func() {
 		playbackID := mistStreamName2playbackID(lines[1])
 		// glog.Infof("for video %s got %d video tracks", playbackID, videoTracksNum)
-		glog.Infof("===> pub %+v", mc.pub2info)
-		mc.mu.RLock()
-		defer mc.mu.RUnlock()
-		if info, ok := mc.pub2info[playbackID]; ok {
+		if info, ok := mc.getStreamInfoLogged(playbackID); ok {
 			info.mu.Lock()
 			defer info.mu.Unlock()
 			if pushInfo, ok := info.pushStatus[lines[2]]; ok {
@@ -767,7 +615,7 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 		w.Write([]byte("false"))
 		return
 	}
-	b, err := ioutil.ReadAll(r.Body)
+	b, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("false"))
@@ -821,177 +669,36 @@ func (mc *mac) handleDefaultStreamTrigger(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (mc *mac) removeInfoAfter(playbackID string, info *streamInfo) {
-	select {
-	case <-info.done:
-		return
-	case <-time.After(keepStreamAfterEnd):
-	}
-	mc.mu.Lock()
-	mc.removeInfo(playbackID)
-	mc.mu.Unlock()
+func (mc *mac) removeInfoDelayed(playbackID string, done chan struct{}) {
+	go func() {
+		select {
+		case <-done:
+			return
+		case <-time.After(keepStreamAfterEnd):
+			mc.removeInfo(playbackID)
+		}
+	}()
 }
 
-// must be called inside mu.Lock
 func (mc *mac) removeInfo(playbackID string) {
-	if info, ok := mc.pub2info[playbackID]; ok {
-		close(info.done)
-		delete(mc.pub2info, playbackID)
-		if mc.useEtcd {
-			mc.deleteEtcdKeys(playbackID)
-		}
-	}
-}
-
-// putEtcdKeys puts keys in one transaction
-func (mc *mac) putEtcdKeys(sess *concurrency.Session, playbackID string, kvs ...string) error {
-	if len(kvs) == 0 || len(kvs)%2 != 0 {
-		return errors.New("number of arguments should be even")
-	}
-	cmp := clientv3.Compare(clientv3.CreateRevision(kvs[0]), ">", -1) // basically noop - will always be true
-	thn := make([]clientv3.Op, 0, len(kvs)/2)
-	get := clientv3.OpGet(kvs[0])
-	for i := 0; i < len(kvs); i += 2 {
-		thn = append(thn, clientv3.OpPut(kvs[i], kvs[i+1], clientv3.WithLease(sess.Lease())))
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
-	resp, err := mc.etcdClient.Txn(ctx).If(cmp).Then(thn...).Else(get).Commit()
-	cancel()
-	if err != nil {
-		glog.Errorf("mist-api-connector: error putting keys for playbackID=%s err=%v", playbackID, err)
-		return err
-	}
-	if resp == nil {
-		return fmt.Errorf("mist-api-connector: error putting keys for playbackID=%s - nil response", playbackID)
-	}
-	if !resp.Succeeded {
-		panic("unexpected")
-	}
-	glog.Infof("for playbackID=%s created %d keys in etcd revision=%d", playbackID, len(kvs)/2, resp.Header.Revision)
-	mc.etcdPub2rev[playbackID] = etcdRevData{resp.Header.Revision, kvs}
-	return nil
-}
-
-func (mc *mac) deleteEtcdKeys(playbackID string) {
-	etcdPlaybackID := mc.routePrefix + playbackID
-	if rev, ok := mc.etcdPub2rev[playbackID]; ok {
-		pathKey := traefikKeyPathRouters + etcdPlaybackID
-		// Just need to check the revision on one rule, use the first playbackPrefix
-		ruleKey := fmt.Sprintf("%s-%s/rule", pathKey, playbackPrefixes[0])
-		cmp := clientv3.Compare(clientv3.ModRevision(ruleKey), "=", rev.revision)
-		ctx, cancel := context.WithTimeout(context.Background(), etcdDialTimeout)
-		thn := []clientv3.Op{
-			clientv3.OpDelete(pathKey, clientv3.WithRange(pathKey+"~")),
-		}
-		if mc.baseStreamName != "" {
-			middleWaresKey := traefikKeyPathMiddlewares + etcdPlaybackID
-			thn = append(thn,
-				clientv3.OpDelete(middleWaresKey, clientv3.WithRange(middleWaresKey+"~")),
-			)
-		}
-		get := clientv3.OpGet(ruleKey)
-		resp, err := mc.etcdClient.Txn(ctx).If(cmp).Then(thn...).Else(get).Commit()
-		cancel()
-		delete(mc.etcdPub2rev, playbackID)
-		if err != nil || resp == nil {
-			glog.Errorf("mist-api-connector: error deleting keys for playbackID=%s err=%v", playbackID, err)
-		} else {
-			if resp.Succeeded {
-				glog.Errorf("mist-api-connector: success deleting keys for playbackID=%s rev=%d", playbackID, rev.revision)
-			} else {
-				var curRev int64
-				if len(resp.Responses) > 0 && len(resp.Responses[0].GetResponseRange().Kvs) > 0 {
-					curRev = resp.Responses[0].GetResponseRange().Kvs[0].CreateRevision
-				}
-				glog.Errorf("mist-api-connector: unsuccessful deleting keys for playbackID=%s myRev=%d curRev=%d pathKey=%s",
-					playbackID, rev.revision, curRev, pathKey)
-			}
-		}
-	} else {
-		glog.Errorf("mist-api-connector: etcd revision for stream playbackID=%s not found", playbackID)
-	}
-}
-
-func (mc *mac) recoverSessionLoop() {
-	if mc.etcdClient == nil {
-		return
-	}
-	clientCtx := mc.etcdClient.Ctx()
-	for clientCtx.Err() == nil {
-		select {
-		case <-clientCtx.Done():
-			// client closed, which means app shutted down
-			return
-		case <-mc.etcdSession.Done():
-		}
-		glog.Infof("etcd session with lease=%d is lost, trying to recover", mc.etcdSession.Lease())
-
-		ctx, cancel := context.WithTimeout(clientCtx, etcdSessionRecoverTimeout)
-		err := mc.recoverEtcdSession(ctx)
-		cancel()
-
-		if err != nil && clientCtx.Err() == nil {
-			glog.Errorf("mist-api-connector: unrecoverable etcd session. err=%q.", err)
-			return
-		}
-	}
-}
-
-func (mc *mac) recoverEtcdSession(ctx context.Context) error {
-	for {
-		err := mc.recoverEtcdSessionOnce()
-		if err == nil {
-			return nil
-		}
-
-		select {
-		case <-time.After(etcdSessionRecoverBackoff):
-			glog.Errorf("mist-api-connector: Retrying etcd session recover. err=%q", err)
-			continue
-		case <-ctx.Done():
-			return fmt.Errorf("mist-api-connector: Timeout recovering etcd session err=%w", err)
-		}
-	}
-}
-
-func (mc *mac) recoverEtcdSessionOnce() error {
-	sess, err := newEtcdSession(mc.etcdClient)
-	if err != nil {
-		return err
-	}
-
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
-	for playbackId, rev := range mc.etcdPub2rev {
-		err := mc.putEtcdKeys(sess, playbackId, rev.entries...)
-		if err != nil {
-			sess.Close()
-			return fmt.Errorf("mist-api-connector: Error re-creating etcd keys. playbackId=%q, err=%w", playbackId, err)
-		}
-	}
-
-	mc.etcdSession.Close()
-	mc.etcdSession = sess
-	glog.Infof("Recovered etcd session. lease=%d", sess.Lease())
-	return nil
+	mc.removeInfoLocked(playbackID)
 }
 
-func newEtcdSession(etcdClient *clientv3.Client) (*concurrency.Session, error) {
-	glog.Infof("Starting new etcd session ttl=%d", etcdSessionTTL)
-	sess, err := concurrency.NewSession(etcdClient, concurrency.WithTTL(etcdSessionTTL))
-	if err != nil {
-		glog.Errorf("Failed to start etcd session err=%q", err)
-		return nil, fmt.Errorf("mist-api-connector: Error creating etcd session err=%w", err)
+// must be called inside mc.mu.Lock
+func (mc *mac) removeInfoLocked(playbackID string) {
+	if info, ok := mc.streamInfo[playbackID]; ok {
+		close(info.done)
+		delete(mc.streamInfo, playbackID)
 	}
-	glog.Infof("etcd got lease %d", sess.Lease())
-	return sess, nil
 }
 
-func (mc *mac) wildcardPlaybackID(stream *livepeer.CreateStreamResp) string {
+func (mc *mac) wildcardPlaybackID(stream *api.Stream) string {
 	return mc.baseNameForStream(stream) + "+" + stream.PlaybackID
 }
 
-func (mc *mac) baseNameForStream(stream *livepeer.CreateStreamResp) string {
+func (mc *mac) baseNameForStream(stream *api.Stream) string {
 	baseName := mc.baseStreamName
 	if mc.shouldEnableAudio(stream) {
 		baseName += audioEnabledStreamSuffix
@@ -999,7 +706,7 @@ func (mc *mac) baseNameForStream(stream *livepeer.CreateStreamResp) string {
 	return baseName
 }
 
-func (mc *mac) shouldEnableAudio(stream *livepeer.CreateStreamResp) bool {
+func (mc *mac) shouldEnableAudio(stream *api.Stream) bool {
 	audio := false
 	if mc.sendAudio == audioAlways {
 		audio = true
@@ -1009,7 +716,7 @@ func (mc *mac) shouldEnableAudio(stream *livepeer.CreateStreamResp) bool {
 	return audio
 }
 
-func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStreamResp, skipTranscoding bool) error {
+func (mc *mac) createMistStream(streamName string, stream *api.Stream, skipTranscoding bool) error {
 	if len(stream.Presets) == 0 && len(stream.Profiles) == 0 {
 		stream.Presets = append(stream.Presets, "P144p30fps16x9")
 	}
@@ -1025,10 +732,6 @@ func (mc *mac) createMistStream(streamName string, stream *livepeer.CreateStream
 }
 
 func (mc *mac) handleHealthcheck(w http.ResponseWriter, r *http.Request) {
-	if !mc.isEtcdSessionHealthy() {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
 	if config, err := mc.mapi.GetConfig(); err != nil || config == nil {
 		glog.Errorf("Error getting mist config on healthcheck. err=%q", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -1037,22 +740,9 @@ func (mc *mac) handleHealthcheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (mc *mac) isEtcdSessionHealthy() bool {
-	if mc.etcdSession == nil {
-		return true
-	}
-	select {
-	case <-mc.etcdSession.Done():
-		return false
-	default:
-		return true
-	}
-}
-
 func (mc *mac) webServerHandlers() *http.ServeMux {
 	mux := http.NewServeMux()
 	utils.AddPProfHandlers(mux)
-	// mux.Handle("/metrics", utils.InitPrometheusExporter("mistconnector"))
 	mux.Handle("/metrics", metrics.Exporter)
 
 	mux.HandleFunc("/_healthz", mc.handleHealthcheck)
@@ -1078,8 +768,8 @@ func (mc *mac) StartServer(bindAddr string) error {
 	return err
 }
 
-func (mc *mac) addTrigger(triggers mistapi.TriggersMap, name, ownURI, def, params string, sync bool) bool {
-	nt := mistapi.Trigger{
+func (mc *mac) addTrigger(triggers mist.TriggersMap, name, ownURI, def, params string, sync bool) bool {
+	nt := mist.Trigger{
 		Default: def,
 		Handler: ownURI,
 		Sync:    sync,
@@ -1107,7 +797,7 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 		return err
 	}
 	if triggers == nil {
-		triggers = make(mistapi.TriggersMap)
+		triggers = make(mist.TriggersMap)
 	}
 	added := mc.addTrigger(triggers, "PUSH_REWRITE", ownURI, "000reallylongnonexistenstreamnamethatreallyshouldntexist000", "", true)
 	// DEFAULT_STREAM needed when using Mist's load balancing
@@ -1138,21 +828,13 @@ func (mc *mac) SetupTriggers(ownURI string) error {
 	return err
 }
 
-func serviceNameFromMistURL(murl string) string {
-	murl = strings.TrimPrefix(murl, "https://")
-	murl = strings.TrimPrefix(murl, "http://")
-	murl = strings.ReplaceAll(murl, ".", "-")
-	murl = strings.ReplaceAll(murl, "/", "-")
-	return murl
-}
-
 func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *streamInfo) {
 	for i := range info.stream.Multistream.Targets {
-		go func(targetRef livepeer.MultistreamTargetRef) {
+		go func(targetRef api.MultistreamTargetRef) {
 			glog.Infof("==> starting multistream %s", targetRef.ID)
-			target, err := mc.lapi.GetMultistreamTargetR(targetRef.ID)
+			target, pushURL, err := mc.getPushUrl(info.stream, &targetRef)
 			if err != nil {
-				glog.Errorf("Error fetching multistream target. targetId=%s stream=%s err=%v",
+				glog.Errorf("Error building multistream target push URL. targetId=%s stream=%s err=%v",
 					targetRef.ID, wildcardPlaybackID, err)
 				return
 			} else if target.Disabled {
@@ -1160,55 +842,30 @@ func (mc *mac) startMultistream(wildcardPlaybackID, playbackID string, info *str
 					targetRef.ID, wildcardPlaybackID)
 				return
 			}
-			// Find the actual parameters of the profile we're using
-			var videoSelector string
-			// Not actually the source. But the highest quality.
-			if targetRef.Profile == "source" {
-				videoSelector = "maxbps"
-			} else {
-				var prof *livepeer.Profile
-				for _, p := range info.stream.Profiles {
-					if p.Name == targetRef.Profile {
-						prof = &p
-						break
-					}
-				}
-				if prof == nil {
-					glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=couldn't find profile %s",
-						targetRef.ID, wildcardPlaybackID, targetRef.Profile)
-					return
-				}
-				videoSelector = fmt.Sprintf("~%dx%d", prof.Width, prof.Height)
-			}
-			join := "?"
-			if strings.Contains(target.URL, "?") {
-				join = "&"
-			}
-			audioSelector := "maxbps"
-			if targetRef.VideoOnly {
-				audioSelector = "silent"
-			}
-			// Inject ?video=~widthxheight to send the correct rendition
-			selectorURL := fmt.Sprintf("%s%svideo=%s&audio=%s", target.URL, join, videoSelector, audioSelector)
-			info.mu.Lock()
-			info.pushStatus[selectorURL] = &pushStatus{target: target, profile: targetRef.Profile}
 
-			err = mc.mapi.StartPush(wildcardPlaybackID, selectorURL)
+			info.mu.Lock()
+			info.pushStatus[pushURL] = &pushStatus{
+				target:  target,
+				profile: targetRef.Profile,
+				metrics: &data.MultistreamMetrics{},
+			}
+			info.mu.Unlock()
+
+			err = mc.mapi.StartPush(wildcardPlaybackID, pushURL)
 			if err != nil {
 				glog.Errorf("Error starting multistream to target. targetId=%s stream=%s err=%v", targetRef.ID, wildcardPlaybackID, err)
-				delete(info.pushStatus, selectorURL)
+				info.mu.Lock()
+				delete(info.pushStatus, pushURL)
 				info.mu.Unlock()
 				return
 			}
-			glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, selectorURL)
-			info.mu.Unlock()
+			glog.Infof("Started multistream to target. targetId=%s stream=%s url=%s", wildcardPlaybackID, targetRef.ID, pushURL)
 		}(info.stream.Multistream.Targets[i])
 	}
 }
 
 func (mc *mac) startSignalHandler() {
 	exitc := make(chan os.Signal, 1)
-	// signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	signal.Notify(exitc, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		gotSig := <-exitc
@@ -1224,70 +881,108 @@ func (mc *mac) startSignalHandler() {
 	}()
 }
 
+func (mc *mac) getPushUrl(stream *api.Stream, targetRef *api.MultistreamTargetRef) (*api.MultistreamTarget, string, error) {
+	target, err := mc.lapi.GetMultistreamTarget(targetRef.ID)
+	if err != nil {
+		return nil, "", fmt.Errorf("error fetching multistream target %s: %w", targetRef.ID, err)
+	}
+	// Find the actual parameters of the profile we're using
+	var videoSelector string
+	// Not actually the source. But the highest quality.
+	if targetRef.Profile == "source" {
+		videoSelector = "maxbps"
+	} else {
+		var prof *api.Profile
+		for _, p := range stream.Profiles {
+			if p.Name == targetRef.Profile {
+				prof = &p
+				break
+			}
+		}
+		if prof == nil {
+			return nil, "", fmt.Errorf("profile not found: %s", targetRef.Profile)
+		}
+		videoSelector = fmt.Sprintf("~%dx%d", prof.Width, prof.Height)
+	}
+	join := "?"
+	if strings.Contains(target.URL, "?") {
+		join = "&"
+	}
+	audioSelector := "maxbps"
+	if targetRef.VideoOnly {
+		audioSelector = "silent"
+	}
+	// Inject ?video=~widthxheight to send the correct rendition
+	return target, fmt.Sprintf("%s%svideo=%s&audio=%s", target.URL, join, videoSelector, audioSelector), nil
+}
+
 func (mc *mac) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	// start calling /setactve/false and sending events on active connections eagerly
-	deactivateGroup := &sync.WaitGroup{}
-	mc.deactiveAllStreams(ctx, deactivateGroup)
-
 	err := mc.srv.Shutdown(ctx)
 	glog.Infof("Done shutting down server with err=%v", err)
-	if mc.useEtcd {
-		mc.etcdClient.Close()
-	}
-	deactivateGroup.Wait()
 
 	mc.cancel()
 	mc.srvShutCh <- err
 }
 
-// deactiveAllStreams sends /setactive/false for all the active streams as well
-// as AMQP events with the inactive state.
-func (mc *mac) deactiveAllStreams(ctx context.Context, wg *sync.WaitGroup) {
-	mc.mu.Lock()
-	ids := make([]string, 0, len(mc.pub2info))
-	streams := make([]*livepeer.CreateStreamResp, 0, len(mc.pub2info))
-	for _, info := range mc.pub2info {
-		ids = append(ids, info.id)
-		streams = append(streams, info.stream)
+func (mc *mac) getStreamInfoLogged(playbackID string) (*streamInfo, bool) {
+	info, err := mc.getStreamInfo(playbackID)
+	if err != nil {
+		glog.Errorf("Error getting stream info playbackID=%q err=%q", playbackID, err)
+		return nil, false
 	}
-	mc.mu.Unlock()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for _, stream := range streams {
-			mc.emitStreamStateEvent(stream, data.StreamState{Active: false})
-		}
-		err := mc.producer.Shutdown(ctx)
-		if err != nil {
-			glog.Errorf("Error shutting down AMQP producer err=%v", err)
-		}
-	}()
-
-	if len(ids) == 0 {
-		return
-	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		updated, err := mc.lapi.DeactivateMany(ids)
-		if err != nil {
-			glog.Errorf("Error setting many isActive to false ids=%+v err=%v", ids, err)
-		} else {
-			glog.Infof("Set many isActive to false ids=%+v rowCount=%d", ids, updated)
-		}
-	}()
+	return info, true
 }
 
-func (mc *mac) getStreamInfo(mistID string) *streamInfo {
-	playbackID := mistStreamName2playbackID(mistID)
+func (mc *mac) getStreamInfo(playbackID string) (*streamInfo, error) {
+	playbackID = mistStreamName2playbackID(playbackID)
+
 	mc.mu.RLock()
-	info := mc.pub2info[playbackID]
+	info := mc.streamInfo[playbackID]
 	mc.mu.RUnlock()
-	return info
+
+	if info != nil {
+		return info, nil
+	}
+
+	glog.Infof("getStreamInfo: Fetching stream not found in memory. playbackID=%s", playbackID)
+	stream, err := mc.lapi.GetStreamByPlaybackID(playbackID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting stream by playback ID %s: %w", playbackID, err)
+	}
+
+	pushes := make(map[string]*pushStatus)
+	for _, ref := range stream.Multistream.Targets {
+		target, pushURL, err := mc.getPushUrl(stream, &ref)
+		if err != nil {
+			return nil, err
+		}
+		pushes[pushURL] = &pushStatus{
+			target:  target,
+			profile: ref.Profile,
+			// Assume setup was all successful
+			pushStartEmitted: true,
+		}
+	}
+
+	info = &streamInfo{
+		id:         stream.ID,
+		stream:     stream,
+		isLazy:     true, // flag it as a lazy stream info to avoid sending metrics
+		done:       make(chan struct{}),
+		pushStatus: pushes,
+		// Assume setup was all successful
+		multistreamStarted: true,
+	}
+	glog.Infof("getStreamInfo: Created info lazily for stream. playbackID=%s id=%s numPushes=%d", playbackID, stream.ID, len(pushes))
+
+	mc.mu.Lock()
+	mc.streamInfo[playbackID] = info
+	mc.mu.Unlock()
+
+	return info, nil
 }
 
 func (mc *mac) SrvShutCh() chan error {
