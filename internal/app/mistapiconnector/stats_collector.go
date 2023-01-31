@@ -70,7 +70,7 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 	}
 	streamsMetrics := compileStreamMetrics(mistStats)
 
-	eg := errgroup.Group{}
+	eg := errGroupRecv{}
 	eg.SetLimit(5)
 
 	for streamID, metrics := range streamsMetrics {
@@ -79,7 +79,7 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 		}
 
 		streamID, metrics := streamID, metrics
-		eg.Go(recovered(func() {
+		eg.GoRecovered(func() {
 			info, err := c.getStreamInfo(streamID)
 			if err != nil {
 				glog.Errorf("Error getting stream info for streamId=%s err=%q", streamID, err)
@@ -93,7 +93,7 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 				return
 			}
 
-			eg.Go(recovered(func() {
+			eg.GoRecovered(func() {
 				info.mu.Lock()
 				timeSinceBumped := time.Since(info.lastSeenBumpedAt)
 				info.mu.Unlock()
@@ -109,9 +109,9 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 				info.mu.Lock()
 				info.lastSeenBumpedAt = time.Now()
 				info.mu.Unlock()
-			}))
+			})
 
-			eg.Go(recovered(func() {
+			eg.GoRecovered(func() {
 				mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)
 				err = c.producer.Publish(ctx, event.AMQPMessage{
 					Exchange: c.amqpExchange,
@@ -121,8 +121,8 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 				if err != nil {
 					glog.Errorf("Error sending mist stream metrics event. err=%q streamId=%q event=%+v", err, info.stream.ID, mseEvent)
 				}
-			}))
-		}))
+			})
+		})
 	}
 
 	return eg.Wait()
@@ -202,8 +202,10 @@ func compileStreamMetrics(mistStats *mist.MistStats) map[string]*streamMetrics {
 	return streamsMetrics
 }
 
-func recovered(f func()) func() error {
-	return func() (err error) {
+type errGroupRecv struct{ errgroup.Group }
+
+func (eg *errGroupRecv) GoRecovered(f func()) {
+	eg.Group.Go(func() (err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				glog.Errorf("Panic in metrics collector. value=%v stack=%s", r, debug.Stack())
@@ -212,5 +214,5 @@ func recovered(f func()) func() error {
 		}()
 		f()
 		return nil
-	}
+	})
 }
