@@ -69,9 +69,14 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 	streamsMetrics := compileStreamMetrics(mistStats)
 
 	for streamID, metrics := range streamsMetrics {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		info, err := c.getStreamInfo(streamID)
 		if err != nil {
-			return fmt.Errorf("error getting stream info for %s: %w", streamID, err)
+			glog.Errorf("Error getting stream info for streamId=%s err=%q", streamID, err)
+			continue
 		}
 		if info.isLazy {
 			// avoid spamming metrics for playback-only catalyst instances. This means
@@ -80,15 +85,14 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 			glog.Infof("Skipping metrics for lazily created stream info. streamId=%q metrics=%+v", streamID, metrics)
 			continue
 		}
+
 		if time.Since(info.lastSeenBumpedAt) > lastSeenBumpPeriod {
 			info.lastSeenBumpedAt = time.Now()
 			if _, err := c.lapi.SetActive(info.stream.ID, true, info.startedAt); err != nil {
 				glog.Errorf("Error updating stream last seen. err=%q streamId=%q", err, info.stream.ID)
-				if ctx.Err() != nil {
-					return err
-				}
 			}
 		}
+
 		mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)
 		err = c.producer.Publish(ctx, event.AMQPMessage{
 			Exchange: c.amqpExchange,
@@ -97,9 +101,6 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 		})
 		if err != nil {
 			glog.Errorf("Error sending mist stream metrics event. err=%q streamId=%q event=%+v", err, info.stream.ID, mseEvent)
-			if ctx.Err() != nil {
-				return err
-			}
 		}
 	}
 	return nil
