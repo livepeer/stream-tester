@@ -11,6 +11,7 @@ import (
 	"github.com/livepeer/livepeer-data/pkg/event"
 	"github.com/livepeer/stream-tester/apis/mist"
 	census "github.com/livepeer/stream-tester/internal/metrics"
+	"golang.org/x/sync/errgroup"
 )
 
 const lastSeenBumpPeriod = 30 * time.Second
@@ -68,42 +69,66 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 	}
 	streamsMetrics := compileStreamMetrics(mistStats)
 
+	eg := errgroup.Group{}
+	eg.SetLimit(5)
+
 	for streamID, metrics := range streamsMetrics {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
-		info, err := c.getStreamInfo(streamID)
-		if err != nil {
-			glog.Errorf("Error getting stream info for streamId=%s err=%q", streamID, err)
-			continue
-		}
-		if info.isLazy {
-			// avoid spamming metrics for playback-only catalyst instances. This means
-			// that if mapic restarts we will stop sending metrics from previous
-			// streams as well, but that's a minor issue (curr stream health is dying).
-			glog.Infof("Skipping metrics for lazily created stream info. streamId=%q metrics=%+v", streamID, metrics)
-			continue
-		}
-
-		if time.Since(info.lastSeenBumpedAt) > lastSeenBumpPeriod {
-			info.lastSeenBumpedAt = time.Now()
-			if _, err := c.lapi.SetActive(info.stream.ID, true, info.startedAt); err != nil {
-				glog.Errorf("Error updating stream last seen. err=%q streamId=%q", err, info.stream.ID)
+		streamID, metrics := streamID, metrics
+		eg.Go(func() error {
+			info, err := c.getStreamInfo(streamID)
+			if err != nil {
+				glog.Errorf("Error getting stream info for streamId=%s err=%q", streamID, err)
+				return nil
 			}
-		}
+			if info.isLazy {
+				// avoid spamming metrics for playback-only catalyst instances. This means
+				// that if mapic restarts we will stop sending metrics from previous
+				// streams as well, but that's a minor issue (curr stream health is dying).
+				glog.Infof("Skipping metrics for lazily created stream info. streamId=%q metrics=%+v", streamID, metrics)
+				return nil
+			}
 
-		mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)
-		err = c.producer.Publish(ctx, event.AMQPMessage{
-			Exchange: c.amqpExchange,
-			Key:      fmt.Sprintf("stream.metrics.%s", info.stream.ID),
-			Body:     mseEvent,
+			eg.Go(func() error {
+				info.mu.Lock()
+				timeSinceBumped := time.Since(info.lastSeenBumpedAt)
+				info.mu.Unlock()
+				if timeSinceBumped <= lastSeenBumpPeriod {
+					return nil
+				}
+
+				if _, err := c.lapi.SetActive(info.stream.ID, true, info.startedAt); err != nil {
+					glog.Errorf("Error updating stream last seen. err=%q streamId=%q", err, info.stream.ID)
+					return nil
+				}
+
+				info.mu.Lock()
+				info.lastSeenBumpedAt = time.Now()
+				info.mu.Unlock()
+				return nil
+			})
+
+			eg.Go(func() error {
+				mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)
+				err = c.producer.Publish(ctx, event.AMQPMessage{
+					Exchange: c.amqpExchange,
+					Key:      fmt.Sprintf("stream.metrics.%s", info.stream.ID),
+					Body:     mseEvent,
+				})
+				if err != nil {
+					glog.Errorf("Error sending mist stream metrics event. err=%q streamId=%q event=%+v", err, info.stream.ID, mseEvent)
+				}
+				return nil
+			})
+
+			return nil
 		})
-		if err != nil {
-			glog.Errorf("Error sending mist stream metrics event. err=%q streamId=%q event=%+v", err, info.stream.ID, mseEvent)
-		}
 	}
-	return nil
+
+	return eg.Wait()
 }
 
 func createMetricsEvent(nodeID, region string, info *streamInfo, metrics *streamMetrics) *data.MediaServerMetricsEvent {
