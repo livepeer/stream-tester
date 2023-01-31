@@ -6,11 +6,14 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/livepeer-data/pkg/data"
 	"github.com/livepeer/livepeer-data/pkg/event"
 	"github.com/livepeer/stream-tester/apis/mist"
 	census "github.com/livepeer/stream-tester/internal/metrics"
 )
+
+const lastSeenBumpPeriod = 30 * time.Second
 
 type infoProvider interface {
 	getStreamInfo(mistID string) (*streamInfo, error)
@@ -19,13 +22,14 @@ type infoProvider interface {
 type metricsCollector struct {
 	nodeID, ownRegion string
 	mapi              *mist.API
+	lapi              *api.Client
 	producer          *event.AMQPProducer
 	amqpExchange      string
 	infoProvider
 }
 
-func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
-	mc := &metricsCollector{nodeID, ownRegion, mapi, producer, amqpExchange, infop}
+func startMetricsCollector(ctx context.Context, period time.Duration, nodeID, ownRegion string, mapi *mist.API, lapi *api.Client, producer *event.AMQPProducer, amqpExchange string, infop infoProvider) {
+	mc := &metricsCollector{nodeID, ownRegion, mapi, lapi, producer, amqpExchange, infop}
 	mc.collectMetricsLogged(ctx, period)
 	go mc.mainLoop(ctx, period)
 }
@@ -75,6 +79,15 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 			// streams as well, but that's a minor issue (curr stream health is dying).
 			glog.Infof("Skipping metrics for lazily created stream info. streamId=%q metrics=%+v", streamID, metrics)
 			continue
+		}
+		if time.Since(info.lastSeenBumpedAt) > lastSeenBumpPeriod {
+			info.lastSeenBumpedAt = time.Now()
+			if _, err := c.lapi.SetActive(info.stream.ID, true, info.startedAt); err != nil {
+				glog.Errorf("Error updating stream last seen. err=%q streamId=%q", err, info.stream.ID)
+				if ctx.Err() != nil {
+					return err
+				}
+			}
 		}
 		mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)
 		err = c.producer.Publish(ctx, event.AMQPMessage{

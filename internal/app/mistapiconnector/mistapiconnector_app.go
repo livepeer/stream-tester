@@ -66,6 +66,7 @@ type (
 		stopped            bool
 		multistreamStarted bool
 		pushStatus         map[string]*pushStatus
+		lastSeenBumpedAt   time.Time
 	}
 
 	trackListDesc struct {
@@ -182,7 +183,7 @@ func NewMac(opts MacOptions) (IMac, error) {
 		mistHardcodedBroadcasters: opts.MistHardcodedBroadcasters,
 	}
 	if producer != nil && !opts.NoMistScrapeMetrics {
-		startMetricsCollector(ctx, statsCollectionPeriod, opts.NodeID, opts.OwnRegion, opts.MistAPI, producer, ownExchangeName, mc)
+		startMetricsCollector(ctx, statsCollectionPeriod, opts.NodeID, opts.OwnRegion, opts.MistAPI, opts.LivepeerAPI, producer, ownExchangeName, mc)
 	}
 	return mc, nil
 }
