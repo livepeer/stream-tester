@@ -16,20 +16,20 @@ require (
 	github.com/livepeer/go-livepeer v0.5.31
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
-	github.com/livepeer/livepeer-data v0.4.11
+	github.com/livepeer/livepeer-data v0.6.2
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/peterbourgon/ff v1.7.0
+	github.com/peterbourgon/ff v1.7.1
 	github.com/peterbourgon/ff/v2 v2.0.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/common v0.37.0
-	github.com/rabbitmq/amqp091-go v1.1.0
-	github.com/rabbitmq/rabbitmq-stream-go-client v0.1.0-beta.0.20211027081212-fd5e6d497413 // indirect
-	github.com/spf13/cobra v1.2.1
+	github.com/rabbitmq/amqp091-go v1.5.0
+	github.com/rabbitmq/rabbitmq-stream-go-client v1.0.1-rc.2 // indirect
+	github.com/spf13/cobra v1.5.0
 	go.etcd.io/etcd/client/pkg/v3 v3.5.7
 	go.etcd.io/etcd/client/v3 v3.5.0-rc.0
 	go.opencensus.io v0.23.0
-	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
+	golang.org/x/net v0.0.0-20220526153639-5463443f8c37
 	golang.org/x/text v0.3.7
 	google.golang.org/api v0.46.0
 	google.golang.org/grpc v1.38.0 // indirect
@@ -88,7 +88,7 @@ require (
 	github.com/tklauser/numcpus v0.2.2 // indirect
 	go.etcd.io/etcd/api/v3 v3.5.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	go.uber.org/goleak v1.0.0 // indirect
+	go.uber.org/goleak v1.1.12 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.17.0 // indirect
 	golang.org/x/crypto v0.0.0-20211215153901-e495a2d5b3d3 // indirect
@@ -104,7 +104,7 @@ require (
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.0 // indirect
 )
 
@@ -119,6 +119,7 @@ require (
 	github.com/btcsuite/btcd v0.22.0-beta // indirect
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.5.1 // indirect
+	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/btree v1.0.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-immutable-radix v1.0.0 // indirect
@@ -128,7 +129,9 @@ require (
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
 	github.com/hashicorp/logutils v1.0.0 // indirect
 	github.com/hashicorp/memberlist v0.5.0 // indirect
+	github.com/klauspost/compress v1.15.9 // indirect
 	github.com/miekg/dns v1.1.41 // indirect
+	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/prometheus/statsd_exporter v0.22.7 // indirect
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
 )
