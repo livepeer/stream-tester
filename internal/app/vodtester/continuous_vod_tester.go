@@ -23,7 +23,7 @@ type (
 // NewContinuousVodTester returns new object
 func NewContinuousVodTester(gctx context.Context, opts common.ContinuousTesterOptions) IContinuousVodTester {
 	return &continuousVodTester{
-		ct:   common.NewContinuousTester(gctx, opts, "vod"),
+		ct:   common.NewContinuousTester(gctx, opts, "VOD"),
 		opts: opts.TesterOptions,
 	}
 }
