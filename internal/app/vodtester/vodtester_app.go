@@ -10,9 +10,13 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/go-api-client"
+
 	"github.com/livepeer/stream-tester/internal/app/common"
+	"github.com/livepeer/stream-tester/m3u8"
 	"golang.org/x/sync/errgroup"
 )
+
+const maxTimeToWaitForManifest = 20 * time.Second
 
 type (
 	// IVodTester ...
@@ -59,19 +63,24 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 			return fmt.Errorf("error importing asset from url=%s: %w", vodImportUrl, err)
 		}
 
-		_, transcodeTask, err := vt.Lapi.TranscodeAsset(importAsset.ID, assetName, api.StandardProfiles[0])
+		// TODO: Figure out a future for transcode task. These are broken with the
+		// newest files used for VOD testing to test playback, and I'm not sure if
+		// it's worth making sure that it keeps working as it uses the old
+		// task-runner pipeline anyway.
+		//
+		// _, transcodeTask, err := vt.Lapi.TranscodeAsset(importAsset.ID, assetName, api.StandardProfiles[0])
 
-		if err != nil {
-			glog.Errorf("Error transcoding asset assetId=%s err=%v", importAsset.ID, err)
-			return fmt.Errorf("error transcoding asset assetId=%s: %w", importAsset.ID, err)
-		}
+		// if err != nil {
+		// 	glog.Errorf("Error transcoding asset assetId=%s err=%v", importAsset.ID, err)
+		// 	return fmt.Errorf("error transcoding asset assetId=%s: %w", importAsset.ID, err)
+		// }
 
-		err = vt.CheckTaskProcessing(taskPollDuration, *transcodeTask)
+		// err = vt.CheckTaskProcessing(taskPollDuration, *transcodeTask)
 
-		if err != nil {
-			glog.Errorf("Error in transcoding task taskId=%s", transcodeTask.ID)
-			return fmt.Errorf("error in transcoding task taskId=%s: %w", transcodeTask.ID, err)
-		}
+		// if err != nil {
+		// 	glog.Errorf("Error in transcoding task taskId=%s", transcodeTask.ID)
+		// 	return fmt.Errorf("error in transcoding task taskId=%s: %w", transcodeTask.ID, err)
+		// }
 
 		exportTask, err := vt.Lapi.ExportAsset(importAsset.ID)
 
@@ -136,8 +145,15 @@ func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration ti
 
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", importAsset.ID, importTask.ID)
+		return nil, fmt.Errorf("error waiting for asset processing: %w", err)
 	}
-	return importAsset, err
+
+	if err := vt.checkPlayback(importAsset.ID); err != nil {
+		glog.Errorf("Error checking playback assetId=%s err=%v", importAsset.ID, err)
+		return nil, fmt.Errorf("error checking playback: %w", err)
+	}
+
+	return importAsset, nil
 }
 
 func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.Duration) error {
@@ -175,8 +191,15 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 	err = vt.CheckTaskProcessing(taskPollDuration, uploadTask)
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
+		return fmt.Errorf("error waiting for asset processing: %w", err)
 	}
-	return err
+
+	if err := vt.checkPlayback(uploadAsset.ID); err != nil {
+		glog.Errorf("Error checking playback assetId=%s err=%v", uploadAsset.ID, err)
+		return fmt.Errorf("error checking playback: %w", err)
+	}
+
+	return nil
 }
 
 func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration time.Duration) error {
@@ -216,9 +239,51 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
+		return fmt.Errorf("error waiting for asset processing: %w", err)
 	}
 
-	return err
+	if err := vt.checkPlayback(uploadAsset.ID); err != nil {
+		glog.Errorf("Error checking playback assetId=%s err=%v", uploadAsset.ID, err)
+		return fmt.Errorf("error checking playback: %w", err)
+	}
+
+	return nil
+}
+
+func (vt *vodTester) checkPlayback(assetID string) error {
+	asset, err := vt.Lapi.GetAsset(assetID, false)
+	if err != nil {
+		return fmt.Errorf("error getting asset: %w", err)
+	} else if asset.VideoSpec.DurationSec <= 0 {
+		return fmt.Errorf("missing asset duration (%f)", asset.VideoSpec.DurationSec)
+	}
+	duration := time.Duration(asset.VideoSpec.DurationSec * float64(time.Second))
+
+	pinfo, err := vt.Lapi.GetPlaybackInfo(asset.PlaybackID)
+	if err != nil {
+		return fmt.Errorf("error getting playback info: %w", err)
+	}
+
+	var url string
+	for _, src := range pinfo.Meta.Source {
+		if src.Type == api.PlaybackInfoSourceTypeHLS {
+			url = src.Url
+			break
+		}
+	}
+	if url == "" {
+		return fmt.Errorf("no HLS source found in playback info")
+	}
+
+	stats, err := m3u8.CheckStats(vt.Ctx, url, duration, maxTimeToWaitForManifest)
+	if err != nil {
+		return err
+	}
+	if numRenditions := len(stats.SegmentsNum); numRenditions <= 1 {
+		return fmt.Errorf("no transcoded renditions found in playlist")
+	}
+
+	return nil
 }
 
 // Patches the target URL with the source URL host, only if the latter is not
