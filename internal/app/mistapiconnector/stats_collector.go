@@ -77,6 +77,7 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		streamID, metrics := streamID, metrics
 
 		info, err := c.getStreamInfo(streamID)
 		if err != nil {
@@ -91,7 +92,6 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 			continue
 		}
 
-		metrics := metrics
 		eg.Go(recovered(func() {
 			info.mu.Lock()
 			timeSinceBumped := time.Since(info.lastSeenBumpedAt)
