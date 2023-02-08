@@ -70,59 +70,57 @@ func (c *metricsCollector) collectMetrics(ctx context.Context) error {
 	}
 	streamsMetrics := compileStreamMetrics(mistStats)
 
-	eg := errGroupRecv{}
+	eg := errgroup.Group{}
 	eg.SetLimit(5)
 
 	for streamID, metrics := range streamsMetrics {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-
 		streamID, metrics := streamID, metrics
-		eg.GoRecovered(func() {
-			info, err := c.getStreamInfo(streamID)
+
+		info, err := c.getStreamInfo(streamID)
+		if err != nil {
+			glog.Errorf("Error getting stream info for streamId=%s err=%q", streamID, err)
+			continue
+		}
+		if info.isLazy {
+			// avoid spamming metrics for playback-only catalyst instances. This means
+			// that if mapic restarts we will stop sending metrics from previous
+			// streams as well, but that's a minor issue (curr stream health is dying).
+			glog.Infof("Skipping metrics for lazily created stream info. streamId=%q metrics=%+v", streamID, metrics)
+			continue
+		}
+
+		eg.Go(recovered(func() {
+			info.mu.Lock()
+			timeSinceBumped := time.Since(info.lastSeenBumpedAt)
+			info.mu.Unlock()
+			if timeSinceBumped <= lastSeenBumpPeriod {
+				return
+			}
+
+			if _, err := c.lapi.SetActive(info.stream.ID, true, info.startedAt); err != nil {
+				glog.Errorf("Error updating stream last seen. err=%q streamId=%q", err, info.stream.ID)
+				return
+			}
+
+			info.mu.Lock()
+			info.lastSeenBumpedAt = time.Now()
+			info.mu.Unlock()
+		}))
+
+		eg.Go(recovered(func() {
+			mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)
+			err = c.producer.Publish(ctx, event.AMQPMessage{
+				Exchange: c.amqpExchange,
+				Key:      fmt.Sprintf("stream.metrics.%s", info.stream.ID),
+				Body:     mseEvent,
+			})
 			if err != nil {
-				glog.Errorf("Error getting stream info for streamId=%s err=%q", streamID, err)
-				return
+				glog.Errorf("Error sending mist stream metrics event. err=%q streamId=%q event=%+v", err, info.stream.ID, mseEvent)
 			}
-			if info.isLazy {
-				// avoid spamming metrics for playback-only catalyst instances. This means
-				// that if mapic restarts we will stop sending metrics from previous
-				// streams as well, but that's a minor issue (curr stream health is dying).
-				glog.Infof("Skipping metrics for lazily created stream info. streamId=%q metrics=%+v", streamID, metrics)
-				return
-			}
-
-			eg.GoRecovered(func() {
-				info.mu.Lock()
-				timeSinceBumped := time.Since(info.lastSeenBumpedAt)
-				info.mu.Unlock()
-				if timeSinceBumped <= lastSeenBumpPeriod {
-					return
-				}
-
-				if _, err := c.lapi.SetActive(info.stream.ID, true, info.startedAt); err != nil {
-					glog.Errorf("Error updating stream last seen. err=%q streamId=%q", err, info.stream.ID)
-					return
-				}
-
-				info.mu.Lock()
-				info.lastSeenBumpedAt = time.Now()
-				info.mu.Unlock()
-			})
-
-			eg.GoRecovered(func() {
-				mseEvent := createMetricsEvent(c.nodeID, c.ownRegion, info, metrics)
-				err = c.producer.Publish(ctx, event.AMQPMessage{
-					Exchange: c.amqpExchange,
-					Key:      fmt.Sprintf("stream.metrics.%s", info.stream.ID),
-					Body:     mseEvent,
-				})
-				if err != nil {
-					glog.Errorf("Error sending mist stream metrics event. err=%q streamId=%q event=%+v", err, info.stream.ID, mseEvent)
-				}
-			})
-		})
+		}))
 	}
 
 	return eg.Wait()
@@ -202,10 +200,8 @@ func compileStreamMetrics(mistStats *mist.MistStats) map[string]*streamMetrics {
 	return streamsMetrics
 }
 
-type errGroupRecv struct{ errgroup.Group }
-
-func (eg *errGroupRecv) GoRecovered(f func()) {
-	eg.Group.Go(func() (err error) {
+func recovered(f func()) func() error {
+	return func() (err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				glog.Errorf("Panic in metrics collector. value=%v stack=%s", r, debug.Stack())
@@ -214,5 +210,5 @@ func (eg *errGroupRecv) GoRecovered(f func()) {
 		}()
 		f()
 		return nil
-	})
+	}
 }
