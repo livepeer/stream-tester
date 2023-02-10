@@ -12,7 +12,7 @@ require (
 	github.com/golang/glog v1.0.0
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
-	github.com/livepeer/go-api-client v0.4.2-0.20230124192858-4ae2f6d037f3
+	github.com/livepeer/go-api-client v0.4.3-0.20230207145728-8eb78c664108
 	github.com/livepeer/go-livepeer v0.5.31
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
