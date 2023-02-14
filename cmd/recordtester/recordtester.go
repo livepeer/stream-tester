@@ -170,7 +170,7 @@ func main() {
 	testLive := fs.Bool("live", false, "Check Live workflow")
 	testVod := fs.Bool("vod", false, "Check VOD workflow")
 	transcodeBucketUrl := fs.String("transcode-bucket-url", "", "Object Store URL to test Transcode API in the format 's3+http(s)://<access-key-id>:<secret-access-key>@<endpoint>/<bucket>'")
-	transcodeW3sProof := fs.String("transcode-w3s-proof", "", "Base64-encoded UCAN delegatyion proof to interact with web3.storage API")
+	transcodeW3sProof := fs.String("transcode-w3s-proof", "", "Base64-encoded UCAN delegation proof to interact with web3.storage API")
 	testTranscode := fs.Bool("transcode", false, "Check Transcode API workflow")
 	catalystPipelineStrategy := fs.String("catalyst-pipeline-strategy", "", "Which catalyst pipeline strategy to use regarding. The appropriate values are defined by catalyst-api itself.")
 	recordObjectStoreId := fs.String("record-object-store-id", "", "ID for the Object Store to use for recording storage. Forwarded to the streams created in the API")
