@@ -8,7 +8,7 @@ require (
 	github.com/Azure/azure-storage-blob-go v0.8.0
 	github.com/Necroforger/dgrouter v0.0.0-20190528143456-040421b5a83e
 	github.com/PagerDuty/go-pagerduty v1.3.0
-	github.com/bwmarrin/discordgo v0.20.2
+	github.com/bwmarrin/discordgo v0.27.0
 	github.com/golang/glog v1.0.0
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
