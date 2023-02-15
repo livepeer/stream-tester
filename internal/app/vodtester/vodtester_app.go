@@ -75,7 +75,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 		// 	return fmt.Errorf("error transcoding asset assetId=%s: %w", importAsset.ID, err)
 		// }
 
-		// err = vt.CheckTaskProcessing(taskPollDuration, *transcodeTask)
+		// err = vt.WaitTaskProcessing(taskPollDuration, *transcodeTask)
 
 		// if err != nil {
 		// 	glog.Errorf("Error in transcoding task taskId=%s", transcodeTask.ID)
@@ -89,7 +89,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 			return fmt.Errorf("error exporting asset assetId=%s: %w", importAsset.ID, err)
 		}
 
-		err = vt.CheckTaskProcessing(taskPollDuration, *exportTask)
+		_, err = vt.WaitTaskProcessing(taskPollDuration, *exportTask)
 
 		if err != nil {
 			glog.Errorf("Error in export task taskId=%s", exportTask.ID)
@@ -141,7 +141,7 @@ func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration ti
 	}
 	glog.Infof("Importing asset taskId=%s outputAssetId=%s pipelineStrategy=%s", importTask.ID, importAsset.ID, vt.CatalystPipelineStrategy)
 
-	err = vt.CheckTaskProcessing(taskPollDuration, *importTask)
+	_, err = vt.WaitTaskProcessing(taskPollDuration, *importTask)
 
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", importAsset.ID, importTask.ID)
@@ -188,7 +188,7 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 		return fmt.Errorf("error uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
 	}
 
-	err = vt.CheckTaskProcessing(taskPollDuration, uploadTask)
+	_, err = vt.WaitTaskProcessing(taskPollDuration, uploadTask)
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
 		return fmt.Errorf("error waiting for asset processing: %w", err)
@@ -235,7 +235,7 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 		return fmt.Errorf("error resumable uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
 	}
 
-	err = vt.CheckTaskProcessing(taskPollDuration, uploadTask)
+	_, err = vt.WaitTaskProcessing(taskPollDuration, uploadTask)
 
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)

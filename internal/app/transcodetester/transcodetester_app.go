@@ -24,7 +24,7 @@ import (
 type (
 	ITranscodeTester interface {
 		// Start test. Blocks until finished.
-		Start(fileName string, transcodeBucketUrl string, taskPollDuration time.Duration) error
+		Start(fileName, transcodeBucketUrl, transcodeW3sProof string, taskPollDuration time.Duration) error
 		Cancel()
 		Done() <-chan struct{}
 	}
@@ -53,26 +53,38 @@ func NewTranscodeTester(gctx context.Context, opts common.TesterOptions) ITransc
 	return vt
 }
 
-func (tt *transcodeTester) Start(fileName string, transcodeBucketUrl string, taskPollDuration time.Duration) error {
+func (tt *transcodeTester) Start(fileName, transcodeBucketUrl, transcodeW3sProof string, taskPollDuration time.Duration) error {
 	defer tt.Cancel()
 
 	eg, egCtx := errgroup.WithContext(tt.Ctx)
 
-	eg.Go(func() error {
-		if err := tt.transcodeFromUrlTester(fileName, transcodeBucketUrl, taskPollDuration); err != nil {
-			glog.Errorf("Error in transcode from url err=%v", err)
-			return fmt.Errorf("error in transcode from url: %w", err)
-		}
-		return nil
-	})
+	if transcodeBucketUrl != "" {
+		eg.Go(func() error {
+			if err := tt.transcodeS3FromUrlTester(fileName, transcodeBucketUrl, taskPollDuration); err != nil {
+				glog.Errorf("Error in transcode S3 from url err=%v", err)
+				return fmt.Errorf("error in transcode from url: %w", err)
+			}
+			return nil
+		})
 
-	eg.Go(func() error {
-		if err := tt.transcodeFromPrivateBucketTester(fileName, transcodeBucketUrl, taskPollDuration); err != nil {
-			glog.Errorf("Error in transcode from private bucket err=%v", err)
-			return fmt.Errorf("error in transcode from private bucket: %w", err)
-		}
-		return nil
-	})
+		eg.Go(func() error {
+			if err := tt.transcodeS3FromPrivateBucketTester(fileName, transcodeBucketUrl, taskPollDuration); err != nil {
+				glog.Errorf("Error in transcode S3 from private bucket err=%v", err)
+				return fmt.Errorf("error in transcode from private bucket: %w", err)
+			}
+			return nil
+		})
+	}
+
+	if transcodeW3sProof != "" {
+		eg.Go(func() error {
+			if err := tt.transcodeWeb3StorageTester(fileName, transcodeW3sProof, taskPollDuration); err != nil {
+				glog.Errorf("Error in transcode web3.storage err=%v", err)
+				return fmt.Errorf("error in transcode web3.storage: %w", err)
+			}
+			return nil
+		})
+	}
 
 	go func() {
 		<-egCtx.Done()
@@ -86,7 +98,7 @@ func (tt *transcodeTester) Start(fileName string, transcodeBucketUrl string, tas
 	return nil
 }
 
-func (tt *transcodeTester) transcodeFromUrlTester(inUrl string, bucketUrl string, taskPollDuration time.Duration) error {
+func (tt *transcodeTester) transcodeS3FromUrlTester(inUrl string, bucketUrl string, taskPollDuration time.Duration) error {
 	os, err := parseObjectStore(bucketUrl)
 	if err != nil {
 		glog.Errorf("Error parsing bucket url=%s: err=%v", bucketUrl, err)
@@ -99,7 +111,7 @@ func (tt *transcodeTester) transcodeFromUrlTester(inUrl string, bucketUrl string
 		glog.Errorf("Error transcoding a file from url=%s: err=%v", inUrl, err)
 		return fmt.Errorf("error transcoding a file from url=%s: %w", inUrl, err)
 	}
-	return tt.checkTaskProcessingAndRenditionFiles(taskPollDuration, *task, os, path)
+	return tt.checkTaskProcessingAndRenditionFiles(taskPollDuration, task, path, &os)
 }
 
 func (tt *transcodeTester) transcodeFromUrl(inUrl string, os objectStore, path string) (*api.Task, error) {
@@ -124,7 +136,7 @@ func (tt *transcodeTester) transcodeFromUrl(inUrl string, os objectStore, path s
 	})
 }
 
-func (tt *transcodeTester) transcodeFromPrivateBucketTester(inUrl string, bucketUrl string, taskPollDuration time.Duration) error {
+func (tt *transcodeTester) transcodeS3FromPrivateBucketTester(inUrl string, bucketUrl string, taskPollDuration time.Duration) error {
 	url, err := url.Parse(inUrl)
 	if err != nil {
 		glog.Errorf("Error parsing input file url=%s: err=%v", inUrl, err)
@@ -141,7 +153,7 @@ func (tt *transcodeTester) transcodeFromPrivateBucketTester(inUrl string, bucket
 	outPath := path2.Join("/output", randPath)
 
 	if err := tt.copyFileIntoInputBucket(inUrl, os, inPath); err != nil {
-		glog.Errorf("Error copying file into input bucket=%s: err=%v", os.bucket, err)
+		glog.Errorf("Error copying file into to input bucket=%s: err=%v", os.bucket, err)
 		return fmt.Errorf("error copying file into input bucket=%s: %w", os.bucket, err)
 	}
 
@@ -151,7 +163,7 @@ func (tt *transcodeTester) transcodeFromPrivateBucketTester(inUrl string, bucket
 		return fmt.Errorf("error transcoding a file from private bucket=%s, path=%s: %w", os.bucket, inPath, err)
 	}
 
-	return tt.checkTaskProcessingAndRenditionFiles(taskPollDuration, *task, os, outPath)
+	return tt.checkTaskProcessingAndRenditionFiles(taskPollDuration, task, outPath, &os)
 }
 
 func (tt *transcodeTester) transcodeFromPrivateBucket(os objectStore, inPath, outPath string) (*api.Task, error) {
@@ -183,6 +195,35 @@ func (tt *transcodeTester) transcodeFromPrivateBucket(os objectStore, inPath, ou
 	})
 }
 
+func (tt *transcodeTester) transcodeWeb3StorageTester(inUrl string, w3sProof string, taskPollDuration time.Duration) error {
+	path := "/output"
+	task, err := tt.transcodeWeb3StorageFromUrl(inUrl, w3sProof, path)
+	if err != nil {
+		glog.Errorf("Error transcoding a file to web3.storage from url=%s: err=%v", inUrl, err)
+		return fmt.Errorf("error transcoding a file to web3.storage from url=%s: %w", inUrl, err)
+	}
+	return tt.checkTaskProcessingAndRenditionFiles(taskPollDuration, task, path, nil)
+}
+
+func (tt *transcodeTester) transcodeWeb3StorageFromUrl(inUrl, w3sProof, path string) (*api.Task, error) {
+	return tt.Lapi.TranscodeFile(api.TranscodeFileReq{
+		Input: api.TranscodeFileReqInput{
+			Url: inUrl,
+		},
+		Storage: api.TranscodeFileReqStorage{
+			Type: "web3.storage",
+			Credentials: &api.TranscodeFileReqCredentials{
+				Proof: w3sProof,
+			},
+		},
+		Outputs: api.TranscodeFileReqOutputs{
+			Hls: api.TranscodeFileReqOutputsHls{
+				Path: path,
+			},
+		},
+	})
+}
+
 func (tt *transcodeTester) copyFileIntoInputBucket(inUrl string, os objectStore, path string) error {
 	uploader := s3manager.NewUploader(newAwsSession(os))
 	resp, err := http.Get(inUrl)
@@ -199,25 +240,65 @@ func (tt *transcodeTester) copyFileIntoInputBucket(inUrl string, os objectStore,
 	return err
 }
 
-func (tt *transcodeTester) checkTaskProcessingAndRenditionFiles(taskPollDuration time.Duration, task api.Task, os objectStore, path string) error {
-	if err := tt.CheckTaskProcessing(taskPollDuration, task); err != nil {
+func (tt *transcodeTester) checkTaskProcessingAndRenditionFiles(taskPollDuration time.Duration, task *api.Task, path string, os *objectStore) error {
+	rTask, err := tt.WaitTaskProcessing(taskPollDuration, *task)
+	if err != nil {
 		glog.Errorf("Error in transcoding task taskId=%s: err=%v", task.ID, err)
 		return fmt.Errorf("error in transcoding task taskId=%s: %w", task.ID, err)
 	}
-	if err := tt.checkRenditionFiles(os, path); err != nil {
+	if err := tt.checkRenditionFiles(rTask, path, os); err != nil {
 		glog.Errorf("Error in checking rendition segments in the bucket=%s, path=%s, err=%v", os.bucket, path, err)
 		return fmt.Errorf("error in checking rendition segments in the bucket=%s, path=%s: %w", os.bucket, path, err)
 	}
 	return nil
 }
 
-func (tt *transcodeTester) checkRenditionFiles(os objectStore, path string) error {
-	svc := s3.New(newAwsSession(os))
-	_, err := svc.GetObjectWithContext(tt.Ctx, &s3.GetObjectInput{
-		Bucket: aws.String(os.bucket),
-		Key:    aws.String(path2.Join(path, "index.m3u8")),
-	})
-	return err
+func (tt *transcodeTester) checkRenditionFiles(task *api.Task, path string, os *objectStore) error {
+	pathsToCheck := []string{path2.Join(path, "index.m3u8")}
+	pathsToCheck = append(pathsToCheck, task.Output.TranscodeFile.Hls.Path)
+	for _, m := range task.Output.TranscodeFile.Mp4 {
+		pathsToCheck = append(pathsToCheck, m.Path)
+	}
+
+	if os != nil {
+		// for Object Store systems check if files are accessible by the OS URL
+		svc := s3.New(newAwsSession(*os))
+		for _, p := range pathsToCheck {
+			_, err := svc.GetObjectWithContext(tt.Ctx, &s3.GetObjectInput{
+				Bucket: aws.String(os.bucket),
+				Key:    aws.String(path2.Join(p)),
+			})
+			return err
+		}
+	}
+
+	if baseUrlStr := task.Output.TranscodeFile.BaseUrl; baseUrlStr != "" {
+		// if baseUrl is returned, then a file should be accessible by this URL
+		baseUrl, err := url.Parse(baseUrlStr)
+		if err != nil {
+			return err
+		}
+		if baseUrl.Scheme != "ipfs" {
+			// for now, we only support IPFS via the web3.storage gateway
+			return fmt.Errorf("only 'ipfs' schema is supported for baseUrl, got %s", baseUrl.Scheme)
+		}
+		w3sLinkUrl, err := url.Parse(fmt.Sprintf("https://%s.ipfs.w3s.link/", baseUrl.Host))
+		if err != nil {
+			return err
+		}
+		for _, p := range pathsToCheck {
+			w3sLinkUrl.Path = p
+			resp, err := http.Head(w3sLinkUrl.String())
+			if err != nil {
+				return err
+			}
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("cannot find rendition file: %s, HTTP status: %s", w3sLinkUrl, resp.Status)
+			}
+		}
+	}
+
+	return nil
 }
 
 func parseObjectStore(bucketUrl string) (objectStore, error) {

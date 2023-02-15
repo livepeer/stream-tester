@@ -10,7 +10,7 @@ import (
 type (
 	IContinuousTranscodeTester interface {
 		// Start test. Blocks until error.
-		Start(fileName string, transcodeBucketUrl string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error
+		Start(fileName, transcodeBucketUrl, transcodeW3sProof string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error
 	}
 
 	continuousTranscodeTester struct {
@@ -26,10 +26,10 @@ func NewContinuousTranscodeTester(gctx context.Context, opts common.ContinuousTe
 	}
 }
 
-func (ctt *continuousTranscodeTester) Start(fileName string, transcodeBucketUrl string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error {
+func (ctt *continuousTranscodeTester) Start(fileName, transcodeBucketUrl, transcodeW3sProof string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error {
 	start := func(ctx context.Context) error {
 		tt := NewTranscodeTester(ctx, ctt.opts)
-		return tt.Start(fileName, transcodeBucketUrl, taskPollDuration)
+		return tt.Start(fileName, transcodeBucketUrl, transcodeW3sProof, taskPollDuration)
 	}
 	return ctt.ct.Start(start, testDuration, pauseBetweenTests)
 }
