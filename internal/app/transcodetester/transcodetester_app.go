@@ -278,22 +278,22 @@ func (tt *transcodeTester) checkRenditionFiles(task *api.Task, path string, os *
 		if err != nil {
 			return err
 		}
-		if baseUrl.Scheme == "ipfs" {
+		if baseUrl.Scheme != "ipfs" {
 			// for now, we only support IPFS via the web3.storage gateway
-			w3sLinkBaseUrl, err := url.Parse(fmt.Sprintf("https://%s.ipfs.w3s.link/", baseUrl.Host))
+			return fmt.Errorf("only 'ipfs' schema is supported for baseUrl, got %s", baseUrl.Scheme)
+		}
+		w3sLinkBaseUrl, err := url.Parse(fmt.Sprintf("https://%s.ipfs.w3s.link/", baseUrl.Host))
+		if err != nil {
+			return err
+		}
+		for _, p := range pathsToCheck {
+			u := w3sLinkBaseUrl.JoinPath(p)
+			resp, err := http.Head(u.String())
 			if err != nil {
 				return err
 			}
-			for _, p := range pathsToCheck {
-				u := w3sLinkBaseUrl.JoinPath(p)
-				resp, err := http.Get(u.String())
-				if err != nil {
-					return err
-				}
-				if resp.StatusCode != http.StatusOK {
-					return fmt.Errorf("cannot find rendition file: %s, HTTP status: %s", u, resp.Status)
-				}
-				resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("cannot find rendition file: %s, HTTP status: %s", u, resp.Status)
 			}
 		}
 	}
