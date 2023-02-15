@@ -272,8 +272,7 @@ func (tt *transcodeTester) checkRenditionFiles(task *api.Task, path string, os *
 		}
 	}
 
-	baseUrlStr := task.Output.TranscodeFile.BaseUrl
-	if baseUrlStr != "" {
+	if baseUrlStr := task.Output.TranscodeFile.BaseUrl; baseUrlStr != "" {
 		// if baseUrl is returned, then a file should be accessible by this URL
 		baseUrl, err := url.Parse(baseUrlStr)
 		if err != nil {
