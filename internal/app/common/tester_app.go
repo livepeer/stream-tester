@@ -14,11 +14,15 @@ type (
 		CancelFunc               context.CancelFunc
 		CatalystPipelineStrategy string
 		Lapi                     *api.Client
+		TaskPollDuration         time.Duration
 	}
 
 	TesterOptions struct {
 		API                      *api.Client
 		CatalystPipelineStrategy string
+		TestDuration             time.Duration
+		TaskPollDuration         time.Duration
+		PauseBetweenTests        time.Duration
 	}
 )
 

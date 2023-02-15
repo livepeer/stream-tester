@@ -22,7 +22,7 @@ type (
 	// IVodTester ...
 	IVodTester interface {
 		// Start test. Blocks until finished.
-		Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) error
+		Start(fileName string, vodImportUrl string) error
 		Cancel()
 		Done() <-chan struct{}
 	}
@@ -41,12 +41,13 @@ func NewVodTester(gctx context.Context, opts common.TesterOptions) IVodTester {
 			Ctx:                      ctx,
 			CancelFunc:               cancel,
 			CatalystPipelineStrategy: opts.CatalystPipelineStrategy,
+			TaskPollDuration:         opts.TaskPollDuration,
 		},
 	}
 	return vt
 }
 
-func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuration time.Duration) error {
+func (vt *vodTester) Start(fileName string, vodImportUrl string) error {
 	defer vt.Cancel()
 
 	eg, egCtx := errgroup.WithContext(vt.Ctx)
@@ -56,7 +57,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 		hostName, _ := os.Hostname()
 		assetName := fmt.Sprintf("vod_test_asset_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 
-		importAsset, err := vt.uploadViaUrlTester(vodImportUrl, taskPollDuration, assetName)
+		importAsset, err := vt.uploadViaUrlTester(vodImportUrl, vt.TaskPollDuration, assetName)
 
 		if err != nil {
 			glog.Errorf("Error importing asset from url=%s err=%v", vodImportUrl, err)
@@ -89,7 +90,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 			return fmt.Errorf("error exporting asset assetId=%s: %w", importAsset.ID, err)
 		}
 
-		_, err = vt.WaitTaskProcessing(taskPollDuration, *exportTask)
+		_, err = vt.WaitTaskProcessing(vt.TaskPollDuration, *exportTask)
 
 		if err != nil {
 			glog.Errorf("Error in export task taskId=%s", exportTask.ID)
@@ -100,7 +101,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 	})
 
 	eg.Go(func() error {
-		err := vt.directUploadTester(fileName, taskPollDuration)
+		err := vt.directUploadTester(fileName, vt.TaskPollDuration)
 
 		if err != nil {
 			glog.Errorf("Error in direct upload task err=%v", err)
@@ -111,7 +112,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 	})
 
 	eg.Go(func() error {
-		err := vt.resumableUploadTester(fileName, taskPollDuration)
+		err := vt.resumableUploadTester(fileName, vt.TaskPollDuration)
 
 		if err != nil {
 			glog.Errorf("Error in resumable upload task err=%v", err)

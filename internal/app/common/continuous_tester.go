@@ -15,7 +15,7 @@ import (
 type (
 	IContinuousTester interface {
 		// Start test. Blocks until error.
-		Start(start func(ctx context.Context) error, testDuration, pauseBetweenTests time.Duration) error
+		Start(start func(ctx context.Context) error) error
 		Cancel()
 		Done() <-chan struct{}
 	}
@@ -34,6 +34,8 @@ type (
 		pagerDutyIntegrationKey string
 		pagerDutyComponent      string
 		pagerDutyLowUrgency     bool
+		testDuration            time.Duration
+		pauseBetweenTests       time.Duration
 		name                    string
 	}
 )
@@ -54,13 +56,13 @@ func NewContinuousTester(gctx context.Context, opts ContinuousTesterOptions, tes
 	return ct
 }
 
-func (ct *continuousTester) Start(start func(ctx context.Context) error, testDuration, pauseBetweenTests time.Duration) error {
+func (ct *continuousTester) Start(start func(ctx context.Context) error) error {
 	messenger.SendMessage(fmt.Sprintf("Starting continuous %s test of %s", ct.name, ct.host))
 	for {
-		msg := fmt.Sprintf(":arrow_right: Starting %s %s test to %s", testDuration, ct.name, ct.host)
+		msg := fmt.Sprintf(":arrow_right: Starting %s %s test to %s", ct.testDuration, ct.name, ct.host)
 		messenger.SendMessage(msg)
 
-		ctx, cancel := context.WithTimeout(ct.ctx, testDuration)
+		ctx, cancel := context.WithTimeout(ct.ctx, ct.testDuration)
 		err := start(ctx)
 		ctxErr := ctx.Err()
 		cancel()
@@ -82,12 +84,12 @@ func (ct *continuousTester) Start(start func(ctx context.Context) error, testDur
 			glog.Info(msg)
 			ct.sendPagerdutyEvent(nil)
 		}
-		glog.Infof("Waiting %s before next test of %s", pauseBetweenTests, ct.name)
+		glog.Infof("Waiting %s before next test of %s", ct.pauseBetweenTests, ct.name)
 		select {
 		case <-ct.ctx.Done():
 			messenger.SendMessage(fmt.Sprintf("Continuous test of %s on %s cancelled", ct.name, ct.host))
 			return err
-		case <-time.After(pauseBetweenTests):
+		case <-time.After(ct.pauseBetweenTests):
 		}
 	}
 	return nil

@@ -2,15 +2,13 @@ package transcodetester
 
 import (
 	"context"
-	"time"
-
 	"github.com/livepeer/stream-tester/internal/app/common"
 )
 
 type (
 	IContinuousTranscodeTester interface {
 		// Start test. Blocks until error.
-		Start(fileName, transcodeBucketUrl, transcodeW3sProof string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error
+		Start(fileName, transcodeBucketUrl, transcodeW3sProof string) error
 	}
 
 	continuousTranscodeTester struct {
@@ -26,10 +24,10 @@ func NewContinuousTranscodeTester(gctx context.Context, opts common.ContinuousTe
 	}
 }
 
-func (ctt *continuousTranscodeTester) Start(fileName, transcodeBucketUrl, transcodeW3sProof string, testDuration, taskPollDuration, pauseBetweenTests time.Duration) error {
+func (ctt *continuousTranscodeTester) Start(fileName, transcodeBucketUrl, transcodeW3sProof string) error {
 	start := func(ctx context.Context) error {
 		tt := NewTranscodeTester(ctx, ctt.opts)
-		return tt.Start(fileName, transcodeBucketUrl, transcodeW3sProof, taskPollDuration)
+		return tt.Start(fileName, transcodeBucketUrl, transcodeW3sProof)
 	}
-	return ctt.ct.Start(start, testDuration, pauseBetweenTests)
+	return ctt.ct.Start(start)
 }

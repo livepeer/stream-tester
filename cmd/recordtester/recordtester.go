@@ -392,35 +392,39 @@ func main() {
 			})
 		}
 		if *testVod {
-			vtOpts := common.TesterOptions{
-				API:                      lapi,
-				CatalystPipelineStrategy: *catalystPipelineStrategy,
-			}
 			eg.Go(func() error {
 				cvtOpts := common.ContinuousTesterOptions{
 					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
 					PagerDutyComponent:      *pagerDutyComponent,
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
-					TesterOptions:           vtOpts,
+					TesterOptions: common.TesterOptions{
+						API:                      lapi,
+						CatalystPipelineStrategy: *catalystPipelineStrategy,
+						TestDuration:             *testDuration,
+						TaskPollDuration:         *taskPollDuration,
+						PauseBetweenTests:        *continuousTest,
+					},
 				}
 				cvt := vodtester.NewContinuousVodTester(egCtx, cvtOpts)
-				return cvt.Start(fileName, *vodImportUrl, *testDuration, *taskPollDuration, *continuousTest)
+				return cvt.Start(fileName, *vodImportUrl)
 			})
 		}
 		if *testTranscode {
-			ttOpts := common.TesterOptions{
-				API:                      lapi,
-				CatalystPipelineStrategy: *catalystPipelineStrategy,
-			}
 			eg.Go(func() error {
 				cttOpts := common.ContinuousTesterOptions{
 					PagerDutyIntegrationKey: *pagerDutyIntegrationKey,
 					PagerDutyComponent:      *pagerDutyComponent,
 					PagerDutyLowUrgency:     *pagerDutyLowUrgency,
-					TesterOptions:           ttOpts,
+					TesterOptions: common.TesterOptions{
+						API:                      lapi,
+						CatalystPipelineStrategy: *catalystPipelineStrategy,
+						TestDuration:             *testDuration,
+						TaskPollDuration:         *taskPollDuration,
+						PauseBetweenTests:        *continuousTest,
+					},
 				}
 				ctt := transcodetester.NewContinuousTranscodeTester(egCtx, cttOpts)
-				return ctt.Start(*fileArg, *transcodeBucketUrl, *transcodeW3sProof, *testDuration, *taskPollDuration, *continuousTest)
+				return ctt.Start(*fileArg, *transcodeBucketUrl, *transcodeW3sProof)
 			})
 		}
 		if err := eg.Wait(); err != nil {
