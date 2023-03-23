@@ -310,7 +310,7 @@ func startEmbeddedBroadcaster(ctx context.Context, bCfg broadcasterConfig, prese
 
 	// Increase Broadcaster timeouts
 	common.SegUploadTimeoutMultiplier = 4.0
-	common.SegmentUploadTimeout = 8 * time.Second
+	common.MinSegmentUploadTimeout = 8 * time.Second
 	common.HTTPDialTimeout = 8 * time.Second
 	common.SegHttpPushTimeoutMultiplier = 4.0
 
