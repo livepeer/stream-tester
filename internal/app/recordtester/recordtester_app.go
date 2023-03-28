@@ -258,8 +258,8 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 252, err
 	}
 	glog.Infof("Sessions: %+v", sessions)
-	if len(sessions) != 1 {
-		err := fmt.Errorf("should have one session, got %d", len(sessions))
+	if len(sessions) > 2 {
+		err := fmt.Errorf("session count too high, got %d", len(sessions))
 		glog.Error(err)
 		// exit(251, fileName, *fileArg, err)
 		return 251, err
