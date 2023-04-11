@@ -61,12 +61,13 @@ func init() {
 }
 
 type broadcasterConfig struct {
-	network         *string
-	ethUrl          *string
-	datadir         *string
-	ethPassword     *string
-	maxTicketEV     *string
-	maxPricePerUnit *int
+	network              *string
+	ethUrl               *string
+	datadir              *string
+	ethPassword          *string
+	maxTicketEV          *string
+	maxPricePerUnit      *int
+	blockPollingInterval *int
 }
 
 func main() {
@@ -107,6 +108,7 @@ func main() {
 	bCfg.ethPassword = flag.String("ethPassword", "", "Password for existing Eth account address")
 	bCfg.maxTicketEV = flag.String("maxTicketEV", "3000000000000", "The maximum acceptable expected value for PM tickets")
 	bCfg.maxPricePerUnit = flag.Int("maxPricePerUnit", 0, "The maximum transcoding price (in wei) per 'pixelsPerUnit' a broadcaster is willing to accept. If not set explicitly, broadcaster is willing to accept ANY price")
+	bCfg.blockPollingInterval = flag.Int("blockPollingInterval", 20, "Interval in seconds at which different blockchain event services poll for blocks")
 
 	// Config file
 	_ = flag.String("config", "", "Config file in the format 'key value', flags and env vars take precedence over the config file")
@@ -310,7 +312,7 @@ func startEmbeddedBroadcaster(ctx context.Context, bCfg broadcasterConfig, prese
 
 	// Increase Broadcaster timeouts
 	common.SegUploadTimeoutMultiplier = 4.0
-	common.SegmentUploadTimeout = 8 * time.Second
+	common.MinSegmentUploadTimeout = 8 * time.Second
 	common.HTTPDialTimeout = 8 * time.Second
 	common.SegHttpPushTimeoutMultiplier = 4.0
 
@@ -331,6 +333,7 @@ func startEmbeddedBroadcaster(ctx context.Context, bCfg broadcasterConfig, prese
 	cfg.TranscodingOptions = &presets
 	cfg.MaxTicketEV = bCfg.maxTicketEV
 	cfg.MaxPricePerUnit = bCfg.maxPricePerUnit
+	cfg.BlockPollingInterval = bCfg.blockPollingInterval
 	cfg.CliAddr = stringPointer(fmt.Sprintf("0.0.0.0:%s", bcastCliPort))
 	cfg.Broadcaster = boolPointer(true)
 	go starter.StartLivepeer(ctx, cfg)
