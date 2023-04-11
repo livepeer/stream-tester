@@ -25,14 +25,19 @@ jobs:
         build:
           - name: loadtester
             file: Dockerfile.load-tester
+            platforms: linux/amd64, linux/arm64
           - name: record-tester
             file: Dockerfile.record-tester
+            platforms: linux/amd64, linux/arm64
           - name: orch-tester
             file: Dockerfile.orch-tester
+            platforms: linux/amd64
           - name: mist-api-connector
             file: Dockerfile.mist-api-connector
+            platforms: linux/amd64, linux/arm64
           - name: streamtester
             file: Dockerfile
+            platforms: linux/amd64, linux/arm64
 
     steps:
       - name: Set up QEMU
@@ -76,7 +81,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v4
         with:
-          platforms: linux/amd64, linux/arm64
+          platforms: ${{ matrix.build.platforms }}
           push: true
           build-args: |
             version=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
