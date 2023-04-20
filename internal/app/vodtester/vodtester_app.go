@@ -63,25 +63,6 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 			return fmt.Errorf("error importing asset from url=%s: %w", vodImportUrl, err)
 		}
 
-		// TODO: Figure out a future for transcode task. These are broken with the
-		// newest files used for VOD testing to test playback, and I'm not sure if
-		// it's worth making sure that it keeps working as it uses the old
-		// task-runner pipeline anyway.
-		//
-		// _, transcodeTask, err := vt.Lapi.TranscodeAsset(importAsset.ID, assetName, api.StandardProfiles[0])
-
-		// if err != nil {
-		// 	glog.Errorf("Error transcoding asset assetId=%s err=%v", importAsset.ID, err)
-		// 	return fmt.Errorf("error transcoding asset assetId=%s: %w", importAsset.ID, err)
-		// }
-
-		// err = vt.WaitTaskProcessing(taskPollDuration, *transcodeTask)
-
-		// if err != nil {
-		// 	glog.Errorf("Error in transcoding task taskId=%s", transcodeTask.ID)
-		// 	return fmt.Errorf("error in transcoding task taskId=%s: %w", transcodeTask.ID, err)
-		// }
-
 		exportTask, err := vt.Lapi.ExportAsset(importAsset.ID)
 
 		if err != nil {
@@ -132,7 +113,7 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 	return nil
 }
 
-func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration time.Duration, assetName string) (*api.Asset, error) {
+func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration time.Duration, assetName string) (_ *api.Asset, err error) {
 
 	importAsset, importTask, err := vt.Lapi.UploadViaURL(vodImportUrl, assetName, vt.CatalystPipelineStrategy)
 	if err != nil {
@@ -141,16 +122,23 @@ func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration ti
 	}
 	glog.Infof("Importing asset taskId=%s outputAssetId=%s pipelineStrategy=%s", importTask.ID, importAsset.ID, vt.CatalystPipelineStrategy)
 
+	// Make sure we include the Asset and Task IDs on any error message
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("assetId=%s taskId=%s %w", importAsset.ID, importTask.ID, err)
+		}
+	}()
+
 	_, err = vt.WaitTaskProcessing(taskPollDuration, *importTask)
 
 	if err != nil {
-		glog.Errorf("Error processing asset assetId=%s taskId=%s", importAsset.ID, importTask.ID)
-		return nil, fmt.Errorf("error waiting for asset processing assetId=%s taskId=%s: %w", importAsset.ID, importTask.ID, err)
+		glog.Errorf("Error processing asset taskId=%s", importTask.ID)
+		return nil, fmt.Errorf("error waiting for asset processing: %w", err)
 	}
 
 	if err := vt.checkPlayback(importAsset.ID); err != nil {
 		glog.Errorf("Error checking playback assetId=%s err=%v", importAsset.ID, err)
-		return nil, fmt.Errorf("error checking playback assetId=%s err=%v", importAsset.ID, err)
+		return nil, fmt.Errorf("error checking playback err=%v", err)
 	}
 
 	return importAsset, nil
@@ -172,6 +160,13 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 		ID: requestUpload.Task.ID,
 	}
 
+	// Make sure we include the Asset and Task IDs on any error message
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("assetId=%s taskId=%s %w", uploadAsset.ID, uploadTask.ID, err)
+		}
+	}()
+
 	glog.Infof("Uploading to endpoint=%s pipelineStrategy=%s", uploadEndpoint, vt.CatalystPipelineStrategy)
 
 	file, err := os.Open(fileName)
@@ -185,25 +180,24 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 	err = vt.Lapi.UploadAsset(vt.Ctx, uploadEndpoint, file)
 	if err != nil {
 		glog.Errorf("Error uploading file filePath=%s err=%v", fileName, err)
-		return fmt.Errorf("error uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
+		return fmt.Errorf("error uploading: %w", err)
 	}
 
 	_, err = vt.WaitTaskProcessing(taskPollDuration, uploadTask)
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
-		return fmt.Errorf("error waiting for asset processing assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
+		return fmt.Errorf("error waiting for asset processing: %w", err)
 	}
 
 	if err := vt.checkPlayback(uploadAsset.ID); err != nil {
 		glog.Errorf("Error checking playback assetId=%s err=%v", uploadAsset.ID, err)
-		return fmt.Errorf("error checking playback assetId=%s: %w", uploadAsset.ID, err)
+		return fmt.Errorf("error checking playback: %w", err)
 	}
 
 	return nil
 }
 
 func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration time.Duration) error {
-
 	hostName, _ := os.Hostname()
 	assetName := fmt.Sprintf("vod_test_upload_resumable_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	requestUpload, err := vt.Lapi.RequestUpload(assetName, vt.CatalystPipelineStrategy)
@@ -219,6 +213,13 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 		ID: requestUpload.Task.ID,
 	}
 
+	// Make sure we include the Asset and Task IDs on any error message
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("assetId=%s taskId=%s %w", uploadAsset.ID, uploadTask.ID, err)
+		}
+	}()
+
 	glog.Infof("Uploading (resumable) to endpoint=%s pipelineStrategy=%s", requestUpload.Url, vt.CatalystPipelineStrategy)
 
 	file, err := os.Open(fileName)
@@ -232,19 +233,19 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 
 	if err != nil {
 		glog.Errorf("Error resumable uploading file filePath=%s err=%v", fileName, err)
-		return fmt.Errorf("error resumable uploading for assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
+		return fmt.Errorf("error resumable uploading: %w", err)
 	}
 
 	_, err = vt.WaitTaskProcessing(taskPollDuration, uploadTask)
 
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
-		return fmt.Errorf("error waiting for asset processing assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
+		return fmt.Errorf("error waiting for asset processing: %w", err)
 	}
 
 	if err := vt.checkPlayback(uploadAsset.ID); err != nil {
 		glog.Errorf("Error checking playback assetId=%s err=%v", uploadAsset.ID, err)
-		return fmt.Errorf("error checking playback assetId=%s: %w", uploadAsset.ID, err)
+		return fmt.Errorf("error checking playback: %w", err)
 	}
 
 	return nil
