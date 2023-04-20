@@ -124,7 +124,7 @@ type VODStats struct {
 // IsOk can we consider download successful
 func (vs *VODStats) IsOk(streamDuration time.Duration, doubled bool) (bool, string) {
 	if len(vs.SegmentsDur) == 0 {
-		return false, "no segments in playlist "
+		return false, "no segments in playlist"
 	}
 	ok := true
 	lsn := 0
