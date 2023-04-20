@@ -145,12 +145,12 @@ func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration ti
 
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", importAsset.ID, importTask.ID)
-		return nil, fmt.Errorf("error waiting for asset processing: %w", err)
+		return nil, fmt.Errorf("error waiting for asset processing assetId=%s taskId=%s: %w", importAsset.ID, importTask.ID, err)
 	}
 
 	if err := vt.checkPlayback(importAsset.ID); err != nil {
 		glog.Errorf("Error checking playback assetId=%s err=%v", importAsset.ID, err)
-		return nil, fmt.Errorf("error checking playback: %w", err)
+		return nil, fmt.Errorf("error checking playback assetId=%s err=%v", importAsset.ID, err)
 	}
 
 	return importAsset, nil
@@ -191,12 +191,12 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 	_, err = vt.WaitTaskProcessing(taskPollDuration, uploadTask)
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
-		return fmt.Errorf("error waiting for asset processing: %w", err)
+		return fmt.Errorf("error waiting for asset processing assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
 	}
 
 	if err := vt.checkPlayback(uploadAsset.ID); err != nil {
 		glog.Errorf("Error checking playback assetId=%s err=%v", uploadAsset.ID, err)
-		return fmt.Errorf("error checking playback: %w", err)
+		return fmt.Errorf("error checking playback assetId=%s: %w", uploadAsset.ID, err)
 	}
 
 	return nil
@@ -239,12 +239,12 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 
 	if err != nil {
 		glog.Errorf("Error processing asset assetId=%s taskId=%s", uploadAsset.ID, uploadTask.ID)
-		return fmt.Errorf("error waiting for asset processing: %w", err)
+		return fmt.Errorf("error waiting for asset processing assetId=%s taskId=%s: %w", uploadAsset.ID, uploadTask.ID, err)
 	}
 
 	if err := vt.checkPlayback(uploadAsset.ID); err != nil {
 		glog.Errorf("Error checking playback assetId=%s err=%v", uploadAsset.ID, err)
-		return fmt.Errorf("error checking playback: %w", err)
+		return fmt.Errorf("error checking playback assetId=%s: %w", uploadAsset.ID, err)
 	}
 
 	return nil
