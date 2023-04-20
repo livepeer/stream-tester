@@ -20,7 +20,7 @@ RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$vers
 
 RUN	parallel -q go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/{}/{}.go ::: testdriver mist-api-connector loadtester stream-monitor recordtester
 
-FROM	alpine:3.15.4
+FROM	alpine:3.17.3
 
 RUN	apk add --no-cache ca-certificates ffmpeg
 
