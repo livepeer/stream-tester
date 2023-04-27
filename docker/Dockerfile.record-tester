@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM	golang:1-stretch	as	builder
+FROM --platform=$BUILDPLATFORM	golang:1-buster as	builder
 
 ARG	TARGETARCH
 ENV	GOARCH="${TARGETARCH}"
@@ -18,7 +18,7 @@ COPY	.	.
 RUN	CGO_ENABLED=0 go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/streamtester/streamtester.go \
 	&& CGO_ENABLED=0 go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/recordtester/recordtester.go
 
-FROM --platform=$TARGETPLATFORM	debian:stretch-slim
+FROM --platform=$TARGETPLATFORM	debian:buster-slim
 
 WORKDIR	/root
 
