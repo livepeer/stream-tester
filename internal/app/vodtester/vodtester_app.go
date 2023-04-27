@@ -144,7 +144,7 @@ func (vt *vodTester) uploadViaUrlTester(vodImportUrl string, taskPollDuration ti
 	return importAsset, nil
 }
 
-func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.Duration) error {
+func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.Duration) (err error) {
 	hostName, _ := os.Hostname()
 	assetName := fmt.Sprintf("vod_test_upload_direct_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	requestUpload, err := vt.Lapi.RequestUpload(assetName, vt.CatalystPipelineStrategy)
@@ -197,7 +197,7 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 	return nil
 }
 
-func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration time.Duration) error {
+func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration time.Duration) (err error) {
 	hostName, _ := os.Hostname()
 	assetName := fmt.Sprintf("vod_test_upload_resumable_%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	requestUpload, err := vt.Lapi.RequestUpload(assetName, vt.CatalystPipelineStrategy)
