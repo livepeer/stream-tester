@@ -50,6 +50,7 @@ type (
 		Ingest              *api.Ingest
 		RecordObjectStoreId string
 		UseForceURL         bool
+		RecordingWaitTime   time.Duration
 		UseHTTP             bool
 		TestMP4             bool
 		TestStreamHealth    bool
@@ -63,6 +64,7 @@ type (
 		ingest              *api.Ingest
 		recordObjectStoreId string
 		useForceURL         bool
+		recordingWaitTime   time.Duration
 		useHTTP             bool
 		mp4                 bool
 		streamHealth        bool
@@ -86,6 +88,7 @@ func NewRecordTester(gctx context.Context, opts RecordTesterOptions, serfOpts Se
 		cancel:              cancel,
 		recordObjectStoreId: opts.RecordObjectStoreId,
 		useForceURL:         opts.UseForceURL,
+		recordingWaitTime:   opts.RecordingWaitTime,
 		useHTTP:             opts.UseHTTP,
 		mp4:                 opts.TestMP4,
 		streamHealth:        opts.TestStreamHealth,
@@ -292,7 +295,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	if rt.useForceURL {
 		time.Sleep(5 * time.Second)
 	} else {
-		time.Sleep(6*time.Minute + 20*time.Second)
+		time.Sleep(rt.recordingWaitTime)
 	}
 	if err = rt.isCancelled(); err != nil {
 		return 0, err
