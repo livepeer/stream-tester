@@ -312,51 +312,51 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 0, err
 	}
 
-	sess = sessions[0]
-	statusShould := api.RecordingStatusReady
-	if rt.useForceURL {
-		statusShould = api.RecordingStatusWaiting
-	}
-	if sess.RecordingStatus != statusShould {
-		err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
-		return 240, err
-		// exit(250, fileName, *fileArg, err)
-	}
-	if sess.RecordingURL == "" {
-		err := fmt.Errorf("recording URL should appear by now")
-		return 249, err
-		// exit(249, fileName, *fileArg, err)
-	}
-	glog.Infof("recordingURL=%s downloading now", sess.RecordingURL)
+	for _, sess := range sessions {
+		sess = sessions[0]
+		statusShould := api.RecordingStatusReady
+		if rt.useForceURL {
+			statusShould = api.RecordingStatusWaiting
+		}
+		if sess.RecordingStatus != statusShould {
+			err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
+			return 240, err
+			// exit(250, fileName, *fileArg, err)
+		}
+		if sess.RecordingURL == "" {
+			err := fmt.Errorf("recording URL should appear by now")
+			return 249, err
+			// exit(249, fileName, *fileArg, err)
+		}
+		glog.Infof("recordingURL=%s downloading now", sess.RecordingURL)
 
-	// started := time.Now()
-	// downloader := testers.NewM3utester2(gctx, sess.RecordingURL, false, false, false, false, 5*time.Second, nil)
-	// <-downloader.Done()
-	// glog.Infof(`Pulling stopped after %s`, time.Since(started))
-	// exit(55, fileName, *fileArg, err)
-	glog.Info("Done Record Test")
+		// started := time.Now()
+		// downloader := testers.NewM3utester2(gctx, sess.RecordingURL, false, false, false, false, 5*time.Second, nil)
+		// <-downloader.Done()
+		// glog.Infof(`Pulling stopped after %s`, time.Since(started))
+		// exit(55, fileName, *fileArg, err)
+		glog.Info("Done Record Test")
 
-	// lapi.DeleteStream(stream.ID)
-	// exit(0, fileName, *fileArg, err)
-	if err = rt.isCancelled(); err != nil {
-		return 0, err
-	}
-	if rt.mp4 {
-		es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration, pauseDuration > 0)
+		// lapi.DeleteStream(stream.ID)
+		// exit(0, fileName, *fileArg, err)
+		if err = rt.isCancelled(); err != nil {
+			return 0, err
+		}
+		if rt.mp4 {
+			es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration, pauseDuration > 0)
+			if err != nil {
+				return es, err
+			}
+		}
+
+		es, err := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
 		if err != nil {
 			return es, err
 		}
 	}
 
-	es, err := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
-	if es == 0 {
-		rt.lapi.DeleteStream(stream.ID)
-		// exit(0, fileName, *fileArg, err)
-	}
-
-	// uploader := testers.NewRtmpStreamer(gctx, rtmpURL)
-	// uploader.StartUpload(fileName, rtmpURL, -1, 30*time.Second)
-	return es, err
+	rt.lapi.DeleteStream(stream.ID)
+	return 0, nil
 }
 
 func (rt *recordTester) getIngestInfo() (*api.Ingest, error) {
