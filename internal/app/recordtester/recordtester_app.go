@@ -343,13 +343,13 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			return 0, err
 		}
 		if rt.mp4 {
-			es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration, pauseDuration > 0)
+			es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration)
 			if err != nil {
 				return es, err
 			}
 		}
 
-		es, err := rt.checkDown(stream, sess.RecordingURL, testDuration, pauseDuration > 0)
+		es, err := rt.checkDown(stream, sess.RecordingURL, testDuration)
 		if err != nil {
 			return es, err
 		}
@@ -421,7 +421,7 @@ func (rt *recordTester) isCancelled() error {
 	return nil
 }
 
-func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDuration time.Duration, doubled bool) (int, error) {
+func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
 	es := 0
 	started := time.Now()
 	glog.V(model.VERBOSE).Infof("Downloading mp4 url=%s stream id=%s", url, stream.ID)
@@ -455,15 +455,11 @@ func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDurat
 		glog.Warningf("Error parsing mp4 for manifestID=%s url=%s err=%v", stream.ID, url, err)
 		return 203, err
 	}
-	durDiffShould := 2 * time.Second
-	if doubled {
-		durDiffShould *= durDiffShould
-	}
 	durDiff := streamDuration - dur
 	if durDiff < 0 {
 		durDiff = -durDiff
 	}
-	if durDiff > durDiffShould {
+	if durDiff > 2*time.Second {
 		ers := fmt.Errorf("duration of mp4 differ by %s (got %s, should %s)", durDiff, dur, streamDuration)
 		glog.Error(ers)
 		return 300, err
@@ -471,7 +467,7 @@ func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDurat
 	return es, nil
 }
 
-func (rt *recordTester) checkDown(stream *api.Stream, url string, streamDuration time.Duration, doubled bool) (int, error) {
+func (rt *recordTester) checkDown(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
 	es := 0
 	started := time.Now()
 	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil, false)
@@ -488,7 +484,7 @@ func (rt *recordTester) checkDown(stream *api.Stream, url string, streamDuration
 	}
 	glog.Infof("Stats for %s: %s", stream.ID, vs.String())
 	glog.Infof("Stats for %s raw: %+v", stream.ID, vs)
-	if ok, ers := vs.IsOk(streamDuration, doubled); !ok {
+	if ok, ers := vs.IsOk(streamDuration, false); !ok {
 		glog.Warningf("NOT OK! (%s)", ers)
 		es = 36
 		return es, errors.New(ers)
