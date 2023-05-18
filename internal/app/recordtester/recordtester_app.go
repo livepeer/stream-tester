@@ -113,7 +113,6 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 				apiTry++
 				continue
 			}
-			// exit(255, fileName, *fileArg, err)
 			return 255, err
 		}
 		break
@@ -121,20 +120,13 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	apiTry = 0
 	glog.Infof("Got broadcasters: %+v", broadcasters)
 	fmt.Printf("Streaming video file '%s'\n", fileName)
-	/*
-		httpIngestURLTemplates := make([]string, 0, len(broadcasters))
-		for _, b := range broadcasters {
-			httpIngestURLTemplates = append(httpIngestURLTemplates, fmt.Sprintf("%s/live/%%s", b))
-		}
-	*/
+
 	if rt.useHTTP && len(broadcasters) == 0 {
-		// exit(254, fileName, *fileArg, errors.New("Empty list of broadcasters"))
 		return 254, errors.New("empty list of broadcasters")
 	} else if (!rt.useHTTP && ingest.Ingest == "") || ingest.Playback == "" {
 		return 254, errors.New("empty ingest URLs")
-		// exit(254, fileName, *fileArg, errors.New("Empty list of ingests"))
 	}
-	// glog.Infof("All cool!")
+
 	hostName, _ := os.Hostname()
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	var stream *api.Stream
@@ -146,7 +138,6 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 				continue
 			}
 			glog.Errorf("Error creating stream using Livepeer API: %v", err)
-			// exit(253, fileName, *fileArg, err)
 			return 253, err
 		}
 		break
@@ -155,12 +146,8 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	rt.streamID = stream.ID
 	rt.stream = stream
 	messenger.SendMessage(fmt.Sprintf(":information_source: Created stream id=%s", stream.ID))
-	// createdAPIStreams = append(createdAPIStreams, stream.ID)
 	glog.V(model.VERBOSE).Infof("Created Livepeer stream id=%s streamKey=%s playbackId=%s name=%s", stream.ID, stream.StreamKey, stream.PlaybackID, streamName)
-	// glog.Infof("Waiting 5 second for stream info to propagate to the Postgres replica")
-	// time.Sleep(5 * time.Second)
 	rtmpURL := fmt.Sprintf("%s/%s", ingest.Ingest, stream.StreamKey)
-	// rtmpURL = fmt.Sprintf("%s/%s", ingests[0].Ingest, stream.ID)
 
 	testerFuncs := []testers.StartTestFunc{}
 	if rt.streamHealth {
@@ -203,8 +190,8 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 
 		sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{MistMode: true}, testerFuncs...)
 		sr2.StartStreaming(fileName, rtmpURL, mediaURL, 2*time.Minute, testDuration)
-		// <-sr2.Done()
 		srerr := sr2.Err()
+
 		glog.Infof("Streaming stream id=%s done err=%v", stream.ID, srerr)
 		var re *testers.RTMPError
 		if errors.As(srerr, &re) {
@@ -259,7 +246,6 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	sessions, err := rt.lapi.GetSessionsNew(stream.ID, false)
 	if err != nil {
 		glog.Errorf("Error getting sessions for stream id=%s err=%v", stream.ID, err)
-		// exit(252, fileName, *fileArg, err)
 		return 252, err
 	}
 	glog.Infof("Sessions: %+v", sessions)
@@ -273,7 +259,6 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		err := fmt.Errorf("invalid session count, expected %d but got %d",
 			expectedSessions, len(sessions))
 		glog.Error(err)
-		// exit(251, fileName, *fileArg, err)
 		return 251, err
 	}
 
@@ -282,12 +267,10 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		glog.Infof("session: %+v", sess)
 		err := fmt.Errorf("got %d profiles but should have %d", len(sess.Profiles), len(stream.Profiles))
 		return 251, err
-		// exit(251, fileName, *fileArg, err)
 	}
 	if sess.RecordingStatus != api.RecordingStatusWaiting {
 		err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, api.RecordingStatusWaiting)
 		return 250, err
-		// exit(250, fileName, *fileArg, err)
 	}
 	if err = rt.isCancelled(); err != nil {
 		return 0, err
@@ -307,7 +290,6 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	if err != nil {
 		err := fmt.Errorf("error getting sessions for stream id=%s err=%v", stream.ID, err)
 		return 252, err
-		// exit(252, fileName, *fileArg, err)
 	}
 	glog.Infof("Sessions: %+v", sessions)
 	if err = rt.isCancelled(); err != nil {
@@ -323,24 +305,13 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		if sess.RecordingStatus != statusShould {
 			err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
 			return 240, err
-			// exit(250, fileName, *fileArg, err)
 		}
 		if sess.RecordingURL == "" {
 			err := fmt.Errorf("recording URL should appear by now")
 			return 249, err
-			// exit(249, fileName, *fileArg, err)
 		}
 		glog.Infof("recordingURL=%s downloading now", sess.RecordingURL)
 
-		// started := time.Now()
-		// downloader := testers.NewM3utester2(gctx, sess.RecordingURL, false, false, false, false, 5*time.Second, nil)
-		// <-downloader.Done()
-		// glog.Infof(`Pulling stopped after %s`, time.Since(started))
-		// exit(55, fileName, *fileArg, err)
-		glog.Info("Done Record Test")
-
-		// lapi.DeleteStream(stream.ID)
-		// exit(0, fileName, *fileArg, err)
 		if err = rt.isCancelled(); err != nil {
 			return 0, err
 		}
@@ -356,6 +327,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			return es, err
 		}
 	}
+	glog.Info("Done Record Test")
 
 	rt.lapi.DeleteStream(stream.ID)
 	return 0, nil
@@ -398,7 +370,6 @@ func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL str
 				continue
 			}
 			glog.Errorf("Error creating stream session using Livepeer API: %v", err)
-			// exit(253, fileName, *fileArg, err)
 			return err
 		}
 		break
@@ -407,7 +378,7 @@ func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL str
 	httpIngestBaseURL := fmt.Sprintf("%s/live/%s", broadcasterURL, session.ID)
 	glog.Infof("httpIngestBaseURL=%s", httpIngestBaseURL)
 	hs.StartUpload(fileName, httpIngestBaseURL, stream.ID, -1, -1, testDuration, 0)
-	// <-hs.Done()
+
 	stats, err := hs.Stats()
 	glog.Infof("Streaming stream id=%s done err=%v", stream.ID, err)
 	glog.Infof("Stats: %+v", stats)
