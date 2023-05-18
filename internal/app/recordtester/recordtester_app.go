@@ -169,6 +169,10 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		})
 	}
 
+	// when pauseDuration is set, we will stream the same file twice sleeping for
+	// the specified duration in between each.
+	streamTwice := pauseDuration > 0
+
 	mediaURL := fmt.Sprintf("%s/%s/index.m3u8", ingest.Playback, stream.PlaybackID)
 	if rt.serfOpts.UseSerf {
 		index := 0
@@ -186,7 +190,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			glog.Warningf("Streaming returned error err=%v", sterr)
 			return 3, err
 		}
-		if pauseDuration > 0 {
+		if streamTwice {
 			glog.Infof("Pause specified, waiting %s before streaming second time", pauseDuration)
 			time.Sleep(pauseDuration)
 			sterr = rt.doOneHTTPStream(fileName, streamName, broadcasters[0], testDuration, stream)
@@ -219,7 +223,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		if err = rt.isCancelled(); err != nil {
 			return 0, err
 		}
-		if pauseDuration > 0 {
+		if streamTwice {
 			glog.Infof("Pause specified, waiting %s before streaming second time", pauseDuration)
 			time.Sleep(pauseDuration)
 			sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{MistMode: true}, testerFuncs...)
@@ -261,7 +265,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	glog.Infof("Sessions: %+v", sessions)
 
 	expectedSessions := 1
-	if pauseDuration > 0 {
+	if streamTwice {
 		expectedSessions = 2
 	}
 
