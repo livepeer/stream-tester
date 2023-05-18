@@ -194,7 +194,6 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 				glog.Warningf("Second time streaming returned error err=%v", sterr)
 				return 3, err
 			}
-			testDuration *= 2
 		}
 	} else {
 
@@ -245,7 +244,6 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			if err = rt.isCancelled(); err != nil {
 				return 0, err
 			}
-			testDuration *= 2
 		}
 	}
 	if err := rt.isCancelled(); err != nil {
