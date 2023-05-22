@@ -1,4 +1,4 @@
-name: Docker Image CI
+name: Build and publish docker images
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build and publish ${{ matrix.build.name }} docker images
+    name: ${{ matrix.build.name }} docker image
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -68,16 +68,16 @@ jobs:
             livepeer/${{ matrix.build.name }}
             ghcr.io/${{ github.repository }}/${{ matrix.build.name }}
           tags: |
-            type=schedule,pattern={{date 'YYYYMMDDHHmmss'}}
-            type=ref,event=branch
-            type=ref,event=tag
-            type=ref,event=pr
             type=sha
+            type=ref,event=pr
+            type=ref,event=tag
             type=sha,format=long
+            type=ref,event=branch
             type=semver,pattern={{version}},prefix=v
             type=semver,pattern={{major}}.{{minor}},prefix=v
-            type=raw,value=${{ github.event.pull_request.head.ref }}
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ github.event.pull_request.head.ref }}
+            type=raw,value=stable,enable=${{ startsWith(github.event.ref, 'refs/tags/v') }}
 
       - name: Build and push
         uses: docker/build-push-action@v4
