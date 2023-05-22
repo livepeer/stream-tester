@@ -165,6 +165,8 @@ func main() {
 	vodImportUrl := fs.String("vod-import-url", "https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_2min.mp4", "URL for VOD import")
 	continuousTest := fs.Duration("continuous-test", 0, "Do continuous testing")
 	useHttp := fs.Bool("http", false, "Do HTTP tests instead of RTMP")
+	forceRecordingUrl := fs.Bool("force-recording-url", false, "Whether to force the API to return a recording URL (skip the user session timeout)")
+	recordingWaitTime := fs.Duration("recording-wait-time", 6*time.Minute+20*time.Second, "How long to wait after the stream ends before checking for recording")
 	testMP4 := fs.Bool("mp4", false, "Download MP4 of recording")
 	testStreamHealth := fs.Bool("stream-health", false, "Check stream health during test")
 	testLive := fs.Bool("live", false, "Check Live workflow")
@@ -330,7 +332,8 @@ func main() {
 		Analyzers:           lanalyzers,
 		Ingest:              ingest,
 		RecordObjectStoreId: *recordObjectStoreId,
-		UseForceURL:         true,
+		UseForceURL:         *forceRecordingUrl,
+		RecordingWaitTime:   *recordingWaitTime,
 		UseHTTP:             *useHttp,
 		TestMP4:             *testMP4,
 		TestStreamHealth:    *testStreamHealth,
