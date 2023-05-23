@@ -276,7 +276,6 @@ func (mut *m3utester2) workerLoop() {
 	defer timer.Stop()
 	finishCheckTimer := time.NewTicker(5 * time.Second)
 	defer finishCheckTimer.Stop()
-	// transcodedLatencies := utils.LatenciesCalculator{}
 	latencies := make(map[string]*utils.DurationsCapped)
 	sourceLatencies := utils.NewDurations(4096)
 	transcodeLatencies := utils.NewDurations(4 * 4096)
@@ -358,9 +357,6 @@ func (mut *m3utester2) workerLoop() {
 		case dres := <-mut.driftCheckResults:
 			if dres.timeAtFirstPlace.IsZero() {
 				glog.V(model.VVERBOSE).Infof("MAIN downloaded: %s", dres.String2())
-				// if _, has := mut.allResults[dres.resolution]; !has {
-				// 	results[dres.resolution] = make([]*downloadResult, 0, 128)
-				// }
 				mut.allResults[dres.resolution] = append(mut.allResults[dres.resolution], dres)
 				continue
 			}
@@ -376,10 +372,6 @@ func (mut *m3utester2) workerLoop() {
 			if len(results[dres.resolution]) > 128 {
 				results[dres.resolution] = results[dres.resolution][1:]
 			}
-			// check for time drift
-			// if dres.seqNo < 24 {
-			// 	continue
-			// }
 			if len(seenResolutions) < 2 {
 				continue
 			}
@@ -518,9 +510,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			mut.fatalEnd(fmt.Errorf("can't get playlist %s for %s, giving up", surl, time.Since(startedAt)))
 			return
 		}
-		// glog.Infof("requesting %s", surl)
 		resp, err := httpClient.Do(uhttp.GetRequest(surl))
-		// glog.Infof("DONE requesting %s", surl)
 		if err != nil {
 			if isRetryable(err) {
 				countTimeouts++
@@ -542,14 +532,12 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		// glog.Infof("Main manifest status %v", resp.Status)
 		b, err := ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		glog.V(model.INSANE).Infof("Main manifest status %v", resp.Status)
 		glog.V(model.INSANE2).Info(string(b))
 		if err != nil {
 			glog.Error("===== error getting master playlist: ", err)
-			// glog.Error(err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -561,7 +549,6 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 		gpl, plt, err := m3u8.Decode(*bytes.NewBuffer(b), true)
 		if err != nil {
 			glog.Error("===== error parsing master playlist: ", err)
-			// glog.Error(err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -573,7 +560,6 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 				mut.fatalEnd(fmt.Errorf("Error: %s", err))
 				return
 			}
-			// _, name := filepath.Split(surl)
 			if mut.save {
 				mut.initSave("", surl)
 				mut.savePlayList.Append(mediaName+"/"+mediaName+".m3u8", nil, m3u8.VariantParams{Name: mediaName})
@@ -601,7 +587,6 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 		if lastNumberOfStreamsInManifest != len(mpl.Variants) {
 			glog.V(model.DEBUG).Infof("Got playlist with %d variants (%s):", len(mpl.Variants), surl)
 		}
-		// glog.Infof("==> model.ProfilesNum = %d", model.ProfilesNum)
 		if !streamStarted && len(mpl.Variants) >= model.ProfilesNum+1 {
 			streamStarted = true
 		} else if waitForTarget > 0 && !streamStarted && time.Since(startedAt) > 2*waitForTarget {
@@ -612,12 +597,9 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			return
 		}
 		lastNumberOfStreamsInManifest = len(mpl.Variants)
-		// glog.Infof("Got playlist with %d variants (%s):", len(mpl.Variants), surl)
-		// glog.Info(mpl)
 		seenResolution := newStringRing(len(mpl.Variants))
 		needSavePlaylist := false
 		for _, variant := range mpl.Variants {
-			// glog.Infof("Variant URI: %s", variant.URI)
 			if mut.wowzaMode {
 				// remove Wowza's session id from URL
 				variant.URI = wowzaSessionRE.ReplaceAllString(variant.URI, "_")
@@ -657,7 +639,6 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 				mut.fatalEnd(errors.New(msg))
 				return
 			}
-			// glog.Infof("Parsed uri: %+v", pvrui, pvrui.IsAbs)
 			if !pvrui.IsAbs() {
 				pvrui = resp.Request.URL.ResolveReference(pvrui)
 			}
@@ -740,7 +721,6 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 		case <-ms.ctx.Done():
 			return
 		case dres := <-ms.downloadResults:
-			// desc := fmt.Sprintf("== ms loop downloaded status %s res %s name %s seqNo %d len %d", dres.status, dres.resolution, dres.name, dres.seqNo, dres.bytes)
 			if dres.status != "200 OK" {
 				continue
 			}
@@ -865,11 +845,6 @@ func (ms *m3uMediaStream) workerLoop(masterDR chan *downloadResult, latencyResul
 					ms.resolution, r.name, r.seqNo, r.startTime, r.duration, tillNext, r.appTime.Local().Format(timeFormat),
 					r.downloadStartedAt.Local().Format(timeFormat), problem)
 				res += msg
-				// if problem != "" && i < len(results)-6 {
-				// 	fmt.Println(res)
-				// 	ms.fatalEnd(msg)
-				// 	return
-				// }
 				if problem != "" && i < len(results)-6 {
 					fatalProblem = msg
 					// break
@@ -1075,7 +1050,6 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 	try := 0
 	for {
 		glog.V(model.VERBOSE).Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
-		// glog.Infof("Downloading segment seqNo=%d url=%s try=%d", task.seqNo, fsurl, try)
 		start := time.Now()
 		resp, err := httpClient.Do(uhttp.GetRequest(fsurl))
 		if err != nil {
@@ -1110,7 +1084,6 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 			res <- &downloadResult{status: resp.Status, try: try}
 			return
 		}
-		// glog.Infof("Download %s result: %s len %d", fsurl, resp.Status, len(b))
 		fsttim, dur, verr := utils.GetVideoStartTimeAndDur(b)
 		if verr != nil {
 			msg := fmt.Sprintf("Error parsing video data %s result status %s video data len %d err %v",
@@ -1128,16 +1101,11 @@ func downloadSegment(task *downloadTask, res chan *downloadResult) {
 				}
 			}
 		}
-		// _, sn := path.Split(fsurl)
-		// glog.Infof("==============>>>>>>>>>>>>>  Saving segment %s", sn)
-		// ioutil.WriteFile(sn, b, 0644)
-		// glog.V(model.DEBUG).Infof("Download %s result: %s len %d timeStart %s segment duration %s", fsurl, resp.Status, len(b), fsttim, dur)
 		glog.V(model.DEBUG).Infof("Download %s result: %s len %d timeStart %s segment duration %s took=%s", fsurl, resp.Status, len(b), fsttim, dur, time.Since(start))
 		res <- &downloadResult{status: resp.Status, bytes: len(b), try: try, name: task.url.String(), seqNo: task.seqNo,
 			videoParseError: verr, startTime: fsttim, duration: dur, mySeqNo: task.mySeqNo, appTime: task.appTime, downloadCompetedAt: completedAt,
 			downloadStartedAt: start, data: b, task: task,
 		}
-		// glog.Infof("Download %s result: %s len %d timeStart %s segment duration %s sent to channel", fsurl, resp.Status, len(b), fsttim, dur)
 		return
 	}
 }
