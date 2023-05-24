@@ -63,7 +63,7 @@ func GetVideoStartTimeDurFrames(segment []byte) (time.Duration, time.Duration, i
 	var skeyframes []time.Duration
 	r := bytes.NewReader(segment)
 	demuxer := ts.NewDemuxer(r)
-	var videoIdx int8
+	var videoIdx int8 = -1
 	var keyFrames int
 	var lastKeyFramePTS time.Duration = -1
 	if strms, err := demuxer.Streams(); err == nil {
@@ -72,7 +72,7 @@ func GetVideoStartTimeDurFrames(segment []byte) (time.Duration, time.Duration, i
 				continue
 			}
 			if s.Type().IsVideo() {
-				if videoIdx == 0 {
+				if videoIdx == -1 {
 					videoIdx = int8(i)
 				} else {
 					glog.Error("Multiple video streams found")
