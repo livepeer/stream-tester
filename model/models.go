@@ -148,7 +148,7 @@ func (vs *VODStats) IsOk(streamDuration time.Duration, doubled bool) (bool, stri
 			}
 			if diff > segDiffShould {
 				ok = false
-				ers := fmt.Sprintf("number of segments between %s and %s differ by %d", lres, res, diff)
+				ers := fmt.Sprintf("number of segments between %s and %s differ by %d. %s: %d segments. %s: %d segments.", lres, res, diff, lres, lsn, res, sn)
 				errs = append(errs, ers)
 				glog.Warningf(ers)
 			}
@@ -160,7 +160,7 @@ func (vs *VODStats) IsOk(streamDuration time.Duration, doubled bool) (bool, stri
 			}
 			if durDiff > durDiffShould {
 				ok = false
-				ers := fmt.Sprintf("duration of stream between %s and %s differ by %s", lres, res, durDiff)
+				ers := fmt.Sprintf("duration of stream between %s and %s differ by %s. Duration of %s: %s. Duration of %s: %s", lres, res, durDiff, lres, ldur, res, vs.SegmentsDur[res])
 				errs = append(errs, ers)
 				glog.Warningf(ers)
 			}
