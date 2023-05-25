@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -19,8 +20,6 @@ func GetVideoStartTime(segment []byte) (time.Duration, error) {
 	demuxer := ts.NewDemuxer(r)
 	var videoIdx int8
 	if strms, err := demuxer.Streams(); err == nil {
-		// glog.V(model.VERBOSE).Infof("=======--- streams: %+v", strms)
-		// glog.Infof("=======--- streams: %+v", strms)
 		for i, s := range strms {
 			if s == nil {
 				continue
@@ -34,7 +33,6 @@ func GetVideoStartTime(segment []byte) (time.Duration, error) {
 		glog.Error("Error reading streams ", err)
 		return 0, err
 	}
-	// glog.Infof("== Video index is %d", videoIdx)
 
 	for {
 		pkt, err := demuxer.ReadPacket()
@@ -45,11 +43,8 @@ func GetVideoStartTime(segment []byte) (time.Duration, error) {
 			glog.Error("Error reading packet", err)
 			return 0, err
 		}
-		// glog.Infof("Packet idx %d key %v time %s\n", pkt.Idx, pkt.IsKeyFrame, pkt.Time)
 		if pkt.Idx == videoIdx {
 			glog.V(model.VERBOSE).Infof("=====--- first video paket idx %d, video idx %d, time %s", pkt.Idx, videoIdx, pkt.Time)
-			// pktHash := md5.Sum(pkt.Data)
-			// glog.Infof("=== downloaded hash of %s is %x", pkt.Time, pktHash)
 			return pkt.Time, nil
 		}
 	}
@@ -68,26 +63,27 @@ func GetVideoStartTimeDurFrames(segment []byte) (time.Duration, time.Duration, i
 	var skeyframes []time.Duration
 	r := bytes.NewReader(segment)
 	demuxer := ts.NewDemuxer(r)
-	var videoIdx int8
+	var videoIdx int8 = -1
 	var keyFrames int
 	var lastKeyFramePTS time.Duration = -1
 	if strms, err := demuxer.Streams(); err == nil {
-		// glog.V(model.VERBOSE).Infof("=======--- streams: %+v", strms)
-		// glog.Infof("=======--- streams: %+v", strms)
 		for i, s := range strms {
 			if s == nil {
 				continue
 			}
 			if s.Type().IsVideo() {
-				videoIdx = int8(i)
-				break
+				if videoIdx == -1 {
+					videoIdx = int8(i)
+				} else {
+					glog.Error("Multiple video streams found")
+					return 0, 0, 0, nil, errors.New("multiple video streams founds")
+				}
 			}
 		}
 	} else {
 		glog.Error("Error reading streams ", err)
 		return 0, 0, 0, nil, err
 	}
-	// glog.Infof("== Video index is %d", videoIdx)
 
 	var lastTime, oneFrameDiff time.Duration
 	var firstTime time.Duration = -1
@@ -101,8 +97,6 @@ func GetVideoStartTimeDurFrames(segment []byte) (time.Duration, time.Duration, i
 			glog.Error("Error reading packet", err)
 			return 0, 0, 0, nil, err
 		}
-		// glog.Infof("Packet idx %d key %v time %s\n", pkt.Idx, pkt.IsKeyFrame, pkt.Time)
-		// glog.Infof("=====--- first video paket idx %d, video idx %d, time %s is key %v is video %v", pkt.Idx, videoIdx, pkt.Time, pkt.IsKeyFrame, pkt.Idx == videoIdx)
 		if pkt.Idx == videoIdx {
 			if pkt.IsKeyFrame {
 				if lastKeyFramePTS == -1 || pkt.Time != lastKeyFramePTS {
@@ -111,16 +105,11 @@ func GetVideoStartTimeDurFrames(segment []byte) (time.Duration, time.Duration, i
 					skeyframes = append(skeyframes, pkt.Time)
 				}
 			}
-			// glog.V(model.VERBOSE).Infof("=====--- first video paket idx %d, video idx %d, time %s", pkt.Idx, videoIdx, pkt.Time)
-			// pktHash := md5.Sum(pkt.Data)
-			// glog.Infof("=== downloaded hash of %s is %x", pkt.Time, pktHash)
 			if firstTime == -1 {
 				glog.V(model.INSANE).Infof("=====--- first video paket idx %d, video idx %d, time %s is key %v is video %v", pkt.Idx, videoIdx, pkt.Time, pkt.IsKeyFrame, pkt.Idx == videoIdx)
 				firstTime = pkt.Time
 			} else if oneFrameDiff == 0 {
 				oneFrameDiff = pkt.Time - firstTime
-				// glog.Infof("=====--- first video paket idx %d, video idx %d, time %s is key %v is video %v frit time %s one frame %s",
-				// 	pkt.Idx, videoIdx, pkt.Time, pkt.IsKeyFrame, pkt.Idx == videoIdx, firstTime, oneFrameDiff)
 			}
 			lastTime = pkt.Time
 		}

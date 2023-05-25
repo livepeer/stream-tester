@@ -88,10 +88,6 @@ func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDur
 			startInd = i
 			break
 		} else if pkt.pts > firstPaketsPTS {
-			// msg := fmt.Sprintf("Diff between RTMP and HLS paket's PTS is %s, from prev packet is %s prev pkt %s HSL pkt %s next pkt %s",
-			// 	pkt.pts-firstPaketsPTS, firstPaketsPTS-lastPaket.pts, lastPaket.String(), firstPaketsPTS, pkt.String())
-			// glog.Info(msg)
-			// panic("stop")
 			curPacket = pkt
 			if firstPaketsPTS-lastPaket.pts < pkt.pts-firstPaketsPTS {
 				curPacket = lastPaket
@@ -102,13 +98,8 @@ func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDur
 		lastPaket = pkt
 	}
 	glog.V(model.VVERBOSE).Infof(`looking for %s cur packet: %s last packet %s startInd %d`, firstPaketsPTS, curPacket.String(), lastPaket.String(), startInd)
-	// for i, pkt := range sm.sentFrames {
-	// 	glog.Info(i, pkt.String())
-	// }
-	// panic("stop")
 	if curPacket.sentAt.IsZero() {
 		// not found
-		// panic(fmt.Sprintf(`not found match for segment with %s PTS`, firstPaketsPTS))
 		return 0, 0, fmt.Errorf(`not found match for segment with %s PTS`, firstPaketsPTS)
 	}
 	for i := startInd; i < len(sentFrames); i++ {
@@ -128,12 +119,9 @@ func (sm *segmentsMatcher) matchSegment(firstPaketsPTS time.Duration, segmentDur
 
 func (sm *segmentsMatcher) cleanup() {
 	glog.V(model.VVERBOSE).Infof(`segments matcher cleanup start len %d`, len(sm.sentFrames))
-	// sm.mu.Lock()
-	// glog.Infof(`segments matcher cleanup start len %d 2`, len(sm.sentFrames))
 	defer func() {
 		glog.V(model.VVERBOSE).Infof(`segments matcher cleanup start len %d end`, len(sm.sentFrames))
 	}()
-	// defer sm.mu.Unlock()
 	if len(sm.sentFrames) == 0 {
 		return
 	}

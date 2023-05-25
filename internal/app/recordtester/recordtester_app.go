@@ -422,6 +422,11 @@ func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDurat
 		glog.Warningf("Error parsing mp4 for manifestID=%s url=%s err=%v", stream.ID, url, err)
 		return 203, err
 	}
+	if len(streams) != 2 {
+		ers := fmt.Errorf("expected only 2 streams (video and audio), got=%d, streams=%v", len(streams), streams)
+		glog.Error(ers)
+		return 203, err
+	}
 	glog.Infof("Got %d streams in mp4 file manifestID=%s url=%s", len(streams), stream.ID, url)
 	dur, err := calcMP4FileDuration(body)
 	if err != nil {
