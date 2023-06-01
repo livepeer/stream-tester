@@ -6,6 +6,10 @@ all: streamtester loadtester testdriver lapi mapi recordtester
 
 # ldflags := -X 'github.com/livepeer/stream-tester/model.Version=$(shell git describe --dirty)' -X 'github.com/livepeer/stream-tester/model.IProduction=true'
 
+.PHONE: test
+test:
+	go test $(shell go list ./... | grep -v "orch-tester") --short -v --covermode=atomic --coverprofile=coverage.out --coverpkg=./...
+
 .PHONY: streamtester
 streamtester:
 	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)" cmd/streamtester/streamtester.go
