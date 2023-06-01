@@ -18,7 +18,7 @@ ARG	version
 
 RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" -tags h264 cmd/streamtester/streamtester.go
 
-RUN	parallel -q go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/{}/{}.go ::: testdriver mist-api-connector loadtester stream-monitor recordtester
+RUN	parallel -q go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/{}/{}.go ::: testdriver loadtester stream-monitor recordtester
 
 FROM	alpine:3.17.3
 
@@ -31,9 +31,8 @@ COPY --from=builder	/root/official_test_source_2s_keys_24pfs_30s_hls	official_te
 
 COPY --from=builder	/root/streamtester	\
 	/root/testdriver	\
-	/root/mist-api-connector	\
 	/root/loadtester	\
 	/root/stream-monitor	\
 	/root/recordtester	/usr/local/bin/
 
-RUN	for b in testdriver mist-api-connector loadtester stream-monitor recordtester; do ln -s /usr/local/bin/$b ./$b; done
+RUN	for b in testdriver loadtester stream-monitor recordtester; do ln -s /usr/local/bin/$b ./$b; done

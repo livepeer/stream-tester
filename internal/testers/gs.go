@@ -199,14 +199,14 @@ func gsCreatePolicy(signer *gsSigner, bucket, region, path string) (string, stri
 
 	expireAt := time.Now().Add(S3_POLICY_EXPIRE_IN_HOURS * time.Hour)
 	expireFmt := expireAt.UTC().Format(timeFormat)
-	src := fmt.Sprintf(`{ "expiration": "%s",
-    "conditions": [
-      {"bucket": "%s"},
-      {"acl": "public-read"},
-      ["starts-with", "$Content-Type", ""],
-      ["starts-with", "$key", "%s"]
-    ]
-  }`, expireFmt, bucket, path)
+	src := fmt.Sprintf(`{"expiration": "%s",
+	"conditions": [
+		{"bucket": "%s"},
+		{"acl": "public-read"},
+		["starts-with", "$Content-Type", ""],
+		["starts-with", "$key", "%s"]
+	]
+	}`, expireFmt, bucket, path)
 	policy := base64.StdEncoding.EncodeToString([]byte(src))
 	sign := signer.sign(policy)
 	return policy, sign

@@ -10,8 +10,17 @@ insert_final_newline = true
 trim_trailing_whitespace = true
 end_of_line = lf
 
-# Makefiles
-[Makefile]
+# Ignored files
+[{go.{mod,sum},*.{txt,md}}]
+charset = unset
+indent_style = unset
+indent_size = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+end_of_line = unset
+
+# Makefiles/golang files
+[{Makefile,*.go}]
 indent_style = tab
 
 [Dockerfile*]
@@ -22,5 +31,5 @@ indent_size = 8
 [*.{yml,yaml,sh}]
 indent_size = 2
 
-[*.go]
-indent_style = tab
+# [*.go]
+# indent_style = tab

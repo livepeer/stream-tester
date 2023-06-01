@@ -628,14 +628,12 @@ type orch struct {
 
 func (s *streamerClient) getOrchestrators() ([]*orch, error) {
 	query := map[string]string{
-		"query": `
-		{
+		"query": `{
 			transcoders(where: {active: true}) {
-			  id
-				 serviceURI
+				id
+				serviceURI
 			}
-		  }
-		`,
+		}`,
 	}
 
 	input, err := json.Marshal(query)

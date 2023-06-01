@@ -176,14 +176,18 @@ func main() {
 	testTranscode := fs.Bool("transcode", false, "Check Transcode API workflow")
 	catalystPipelineStrategy := fs.String("catalyst-pipeline-strategy", "", "Which catalyst pipeline strategy to use regarding. The appropriate values are defined by catalyst-api itself.")
 	recordObjectStoreId := fs.String("record-object-store-id", "", "ID for the Object Store to use for recording storage. Forwarded to the streams created in the API")
+
+	// Discord related flags
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
 	discordUserName := fs.String("discord-user-name", "", "User name to use when sending messages to Discord")
 	discordUsersToNotify := fs.String("discord-users", "", "Id's of users to notify in case of failure")
+
+	// PagerDuty related flags
 	pagerDutyIntegrationKey := fs.String("pagerduty-integration-key", "", "PagerDuty integration key")
 	pagerDutyComponent := fs.String("pagerduty-component", "", "PagerDuty component")
 	pagerDutyLowUrgency := fs.Bool("pagerduty-low-urgency", false, "Whether to send only low-urgency PagerDuty alerts")
-	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
 
+	// Serf related flags
 	serfRPCAddr := fs.String("serf-rpc-addr", "", "Serf RPC address for fetching serf members")
 	useSerf := fs.Bool("use-serf", false, "Use serf playback URLs")
 	useRandomSerfMember := fs.Bool("random-serf-member", false, "Use a random member from serf member list")
@@ -191,6 +195,8 @@ func main() {
 	serfNodeCount := fs.Int("serf-node-count", 5, "Count of serf nodes when selecting nearest members")
 	latitude := fs.Float64("latitude", 0, "latitude/geolocation of this record testing instance")
 	longitude := fs.Float64("longitude", 0, "longitude/geolocation of this record testing instance")
+
+	bind := fs.String("bind", "0.0.0.0:9090", "Address to bind metric server to")
 
 	_ = fs.String("config", "", "config file (optional)")
 

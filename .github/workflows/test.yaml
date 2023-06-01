@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Test project
+  go-test:
+    name: Run go testing suite with coverage
     runs-on: ubuntu-20.04
     steps:
       - name: Set up Go
@@ -46,7 +46,7 @@ jobs:
       - name: Trigger test suite
         run: |
           # ignoring orch-tester
-          go test $(go list ./... | grep -v "orch-tester") --short -v --covermode=atomic --coverprofile=coverage.out
+          go test $(go list ./... | grep -v "orch-tester") --short -v --covermode=atomic --coverprofile=coverage.out --coverpkg=./...
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v3
@@ -89,3 +89,20 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v2
+
+  editorconfig:
+    name: Run editorconfig checker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3.5.2
+        with:
+          # Check https://github.com/livepeer/go-livepeer/pull/1891
+          # for ref value discussion
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install editorconfig-checker
+        uses: editorconfig-checker/action-editorconfig-checker@main
+
+      - name: Run editorconfig checker against the repo
+        run: editorconfig-checker
