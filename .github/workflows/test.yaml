@@ -42,7 +42,7 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Get dependencies
-        run: go get -v -t -d ./...
+        run: go mod download
 
       - name: Trigger test suite
         run: |

@@ -1,11 +1,15 @@
-FROM	livepeerci/build	as	builder
+FROM --platform=$BUILDPLATFORM	livepeerci/build	as	builder
 
-RUN	apt update && \
-	apt install -yqq wget tar
+ARG	BUILDARCH
+
+RUN	apt update \
+	&& apt install -yqq wget tar \
+	&& rm -rf /usr/local/go \
+	&& curl -fSsL https://go.dev/dl/go1.19.9.linux-${BUILDARCH}.tar.gz | tar -C /usr/local -xz
 
 WORKDIR	/root
 
-RUN	wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
+RUN	wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C . && go version
 
 COPY	go.mod go.sum ./
 
@@ -28,7 +32,7 @@ RUN	apt update && \
 
 RUN	update-ca-certificates
 
-WORKDIR /root
+WORKDIR	/root
 
 COPY --from=builder	/root/official_test_source_2s_keys_24pfs_30s_hls	official_test_source_2s_keys_24pfs_30s_hls
 COPY --from=builder	/root/orch_tester	/usr/local/bin/orch_tester
