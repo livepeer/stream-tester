@@ -179,7 +179,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	if rt.useHTTP {
 		sterr := rt.doOneHTTPStream(fileName, streamName, broadcasters[0], testDuration, stream)
 		if sterr != nil {
-			glog.Warningf("Streaming returned error err=%v", sterr, stream.ID, stream.PlaybackID)
+			glog.Warningf("Streaming returned error err=%v streamId=%s playbackId=%s", sterr, stream.ID, stream.PlaybackID)
 			return 3, err
 		}
 		if streamTwice {
