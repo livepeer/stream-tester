@@ -144,7 +144,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	// Make sure we include the Stream and Playback IDs on any error message
 	defer func() {
 		if err != nil {
-			err = fmt.Errorf("streamId=%s playbackId=%s %w", stream.ID, stream.PlaybackID, err)
+			err = fmt.Errorf("playbackId=%s %w", stream.PlaybackID, err)
 		}
 	}()
 	apiTry = 0
