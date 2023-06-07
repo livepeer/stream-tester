@@ -13,10 +13,10 @@ require (
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/livepeer/go-api-client v0.4.7
-	github.com/livepeer/go-livepeer v0.5.39-0.20230323063518-8c7ec0155c5b
+	github.com/livepeer/go-livepeer v0.5.39-0.20230606164228-1b9da7f25fa8
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
-	github.com/livepeer/livepeer-data v0.7.1
+	github.com/livepeer/livepeer-data v0.7.2-0.20230601112542-e54477bc9479
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/peterbourgon/ff v1.7.1
