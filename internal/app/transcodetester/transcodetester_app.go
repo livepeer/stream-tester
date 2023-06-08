@@ -129,7 +129,7 @@ func (tt *transcodeTester) transcodeFromUrl(inUrl string, os objectStore, path s
 			Bucket: os.bucket,
 		},
 		Outputs: api.TranscodeFileReqOutputs{
-			Hls: api.TranscodeFileReqOutputsHls{
+			Hls: api.TranscodeFileReqOutput{
 				Path: path,
 			},
 		},
@@ -188,7 +188,7 @@ func (tt *transcodeTester) transcodeFromPrivateBucket(os objectStore, inPath, ou
 			Bucket: os.bucket,
 		},
 		Outputs: api.TranscodeFileReqOutputs{
-			Hls: api.TranscodeFileReqOutputsHls{
+			Hls: api.TranscodeFileReqOutput{
 				Path: outPath,
 			},
 		},
@@ -217,7 +217,7 @@ func (tt *transcodeTester) transcodeWeb3StorageFromUrl(inUrl, w3sProof, path str
 			},
 		},
 		Outputs: api.TranscodeFileReqOutputs{
-			Hls: api.TranscodeFileReqOutputsHls{
+			Hls: api.TranscodeFileReqOutput{
 				Path: path,
 			},
 		},

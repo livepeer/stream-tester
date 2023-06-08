@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/livepeer/stream-tester/apis/mist"
+	"github.com/livepeer/catalyst-api/mapic/apis/mist"
 	"github.com/livepeer/stream-tester/apis/picarto"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
@@ -58,10 +58,9 @@ func main() {
 			if *mistCreds == "" {
 				return fmt.Errorf("Mist's credentials should be provided")
 			}
-			createStream(*host, *mistCreds, *token, args[0])
+			return createStream(*host, *mistCreds, *token, args[0])
 			// _, _, err := createStream(*token, *presets, args[0])
 			// return err
-			return nil
 		},
 	}
 

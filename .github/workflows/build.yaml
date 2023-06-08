@@ -127,7 +127,6 @@ jobs:
           - lapi
           - loadtester
           - mapi
-          - mist-api-connector
           - recordtester
           - streamtester
           - testdriver

@@ -15,8 +15,8 @@ import (
 	// pprof adds handlers to default mux via `init()`
 
 	"github.com/golang/glog"
+	mistapi "github.com/livepeer/catalyst-api/mapic/apis/mist"
 	"github.com/livepeer/stream-tester/apis/livepeer"
-	mistapi "github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/internal/utils"

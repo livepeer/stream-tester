@@ -1,7 +1,7 @@
+//go:build h264
 // +build h264
 
 /*
-
 Golang h264,aac decoder/encoder libav wrapper
 
 	d, err = codec.NewAACEncoder()
@@ -20,19 +20,19 @@ Golang h264,aac decoder/encoder libav wrapper
 package codec
 
 import (
-	"unsafe"
 	"reflect"
+	"unsafe"
 
 	/*
-	#cgo pkg-config: libavformat libavutil libavcodec 
+		#cgo pkg-config: libavformat libavutil libavcodec
 
-	#include <libavutil/avutil.h>
-	#include <libavformat/avformat.h>
+		#include <libavutil/avutil.h>
+		#include <libavformat/avformat.h>
 
-	static void libav_init() {
-		av_register_all();
-		av_log_set_level(AV_LOG_DEBUG);
-	}
+		static void libav_init() {
+			av_register_all();
+			av_log_set_level(AV_LOG_DEBUG);
+		}
 	*/
 	"C"
 )
@@ -48,5 +48,3 @@ func fromCPtr(buf unsafe.Pointer, size int) (ret []uint8) {
 	hdr.Data = uintptr(buf)
 	return
 }
-
-
