@@ -97,9 +97,8 @@ func NewRecordTester(gctx context.Context, opts RecordTesterOptions, serfOpts Se
 	return rt
 }
 
-func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.Duration) (int, error) {
+func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.Duration) (i int, err error) {
 	defer rt.cancel()
-	var err error
 	var broadcasters []string
 	ingest, err := rt.getIngestInfo()
 	if err != nil {
@@ -142,11 +141,17 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		}
 		break
 	}
+	// Make sure we include the Stream and Playback IDs on any error message
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("playbackId=%s %w", stream.PlaybackID, err)
+		}
+	}()
 	apiTry = 0
 	rt.streamID = stream.ID
 	rt.stream = stream
 	messenger.SendMessage(fmt.Sprintf(":information_source: Created stream id=%s", stream.ID))
-	glog.V(model.VERBOSE).Infof("Created Livepeer stream id=%s streamKey=%s playbackId=%s name=%s", stream.ID, stream.StreamKey, stream.PlaybackID, streamName)
+	glog.V(model.VERBOSE).Infof("Created Livepeer stream streamId=%s streamKey=%s playbackId=%s name=%s", stream.ID, stream.StreamKey, stream.PlaybackID, streamName)
 	rtmpURL := fmt.Sprintf("%s/%s", ingest.Ingest, stream.StreamKey)
 
 	testerFuncs := []testers.StartTestFunc{}
@@ -169,20 +174,20 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		serfMember := rt.serfOpts.SerfMembers[index]
 		mediaURL = fmt.Sprintf("%s/hls/%s/index.m3u8", serfMember.Tags["https"], stream.PlaybackID)
 	}
-	glog.V(model.SHORT).Infof("RTMP: %s", rtmpURL)
-	glog.V(model.SHORT).Infof("MEDIA: %s", mediaURL)
+	glog.V(model.SHORT).Infof("RTMP: %s streamId=%s playbackId=%s", rtmpURL, stream.ID, stream.PlaybackID)
+	glog.V(model.SHORT).Infof("MEDIA: %s streamId=%s playbackId=%s", mediaURL, stream.ID, stream.PlaybackID)
 	if rt.useHTTP {
 		sterr := rt.doOneHTTPStream(fileName, streamName, broadcasters[0], testDuration, stream)
 		if sterr != nil {
-			glog.Warningf("Streaming returned error err=%v", sterr)
+			glog.Warningf("Streaming returned error err=%v streamId=%s playbackId=%s", sterr, stream.ID, stream.PlaybackID)
 			return 3, err
 		}
 		if streamTwice {
-			glog.Infof("Pause specified, waiting %s before streaming second time", pauseDuration)
+			glog.Infof("Pause specified, waiting %s before streaming second time. streamId=%s playbackId=%s", pauseDuration, stream.ID, stream.PlaybackID)
 			time.Sleep(pauseDuration)
 			sterr = rt.doOneHTTPStream(fileName, streamName, broadcasters[0], testDuration, stream)
 			if sterr != nil {
-				glog.Warningf("Second time streaming returned error err=%v", sterr)
+				glog.Warningf("Second time streaming returned error err=%v streamId=%s playbackId=%s", sterr, stream.ID, stream.PlaybackID)
 				return 3, err
 			}
 		}
@@ -192,46 +197,46 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		sr2.StartStreaming(fileName, rtmpURL, mediaURL, 2*time.Minute, testDuration)
 		srerr := sr2.Err()
 
-		glog.Infof("Streaming stream id=%s done err=%v", stream.ID, srerr)
+		glog.Infof("Streaming done err=%v streamId=%s playbackId=%s", srerr, stream.ID, stream.PlaybackID)
 		var re *testers.RTMPError
 		if errors.As(srerr, &re) {
 			return 2, re
 		}
 		if srerr != nil {
-			glog.Warningf("Streaming returned error err=%v", srerr)
+			glog.Warningf("Streaming returned error err=%v streamId=%s playbackId=%s", srerr, stream.ID, stream.PlaybackID)
 			return 3, srerr
 		}
 		stats, err := sr2.Stats()
 		if err != nil {
-			glog.Warningf("Stats returned error err=%v", err)
+			glog.Warningf("Stats returned error err=%v streamId=%s playbackId=%s", err, stream.ID, stream.PlaybackID)
 			return 21, err
 		}
-		glog.Infof("Streaming success rate=%v", stats.SuccessRate)
+		glog.Infof("Streaming success rate=%v streamId=%s playbackId=%s", stats.SuccessRate, stream.ID, stream.PlaybackID)
 		if err = rt.isCancelled(); err != nil {
 			return 0, err
 		}
 		if streamTwice {
-			glog.Infof("Pause specified, waiting %s before streaming second time", pauseDuration)
+			glog.Infof("Pause specified, waiting %s before streaming second time. streamId=%s playbackId=%s", pauseDuration, stream.ID, stream.PlaybackID)
 			time.Sleep(pauseDuration)
 			sr2 := testers.NewStreamer2(rt.ctx, testers.Streamer2Options{MistMode: true}, testerFuncs...)
 			go sr2.StartStreaming(fileName, rtmpURL, mediaURL, 30*time.Second, testDuration)
 			<-sr2.Done()
 			srerr := sr2.Err()
-			glog.Infof("Streaming second stream id=%s done", stream.ID)
+			glog.Infof("Streaming second done. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 			var re *testers.RTMPError
 			if errors.As(srerr, &re) {
 				return 2, re
 			}
 			if srerr != nil {
-				glog.Warningf("Streaming second returned error err=%v", srerr)
+				glog.Warningf("Streaming second returned error err=%v streamId=%s playbackId=%s", srerr, stream.ID, stream.PlaybackID)
 				return 3, srerr
 			}
 			stats, err := sr2.Stats()
 			if err != nil {
-				glog.Warningf("Stats returned error err=%v", err)
+				glog.Warningf("Stats returned error err=%v streamId=%s playbackId=%s", err, stream.ID, stream.PlaybackID)
 				return 21, err
 			}
-			glog.Infof("Streaming second time success rate=%v", stats.SuccessRate)
+			glog.Infof("Streaming second time success rate=%v streamId=%s playbackId=%s", stats.SuccessRate, stream.ID, stream.PlaybackID)
 			if err = rt.isCancelled(); err != nil {
 				return 0, err
 			}
@@ -240,15 +245,15 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	if err := rt.isCancelled(); err != nil {
 		return 0, err
 	}
-	glog.Infof("Waiting 10 seconds")
+	glog.Infof("Waiting 10 seconds. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 	time.Sleep(10 * time.Second)
 	// now get sessions
 	sessions, err := rt.lapi.GetSessionsNew(stream.ID, false)
 	if err != nil {
-		glog.Errorf("Error getting sessions for stream id=%s err=%v", stream.ID, err)
+		glog.Errorf("Error getting sessions err=%v streamId=%s playbackId=%s", err, stream.ID, stream.PlaybackID)
 		return 252, err
 	}
-	glog.Infof("Sessions: %+v", sessions)
+	glog.Infof("Sessions: %+v streamId=%s playbackId=%s", sessions, stream.ID, stream.PlaybackID)
 
 	expectedSessions := 1
 	if streamTwice {
@@ -264,7 +269,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 
 	sess := sessions[0]
 	if len(sess.Profiles) != len(stream.Profiles) {
-		glog.Infof("session: %+v", sess)
+		glog.Infof("session: %+v streamId=%s playbackId=%s", sess, stream.ID, stream.PlaybackID)
 		err := fmt.Errorf("got %d profiles but should have %d", len(sess.Profiles), len(stream.Profiles))
 		return 251, err
 	}
@@ -276,7 +281,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 0, err
 	}
 
-	glog.Info("Streaming done, waiting for recording URL to appear")
+	glog.Infof("Streaming done, waiting for recording URL to appear. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 	if rt.useForceURL {
 		time.Sleep(5 * time.Second)
 	} else {
@@ -291,7 +296,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		err := fmt.Errorf("error getting sessions for stream id=%s err=%v", stream.ID, err)
 		return 252, err
 	}
-	glog.Infof("Sessions: %+v", sessions)
+	glog.Infof("Sessions: %+v streamId=%s playbackId=%s", sessions, stream.ID, stream.PlaybackID)
 	if err = rt.isCancelled(); err != nil {
 		return 0, err
 	}
@@ -310,7 +315,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			err := fmt.Errorf("recording URL should appear by now")
 			return 249, err
 		}
-		glog.Infof("recordingURL=%s downloading now", sess.RecordingURL)
+		glog.Infof("recordingURL=%s downloading now. streamId=%s playbackId=%s", sess.RecordingURL, stream.ID, stream.PlaybackID)
 
 		if err = rt.isCancelled(); err != nil {
 			return 0, err
@@ -327,7 +332,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			return es, err
 		}
 	}
-	glog.Info("Done Record Test")
+	glog.Infof("Done Record Test. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 
 	rt.lapi.DeleteStream(stream.ID)
 	return 0, nil
@@ -397,29 +402,29 @@ func (rt *recordTester) isCancelled() error {
 func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
 	es := 0
 	started := time.Now()
-	glog.V(model.VERBOSE).Infof("Downloading mp4 url=%s stream id=%s", url, stream.ID)
+	glog.V(model.VERBOSE).Infof("Downloading mp4 url=%s streamId=%s playbackId=%s", url, stream.ID, stream.PlaybackID)
 
 	resp, err := http.Get(url)
 	if err != nil {
-		glog.Warningf("Error downloading mp4 for manifestID=%s url=%s", stream.ID, url)
+		glog.Warningf("Error downloading mp4 url=%s streamId=%s playbackId=%s", url, stream.ID, stream.PlaybackID)
 		return 3, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		glog.Warningf("HTTP error downloading mp4 for manifestID=%s url=%s status=%s", stream.ID, url, resp.Status)
+		glog.Warningf("HTTP error downloading mp4 url=%s status=%s streamId=%s playbackId=%s", url, resp.Status, stream.ID, stream.PlaybackID)
 		return 3, err
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		glog.Warningf("HTTP error downloading mp4 for manifestID=%s url=%s err=%v", stream.ID, url, err)
+		glog.Warningf("HTTP error downloading mp4 url=%s err=%v streamId=%s playbackId=%s", url, err, stream.ID, stream.PlaybackID)
 		return 3, err
 	}
-	glog.Infof("Downloaded bytes=%b manifestID=%s url=%s took=%s", len(body), stream.ID, url, time.Since(started))
+	glog.Infof("Downloaded bytes=%b url=%s took=%s streamId=%s playbackId=%s", len(body), url, time.Since(started), stream.ID, stream.PlaybackID)
 	bodyR := bytes.NewReader(body)
 	dem := mp4.NewDemuxer(bodyR)
 	streams, err := dem.Streams()
 	if err != nil {
-		glog.Warningf("Error parsing mp4 for manifestID=%s url=%s err=%v", stream.ID, url, err)
+		glog.Warningf("Error parsing mp4 url=%s err=%v streamId=%s playbackId=%s", url, err, stream.ID, stream.PlaybackID)
 		return 203, err
 	}
 	if len(streams) != 2 {
@@ -427,10 +432,10 @@ func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDurat
 		glog.Error(ers)
 		return 203, err
 	}
-	glog.Infof("Got %d streams in mp4 file manifestID=%s url=%s", len(streams), stream.ID, url)
+	glog.Infof("Got %d streams in mp4 file url=%s streamId=%s playbackId=%s", len(streams), url, stream.ID, stream.PlaybackID)
 	dur, err := calcMP4FileDuration(body)
 	if err != nil {
-		glog.Warningf("Error parsing mp4 for manifestID=%s url=%s err=%v", stream.ID, url, err)
+		glog.Warningf("Error parsing mp4 url=%s err=%v streamId=%s playbackId=%s", url, err, stream.ID, stream.PlaybackID)
 		return 203, err
 	}
 	durDiff := streamDuration - dur
@@ -440,7 +445,7 @@ func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDurat
 	if durDiff > 2*time.Second {
 		ers := fmt.Errorf("duration of mp4 differ by %s (got %s, should %s)", durDiff, dur, streamDuration)
 		glog.Error(ers)
-		return 300, err
+		return 300, ers
 	}
 	return es, nil
 }
@@ -450,24 +455,24 @@ func (rt *recordTester) checkDown(stream *api.Stream, url string, streamDuration
 	started := time.Now()
 	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil, false)
 	<-downloader.Done()
-	glog.Infof(`Pulling for %s (%s) stopped after %s`, stream.ID, stream.PlaybackID, time.Since(started))
+	glog.Infof(`Pulling stopped after %s. streamId=%s playbackId=%s`, time.Since(started), stream.ID, stream.PlaybackID)
 	if err := rt.isCancelled(); err != nil {
 		return 0, err
 	}
 	vs := downloader.VODStats()
 	rt.vodStats = vs
 	if len(vs.SegmentsNum) != len(api.StandardProfiles)+1 {
-		glog.Warningf("Number of renditions doesn't match! Has %d should %d", len(vs.SegmentsNum), len(api.StandardProfiles)+1)
+		glog.Warningf("Number of renditions doesn't match! Has %d should %d. streamId=%s playbackId=%s", len(vs.SegmentsNum), len(api.StandardProfiles)+1, stream.ID, stream.PlaybackID)
 		es = 35
 	}
-	glog.Infof("Stats for %s: %s", stream.ID, vs.String())
-	glog.Infof("Stats for %s raw: %+v", stream.ID, vs)
+	glog.Infof("Stats: %s streamId=%s playbackId=%s", vs.String(), stream.ID, stream.PlaybackID)
+	glog.Infof("Stats raw: %+v streamId=%s playbackId=%s", vs, stream.ID, stream.PlaybackID)
 	if ok, ers := vs.IsOk(streamDuration, false); !ok {
-		glog.Warningf("NOT OK! (%s)", ers)
+		glog.Warningf("NOT OK! (%s) streamId=%s playbackId=%s", ers, stream.ID, stream.PlaybackID)
 		es = 36
 		return es, errors.New(ers)
 	} else {
-		glog.Infoln("All ok!")
+		glog.Infof("All ok! streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 	}
 	return es, nil
 }
