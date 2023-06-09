@@ -1,8 +1,9 @@
 package main
 
 import (
-	"go.opencensus.io/stats/view"
 	"sync"
+
+	"go.opencensus.io/stats/view"
 )
 
 type broadcasterMetrics struct {
@@ -16,7 +17,7 @@ type broadcasterMetrics struct {
 	lastErrs map[string]int
 	incErrs  map[string]int
 
-	mu sync.Mutex
+	mu *sync.Mutex
 }
 
 func newBroadcasterMetrics() *broadcasterMetrics {
@@ -27,7 +28,7 @@ func newBroadcasterMetrics() *broadcasterMetrics {
 		rateCount: map[string]int{},
 		lastErrs:  map[string]int{},
 		incErrs:   map[string]int{},
-		mu:        sync.Mutex{},
+		mu:        &sync.Mutex{},
 	}
 }
 

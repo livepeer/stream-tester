@@ -112,7 +112,7 @@ func (bot *discordBot) start() {
 
 	// wait for the global exit
 	<-bot.ctx.Done()
-	bot.sess.UpdateStatus(255, "")
+	bot.sess.UpdateGameStatus(255, "")
 
 	// Cleanly close down the Discord session.
 	bot.sess.Close()
@@ -124,7 +124,7 @@ func (bot *discordBot) start() {
 func ready(s *discordgo.Session, event *discordgo.Ready) {
 
 	// Set the playing status.
-	s.UpdateStatus(0, botPrefix)
+	s.UpdateGameStatus(0, botPrefix)
 }
 
 func (bot *discordBot) setupRouter() *exrouter.Route {

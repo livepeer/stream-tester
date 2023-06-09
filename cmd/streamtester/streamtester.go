@@ -19,9 +19,9 @@ import (
 	"github.com/peterbourgon/ff"
 
 	"github.com/golang/glog"
+	mistapi "github.com/livepeer/catalyst-api/mapic/apis/mist"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/stream-tester/apis/livepeer"
-	mistapi "github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/metrics"
 	"github.com/livepeer/stream-tester/internal/server"
 	"github.com/livepeer/stream-tester/internal/testers"

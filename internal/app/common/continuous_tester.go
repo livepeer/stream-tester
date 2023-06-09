@@ -90,7 +90,6 @@ func (ct *continuousTester) Start(start func(ctx context.Context) error, testDur
 		case <-time.After(pauseBetweenTests):
 		}
 	}
-	return nil
 }
 
 func (ct *continuousTester) sendPagerdutyEvent(err error) {

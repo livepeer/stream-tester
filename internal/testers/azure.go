@@ -50,7 +50,11 @@ func save2Azure(fileName string, data []byte) (string, error) {
 	blobURL := azure.NewBlobURL(fileName)
 	var hdrs azblob.BlobHTTPHeaders
 	var ac azblob.BlobAccessConditions
-	resp, err := blobURL.ToBlockBlobURL().Upload(ctx, body, hdrs, azblob.Metadata{}, ac)
+	var att azblob.AccessTierType
+	var btm azblob.BlobTagsMap
+	var cpko azblob.ClientProvidedKeyOptions
+	var impo azblob.ImmutabilityPolicyOptions
+	resp, err := blobURL.ToBlockBlobURL().Upload(ctx, body, hdrs, azblob.Metadata{}, ac, att, btm, cpko, impo)
 	glog.Infof("Response for uploading to Azure: %v", resp.Status())
 	return azureContainer + "/" + fileName, err
 }

@@ -10,13 +10,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/livepeer/go-livepeer/cmd/livepeer/starter"
-	"github.com/livepeer/go-livepeer/common"
-	"github.com/livepeer/joy4/format"
-	streamtesterMetrics "github.com/livepeer/stream-tester/internal/metrics"
-	"github.com/livepeer/stream-tester/internal/server"
-	"github.com/peterbourgon/ff"
-	"go.opencensus.io/stats/view"
 	"io/ioutil"
 	"log"
 	"math"
@@ -27,6 +20,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/livepeer/go-livepeer/cmd/livepeer/starter"
+	"github.com/livepeer/go-livepeer/common"
+	"github.com/livepeer/joy4/format"
+	streamtesterMetrics "github.com/livepeer/stream-tester/internal/metrics"
+	"github.com/livepeer/stream-tester/internal/server"
+	"github.com/peterbourgon/ff"
+	"go.opencensus.io/stats/view"
 
 	"github.com/golang/glog"
 	apiModels "github.com/livepeer/leaderboard-serverless/models"
@@ -39,20 +40,22 @@ import (
 	promModels "github.com/prometheus/common/model"
 )
 
-const defaultHost = "127.0.0.1"
-const streamTesterPort = "7934"
-const streamTesterLapiToken = ""
-const streamTesterMistCreds = ""
-const prometheusPort = "9090"
-const bcastMediaPort = "8935"
-const bcastRTMPPort = "1935"
-const bcastCliPort = "7935"
+const (
+	defaultHost           = "127.0.0.1"
+	streamTesterPort      = "7934"
+	streamTesterLapiToken = ""
+	streamTesterMistCreds = ""
+	prometheusPort        = "9090"
+	bcastMediaPort        = "8935"
+	bcastRTMPPort         = "1935"
+	bcastCliPort          = "7935"
 
-const refreshWait = 70 * time.Second
-const httpTimeout = 8 * time.Second
-const bcastReadyTimeout = 10 * time.Minute
+	refreshWait       = 70 * time.Second
+	httpTimeout       = 8 * time.Second
+	bcastReadyTimeout = 10 * time.Minute
 
-const numSegments = 15
+	numSegments = 15
+)
 
 var start time.Time
 
@@ -628,14 +631,12 @@ type orch struct {
 
 func (s *streamerClient) getOrchestrators() ([]*orch, error) {
 	query := map[string]string{
-		"query": `
-		{
+		"query": `{
 			transcoders(where: {active: true}) {
-			  id
-				 serviceURI
+				id
+				serviceURI
 			}
-		  }
-		`,
+		}`,
 	}
 
 	input, err := json.Marshal(query)

@@ -16,12 +16,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/livepeer/catalyst-api/mapic/apis/mist"
 	"github.com/livepeer/joy4/av"
 	"github.com/livepeer/joy4/av/avutil"
 	"github.com/livepeer/joy4/format"
 	"github.com/livepeer/joy4/format/ts"
 	"github.com/livepeer/stream-tester/apis/livepeer"
-	"github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/model"
@@ -42,14 +42,17 @@ var errResolution = errors.New("InvalidResolution")
 var errH264Profile = errors.New("InvalidH264Profile")
 
 var allowedExt = []string{".ts", ".mp4"}
-var allowedH264Profiles = map[string]string{"baseline": "H264Baseline", "main": "H264Main", "high": "H264High"}
-
-/*
-   - H264Baseline
-   - H264Main
-   - H264High
-   - H264ConstrainedHigh
-*/
+var allowedH264Profiles = map[string]string{
+	/*
+		- H264Baseline
+		- H264Main
+		- H264High
+		- H264ConstrainedHigh
+	*/
+	"baseline": "H264Baseline",
+	"main":     "H264Main",
+	"high":     "H264High",
+}
 
 func parseResolution(resolution string) (int, int, error) {
 	res := strings.Split(resolution, "x")

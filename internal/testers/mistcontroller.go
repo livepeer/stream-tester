@@ -16,8 +16,8 @@ import (
 
 	"github.com/Necroforger/dgrouter/exrouter"
 	"github.com/golang/glog"
+	"github.com/livepeer/catalyst-api/mapic/apis/mist"
 	"github.com/livepeer/m3u8"
-	"github.com/livepeer/stream-tester/apis/mist"
 	"github.com/livepeer/stream-tester/apis/picarto"
 	"github.com/livepeer/stream-tester/internal/utils"
 	"github.com/livepeer/stream-tester/internal/utils/uhttp"
