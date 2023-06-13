@@ -9,7 +9,7 @@ RUN	apt update \
 
 WORKDIR	/root
 
-RUN	wget -qO- https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C . && go version
+RUN	wget -qO- https://test-harness-gcp.livepeer.fish/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C . && go version
 
 COPY	go.mod go.sum ./
 

@@ -23,20 +23,20 @@ Automatically built binaries can be found on
 
 ## Video test files
 
-- [official_test_source_2s_keys_24pfs.mp4](https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs.mp4)
+- [official_test_source_2s_keys_24pfs.mp4](https://test-harness-gcp.livepeer.fish/official_test_source_2s_keys_24pfs.mp4)
 
-- [official_test_source_2s_keys_24pfs_3min.mp4](https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs_3min.mp4)
+- [official_test_source_2s_keys_24pfs_3min.mp4](https://test-harness-gcp.livepeer.fish/official_test_source_2s_keys_24pfs_3min.mp4)
 
-- [bbb_sunflower_1080p_30fps_normal_t02.mp4](https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_t02.mp4)
+- [bbb_sunflower_1080p_30fps_normal_t02.mp4](https://test-harness-gcp.livepeer.fish/bbb_sunflower_1080p_30fps_normal_t02.mp4)
 
-- [bbb_sunflower_1080p_30fps_normal_2min.mp4](https://storage.googleapis.com/lp_testharness_assets/bbb_sunflower_1080p_30fps_normal_2min.mp4)
+- [bbb_sunflower_1080p_30fps_normal_2min.mp4](https://test-harness-gcp.livepeer.fish/bbb_sunflower_1080p_30fps_normal_2min.mp4)
 
 ## Command line
 
 If name of the file to stream is not specified, then default one -
 `official_test_source_2s_keys_24pfs.mp4` is used. It should be placed
 in the same directory as Stream Tester. Can be downloaded from
-[here](https://storage.googleapis.com/lp_testharness_assets/official_test_source_2s_keys_24pfs.mp4).
+[here](https://test-harness-gcp.livepeer.fish/official_test_source_2s_keys_24pfs.mp4).
 
 All options can be put into config file and used like
 

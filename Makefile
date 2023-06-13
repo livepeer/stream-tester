@@ -50,10 +50,6 @@ docker:
 push:
 	docker push livepeer/streamtester:latest
 
-.PHONY: localdocker
-localdocker:
-	docker build -f docker/Dockerfile.debian -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .
-
 .PHONY: release
 release:
 	@if [[ ! "$(version)" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-.+)?$$ ]]; then \
