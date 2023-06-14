@@ -553,8 +553,8 @@ github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07 h1:ISkFQYYDgfnM6Go
 github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07/go.mod h1:RDTLvmm/NJWjzuUpEDyIWmLTqSfpZEcnPnacG8sfh34=
 github.com/livepeer/leaderboard-serverless v1.0.0 h1:QqUxAEorjtfFxQO7tqTbxOLK+LFTJU27hvXf3/8YRZw=
 github.com/livepeer/leaderboard-serverless v1.0.0/go.mod h1:0H4gFyyTO3lXtqfRIwyRaWPuW0pBMXkNUDtIjHHniW0=
-github.com/livepeer/livepeer-data v0.7.2-0.20230601112542-e54477bc9479 h1:oZlEaaAQL3uQ/gteMNHjTGp+8myVKnLWqN7jn2zVNpc=
-github.com/livepeer/livepeer-data v0.7.2-0.20230601112542-e54477bc9479/go.mod h1:Jpf4jHK+fbWioBHRDRM1WadNT1qmY27g2YicTdO0Rtc=
+github.com/livepeer/livepeer-data v0.7.2 h1:cda20aNKKTxyhgvWu/zVf0IPRYTWu2xB5cPav1CwqBs=
+github.com/livepeer/livepeer-data v0.7.2/go.mod h1:Jpf4jHK+fbWioBHRDRM1WadNT1qmY27g2YicTdO0Rtc=
 github.com/livepeer/lpms v0.0.0-20230502004917-20aa13b8165e h1:1n1mh6u0Hcle7+s2bobJVde71MmGH9FUu6ZD5AtfLGI=
 github.com/livepeer/lpms v0.0.0-20230502004917-20aa13b8165e/go.mod h1:Hr/JhxxPDipOVd4ZrGYWrdJfpVF8/SEI0nNr2ctAlkM=
 github.com/livepeer/m3u8 v0.11.1 h1:VkUJzfNTyjy9mqsgp5JPvouwna8wGZMvd/gAfT5FinU=
