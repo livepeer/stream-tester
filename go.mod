@@ -30,7 +30,7 @@ require (
 	go.etcd.io/etcd/client/v3 v3.5.9
 	go.opencensus.io v0.24.0
 	golang.org/x/net v0.10.0
-	golang.org/x/text v0.9.0
+	golang.org/x/text v0.10.0
 	google.golang.org/api v0.125.0
 	google.golang.org/grpc v1.55.0 // indirect
 )
