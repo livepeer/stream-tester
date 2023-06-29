@@ -3,7 +3,7 @@ module github.com/livepeer/stream-tester
 go 1.19
 
 require (
-	cloud.google.com/go/storage v1.30.1
+	cloud.google.com/go/storage v1.31.0
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/Azure/azure-storage-blob-go v0.15.0
 	github.com/Necroforger/dgrouter v0.0.0-20200517224846-e66453b957c1
