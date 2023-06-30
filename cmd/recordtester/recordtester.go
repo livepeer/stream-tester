@@ -162,7 +162,7 @@ func main() {
 	ingestStr := fs.String("ingest", "", "Ingest server info in JSON format including ingest and playback URLs. Should follow Livepeer API schema")
 	analyzerServers := fs.String("analyzer-servers", "", "Comma-separated list of base URLs to connect for the Stream Health Analyzer API (defaults to --api-server)")
 	fileArg := fs.String("file", "bbb_sunflower_1080p_30fps_normal_t02.mp4", "File to stream")
-	vodImportUrl := fs.String("vod-import-url", "https://test-harness-gcp.livepeer.fish/bbb_sunflower_1080p_30fps_normal_2min.mp4", "URL for VOD import")
+	vodImportUrl := fs.String("vod-import-url", "https://test-harness-gcp.livepeer.fish/bbb_sunflower_1080p_30fps_normal_1min.mp4", "URL for VOD import")
 	continuousTest := fs.Duration("continuous-test", 0, "Do continuous testing")
 	useHttp := fs.Bool("http", false, "Do HTTP tests instead of RTMP")
 	forceRecordingUrl := fs.Bool("force-recording-url", false, "Whether to force the API to return a recording URL (skip the user session timeout)")

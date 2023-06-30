@@ -6,7 +6,7 @@ RUN	apk add --no-cache make gcc musl-dev linux-headers git \
 
 WORKDIR	/root
 
-RUN	parallel wget https://test-harness-gcp.livepeer.fish/{} ::: official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs_3min.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_2min.mp4 official_test_source_2s_keys_24pfs_30s.mp4 && \
+RUN	parallel wget https://test-harness-gcp.livepeer.fish/{} ::: official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs_3min.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_1min.mp4 official_test_source_2s_keys_24pfs_30s.mp4 && \
 	wget -qO- https://test-harness-gcp.livepeer.fish/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
 
 COPY	go.mod	go.sum	./
