@@ -29,7 +29,7 @@ Automatically built binaries can be found on
 
 - [bbb_sunflower_1080p_30fps_normal_t02.mp4](https://test-harness-gcp.livepeer.fish/bbb_sunflower_1080p_30fps_normal_t02.mp4)
 
-- [bbb_sunflower_1080p_30fps_normal_2min.mp4](https://test-harness-gcp.livepeer.fish/bbb_sunflower_1080p_30fps_normal_2min.mp4)
+- [bbb_sunflower_1080p_30fps_normal_1min.mp4](https://test-harness-gcp.livepeer.fish/bbb_sunflower_1080p_30fps_normal_1min.mp4)
 
 ## Command line
 
