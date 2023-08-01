@@ -548,7 +548,7 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 			continue
 		}
 		if strings.Contains(string(b), "#EXT-X-ERROR") {
-			errs = append(errs, err.Error())
+			errs = append(errs, fmt.Sprintf("error in playlist: %s", string(b)))
 			glog.Error("===== error in playlist: ", string(b))
 			time.Sleep(2 * time.Second)
 			continue
