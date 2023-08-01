@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"net"
@@ -499,6 +500,8 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 	var gotManifest, streamStarted bool
 	var lastNumberOfStreamsInManifest int = -1
 
+	var errs []string
+
 	countTimeouts := 0
 	for {
 		select {
@@ -507,11 +510,12 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 		default:
 		}
 		if waitForTarget > 0 && !gotManifest && time.Since(startedAt) > waitForTarget {
-			mut.fatalEnd(fmt.Errorf("can't get playlist %s for %s, giving up", surl, time.Since(startedAt)))
+			mut.fatalEnd(fmt.Errorf("can't get playlist %s for %s, giving up. Errors: %s", surl, time.Since(startedAt), strings.Join(errs, ", ")))
 			return
 		}
 		resp, err := httpClient.Do(uhttp.GetRequest(surl))
 		if err != nil {
+			errs = append(errs, err.Error())
 			if isRetryable(err) {
 				countTimeouts++
 				if countTimeouts > 32 {
@@ -526,28 +530,32 @@ func (mut *m3utester2) manifestPullerLoop(waitForTarget time.Duration) {
 		}
 		countTimeouts = 0
 		if resp.StatusCode != http.StatusOK {
-			b, _ := ioutil.ReadAll(resp.Body)
+			errs = append(errs, fmt.Sprintf("Status Code: %d", resp.StatusCode))
+			b, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			glog.V(model.VVERBOSE).Infof("===== status error getting master playlist %s: %v (%s) body: %s", surl, resp.StatusCode, resp.Status, string(b))
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		b, err := ioutil.ReadAll(resp.Body)
+		b, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		glog.V(model.INSANE).Infof("Main manifest status %v", resp.Status)
 		glog.V(model.INSANE2).Info(string(b))
 		if err != nil {
+			errs = append(errs, err.Error())
 			glog.Error("===== error getting master playlist: ", err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
 		if strings.Contains(string(b), "#EXT-X-ERROR") {
+			errs = append(errs, err.Error())
 			glog.Error("===== error in playlist: ", string(b))
 			time.Sleep(2 * time.Second)
 			continue
 		}
 		gpl, plt, err := m3u8.Decode(*bytes.NewBuffer(b), true)
 		if err != nil {
+			errs = append(errs, err.Error())
 			glog.Error("===== error parsing master playlist: ", err)
 			time.Sleep(2 * time.Second)
 			continue

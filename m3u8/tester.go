@@ -33,7 +33,7 @@ func CheckStats(ctx context.Context, url string, expectedDuration time.Duration,
 	<-downloader.Done()
 	stats := downloader.VODStats()
 	if ok, ers := stats.IsOk(expectedDuration, false); !ok {
-		return model.VODStats{}, fmt.Errorf("playlist not ok: %s", ers)
+		return model.VODStats{}, fmt.Errorf("playlist at %s not ok: %s", url, ers)
 	}
 	return stats, nil
 }
