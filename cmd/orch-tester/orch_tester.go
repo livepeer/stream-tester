@@ -644,6 +644,7 @@ func (s *streamerClient) getOrchestrators() ([]*orch, error) {
 		return nil, err
 	}
 	req, err := http.NewRequest("POST", s.subgraph, bytes.NewBuffer(input))
+	req.Header.Add("Content-Type", "application/json")
 	if err != nil {
 		return nil, err
 	}
