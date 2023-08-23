@@ -32,7 +32,7 @@ mapi:
 
 .PHONY: recordtester
 recordtester:
-	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)" cmd/recordtester/recordtester.go
+	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)" cmd/recordtester/main/recordtester.go
 
 .PHONY: stream-monitor
 monitor:
