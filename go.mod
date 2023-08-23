@@ -189,5 +189,3 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 )
-
-exclude github.com/gosuri/uilive v0.0.4 // cause memory corruption
