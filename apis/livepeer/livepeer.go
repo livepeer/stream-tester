@@ -336,22 +336,6 @@ var StandardProfiles = []Profile{
 		Height:  360,
 		Gop:     "2.0",
 	},
-	{
-		Name:    "480p0",
-		Fps:     0,
-		Bitrate: 1600000,
-		Width:   854,
-		Height:  480,
-		Gop:     "2.0",
-	},
-	{
-		Name:    "720p0",
-		Fps:     0,
-		Bitrate: 3000000,
-		Width:   1280,
-		Height:  720,
-		Gop:     "2.0",
-	},
 }
 
 // DeleteStream deletes stream
