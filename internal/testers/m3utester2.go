@@ -964,7 +964,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 			ms.savePlayList.SeqNo = pl.SeqNo
 			gotManifest = true
 		}
-		glog.Infof("Got media playlist %s with %d (really %d (%d)) segments of url %s: %s", ms.resolution, len(pl.Segments), countSegments(pl), pl.Len(), surl, pl.String())
+		glog.Infof("Got media playlist %s with %d (really %d (%d)) segments of url %s", ms.resolution, len(pl.Segments), countSegments(pl), pl.Len(), surl)
 		glog.V(model.INSANE2).Info(string(b))
 		now := time.Now()
 		var lastTimeDownloadStarted time.Time

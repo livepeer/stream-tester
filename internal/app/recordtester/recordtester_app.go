@@ -282,60 +282,73 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	}
 
 	glog.Infof("Streaming done, waiting for recording URL to appear. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
-	if rt.useForceURL {
-		time.Sleep(5 * time.Second)
-	} else {
-		time.Sleep(rt.recordingWaitTime)
-	}
-	if err = rt.isCancelled(); err != nil {
-		return 0, err
-	}
-
-	sessions, err = rt.lapi.GetSessionsNew(stream.ID, rt.useForceURL)
-	if err != nil {
-		err := fmt.Errorf("error getting sessions for stream id=%s err=%v", stream.ID, err)
-		return 252, err
-	}
-	glog.Infof("Sessions: %+v streamId=%s playbackId=%s", sessions, stream.ID, stream.PlaybackID)
-	if err = rt.isCancelled(); err != nil {
-		return 0, err
-	}
-
-	for _, sess := range sessions {
-		sess = sessions[0]
-		statusShould := api.RecordingStatusReady
-		if rt.useForceURL {
-			statusShould = api.RecordingStatusWaiting
-		}
-		if sess.RecordingStatus != statusShould {
-			err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
-			return 240, err
-		}
-		if sess.RecordingURL == "" {
-			err := fmt.Errorf("recording URL should appear by now")
-			return 249, err
-		}
-		glog.Infof("recordingURL=%s downloading now. streamId=%s playbackId=%s", sess.RecordingURL, stream.ID, stream.PlaybackID)
-
+	poll := func() (int, error) {
 		if err = rt.isCancelled(); err != nil {
 			return 0, err
 		}
-		if rt.mp4 {
-			es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration)
+
+		sessions, err = rt.lapi.GetSessionsNew(stream.ID, rt.useForceURL)
+		if err != nil {
+			err := fmt.Errorf("error getting sessions for stream id=%s err=%v", stream.ID, err)
+			return 252, err
+		}
+		glog.Infof("Sessions: %+v streamId=%s playbackId=%s", sessions, stream.ID, stream.PlaybackID)
+		if err = rt.isCancelled(); err != nil {
+			return 0, err
+		}
+
+		for _, sess := range sessions {
+			sess = sessions[0]
+			statusShould := api.RecordingStatusReady
+			if rt.useForceURL {
+				statusShould = api.RecordingStatusWaiting
+			}
+			if sess.RecordingStatus != statusShould {
+				err := fmt.Errorf("recording status is %s but should be %s", sess.RecordingStatus, statusShould)
+				return 240, err
+			}
+			if sess.RecordingURL == "" {
+				err := fmt.Errorf("recording URL should appear by now")
+				return 249, err
+			}
+			glog.Infof("recordingURL=%s downloading now. streamId=%s playbackId=%s", sess.RecordingURL, stream.ID, stream.PlaybackID)
+
+			if err = rt.isCancelled(); err != nil {
+				return 0, err
+			}
+			if rt.mp4 {
+				es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration)
+				if err != nil {
+					return es, err
+				}
+			}
+
+			es, err := rt.checkDown(stream, sess.RecordingURL, testDuration)
 			if err != nil {
 				return es, err
 			}
 		}
-
-		es, err := rt.checkDown(stream, sess.RecordingURL, testDuration)
-		if err != nil {
-			return es, err
-		}
+		return 0, nil
 	}
+	var giveup time.Time
+	if rt.useForceURL {
+		giveup = time.Now().Add(5 * time.Second)
+	} else {
+		giveup = time.Now().Add(rt.recordingWaitTime)
+	}
+	var ret int
+	for time.Now().Before(giveup) {
+		ret, err = poll()
+		if ret == 0 {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+
 	glog.Infof("Done Record Test. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 
 	rt.lapi.DeleteStream(stream.ID)
-	return 0, nil
+	return ret, err
 }
 
 func (rt *recordTester) getIngestInfo() (*api.Ingest, error) {
