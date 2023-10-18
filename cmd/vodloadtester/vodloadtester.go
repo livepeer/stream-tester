@@ -30,6 +30,7 @@ type cliArguments struct {
 	DirectUpload    bool
 	ResumableUpload bool
 	Import          bool
+	Clip            bool
 
 	TaskCheck         bool
 	TaskCheckTimeout  uint
@@ -56,8 +57,8 @@ type vodLoadTester struct {
 
 type uploadTest struct {
 	ApiServer            string      `json:"apiServer"`
-	StartTime            time.Time   `json:"startTime"`
-	EndTime              time.Time   `json:"endTime"`
+	StartTime            string      `json:"startTime"`
+	EndTime              string      `json:"endTime"`
 	RunnerInfo           string      `json:"runnerInfo,omitempty"`
 	Kind                 string      `json:"kind,omitempty"`
 	AssetID              string      `json:"assetId,omitempty"`
@@ -68,6 +69,8 @@ type uploadTest struct {
 	TaskCheckSuccess     uint        `json:"taskCheckSuccess,omitempty"`
 	ErrorMessage         string      `json:"errorMessage,omitempty"`
 	Source               string      `json:"source,omitempty"`
+	Elapsed              uint        `json:"elapsed,omitempty"`
+	TimeToSourceReady    float64     `json:"timeToSourceReady,omitempty"`
 	ProbeData            []ProbeData `json:"data,omitempty"`
 }
 
@@ -118,6 +121,7 @@ func main() {
 	fs.BoolVar(&cliFlags.DirectUpload, "direct", false, "Launch direct upload test")
 	fs.BoolVar(&cliFlags.ResumableUpload, "resumable", false, "Launch tus upload test")
 	fs.BoolVar(&cliFlags.Import, "import", false, "Launch import from url test")
+	fs.BoolVar(&cliFlags.Clip, "clip", false, "Launch clipping load test")
 
 	// Input files and results
 	fs.StringVar(&cliFlags.Filename, "file", "", "File to upload or url to import. Can be either a video or a .json array of objects with a url key")
@@ -156,7 +160,7 @@ func main() {
 		return
 	}
 
-	if cliFlags.Filename == "" && cliFlags.Folder == "" {
+	if cliFlags.Filename == "" && cliFlags.Folder == "" && !cliFlags.Clip {
 		glog.V(logs.SHORT).Infof("missing --file or --folder parameter")
 		return
 	}
@@ -245,10 +249,15 @@ func main() {
 		}
 	}
 
+	if cliFlags.Clip {
+		playbackId := "afb20wapuh9cubwx"
+		vt.clipTest(playbackId, runnerInfo)
+	}
+
 }
 
 func (vt *vodLoadTester) requestUploadUrls(assetName string) (*api.UploadUrls, error) {
-	uploadUrls, err := vt.lapi.RequestUpload(assetName)
+	uploadUrls, err := vt.lapi.RequestUpload(assetName, "")
 	if err != nil {
 		return nil, err
 	}
@@ -317,6 +326,24 @@ func (vt *vodLoadTester) resumableUploadLoadTest(fileName, runnerInfo string) {
 
 }
 
+func (vt *vodLoadTester) clipTest(playbackId string, runnerInfo string) {
+
+	wg := &sync.WaitGroup{}
+
+	for i := 0; i < int(vt.cliFlags.VideoAmount); i += int(vt.cliFlags.Simultaneous) {
+		for j := 0; j < int(vt.cliFlags.Simultaneous); j++ {
+			glog.V(logs.SHORT).Infof("Clipping video %d/%d\n", i+j+1, vt.cliFlags.VideoAmount)
+			wg.Add(1)
+			go func() {
+				vt.Clip(playbackId, runnerInfo, wg)
+			}()
+		}
+		time.Sleep(vt.cliFlags.StartDelayDuration)
+	}
+
+	wg.Wait()
+}
+
 func (vt *vodLoadTester) resumableUploadFromFolderLoadTest(folderName string, runnerInfo string) {
 	wg := &sync.WaitGroup{}
 
@@ -377,10 +404,10 @@ func (vt *vodLoadTester) uploadFile(fileName, runnerInfo string, wg *sync.WaitGr
 	if resumable {
 		uploadKind = "resumableUpload"
 	}
-
+	startTime := time.Now()
 	uploadTest := uploadTest{
 		ApiServer:  vt.cliFlags.APIServer,
-		StartTime:  time.Now(),
+		StartTime:  startTime.Format("2006-01-02 15:04:05"),
 		RunnerInfo: runnerInfo,
 		Kind:       uploadKind,
 		Source:     fileName,
@@ -394,7 +421,7 @@ func (vt *vodLoadTester) uploadFile(fileName, runnerInfo string, wg *sync.WaitGr
 		glog.V(logs.SHORT).Infof("Error requesting upload urls: %v", err)
 		uploadTest.RequestUploadSuccess = 0
 		uploadTest.ErrorMessage = err.Error()
-		vt.writeResultNdjson(uploadTest)
+		vt.writeResultNdjson(uploadTest, startTime)
 		return
 	} else {
 		uploadTest.RequestUploadSuccess = 1
@@ -420,7 +447,7 @@ func (vt *vodLoadTester) uploadFile(fileName, runnerInfo string, wg *sync.WaitGr
 	} else {
 		uploadTest.UploadSuccess = 1
 		if vt.cliFlags.TaskCheck {
-			err := vt.checkTaskProcessing(api.TaskOnlyId{ID: uploadTest.TaskID})
+			err := vt.checkTaskProcessing(api.TaskOnlyId{ID: uploadTest.TaskID}, uploadTest.AssetID)
 			if err != nil {
 				uploadTest.TaskCheckSuccess = 0
 				uploadTest.ErrorMessage = err.Error()
@@ -430,7 +457,88 @@ func (vt *vodLoadTester) uploadFile(fileName, runnerInfo string, wg *sync.WaitGr
 		}
 
 	}
-	vt.writeResultNdjson(uploadTest)
+	vt.writeResultNdjson(uploadTest, startTime)
+}
+
+func (vt *vodLoadTester) Clip(playbackId string, runnerInfo string, wg *sync.WaitGroup) {
+
+	rndAssetName := fmt.Sprintf("clip_test_%s", randName())
+	startTime := time.Now()
+	uploadTest := uploadTest{
+		ApiServer:  vt.cliFlags.APIServer,
+		StartTime:  startTime.Format("2006-01-02 15:04:05"),
+		RunnerInfo: runnerInfo,
+		Kind:       "clip",
+		Source:     "",
+	}
+
+	asset, task, err := vt.lapi.Clip(api.Clip{
+		PlaybackID: playbackId,
+		StartTime:  1697641672000,
+		EndTime:    1697641852000,
+		Name:       rndAssetName,
+	})
+
+	uploadTest.TaskID = task.ID
+	uploadTest.AssetID = asset.ID
+
+	if err != nil {
+		glog.V(logs.SHORT).Infof("Error clipping asset: %v", err)
+		uploadTest.RequestUploadSuccess = 0
+		uploadTest.ErrorMessage = err.Error()
+		vt.writeResultNdjson(uploadTest, startTime)
+		return
+	}
+
+	uploadTest.RequestUploadSuccess = 1
+
+	// Create a new WaitGroup to wait for parallel operations
+	var innerWg sync.WaitGroup
+
+	// Channel to communicate errors between goroutines
+	errCh := make(chan error, 2)
+
+	// Check asset source in a goroutine
+	innerWg.Add(1)
+	go func() {
+		defer innerWg.Done()
+
+		err := vt.checkAssetSource(asset.ID)
+		if err != nil {
+			uploadTest.TaskCheckSuccess = 0
+			uploadTest.ErrorMessage = err.Error()
+			errCh <- err
+		} else {
+			uploadTest.TimeToSourceReady = time.Since(startTime).Seconds()
+		}
+	}()
+
+	// Check task processing in another goroutine
+	innerWg.Add(1)
+	go func() {
+		defer innerWg.Done()
+
+		err := vt.checkTaskProcessing(api.TaskOnlyId{ID: task.ID}, uploadTest.AssetID)
+		if err != nil {
+			uploadTest.TaskCheckSuccess = 0
+			uploadTest.ErrorMessage = err.Error()
+			errCh <- err
+		}
+	}()
+
+	// Wait for the goroutines to finish
+	innerWg.Wait()
+
+	// Check for errors from goroutines and write result
+	if len(errCh) > 0 {
+		// Here, you can handle the errors from the goroutines if you wish.
+		// For now, we're simply logging the first error.
+		glog.V(logs.SHORT).Infof("Error from goroutines: %v", <-errCh)
+	}
+
+	vt.writeResultNdjson(uploadTest, startTime)
+
+	defer wg.Done()
 }
 
 func (vt *vodLoadTester) importFromJSONTest(jsonFile string, runnerInfo string) {
@@ -499,9 +607,10 @@ func (vt *vodLoadTester) importFromUrlTest(url string, runnerInfo string) {
 }
 
 func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.WaitGroup, probeData ...ProbeData) {
+	startTime := time.Now()
 	uploadTest := uploadTest{
 		ApiServer:  vt.cliFlags.APIServer,
-		StartTime:  time.Now(),
+		StartTime:  startTime.Format("2006-01-02 15:04:05"),
 		RunnerInfo: runnerInfo,
 		Kind:       "import",
 		Source:     url,
@@ -513,7 +622,7 @@ func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.W
 
 	rndAssetName := fmt.Sprintf("load_test_import_%s", randName())
 	glog.V(logs.DEBUG).Infof("Importing %s from %s", rndAssetName, url)
-	asset, task, err := vt.lapi.ImportAsset(url, rndAssetName)
+	asset, task, err := vt.lapi.UploadViaURL(url, rndAssetName, "")
 
 	defer wg.Done()
 
@@ -521,7 +630,7 @@ func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.W
 		glog.V(logs.SHORT).Infof("Error importing asset: %v", err)
 		uploadTest.ImportSuccess = 0
 		uploadTest.ErrorMessage = err.Error()
-		vt.writeResultNdjson(uploadTest)
+		vt.writeResultNdjson(uploadTest, startTime)
 		return
 	} else {
 		uploadTest.ImportSuccess = 1
@@ -534,7 +643,7 @@ func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.W
 	}
 
 	if vt.cliFlags.TaskCheck {
-		err := vt.checkTaskProcessing(api.TaskOnlyId{ID: uploadTest.TaskID})
+		err := vt.checkTaskProcessing(api.TaskOnlyId{ID: uploadTest.TaskID}, uploadTest.AssetID)
 		if err != nil {
 			uploadTest.TaskCheckSuccess = 0
 			uploadTest.ErrorMessage = err.Error()
@@ -543,13 +652,18 @@ func (vt *vodLoadTester) importFromUrl(url string, runnerInfo string, wg *sync.W
 		}
 	}
 
-	uploadTest.EndTime = time.Now()
+	uploadTest.EndTime = time.Now().Format("2006-01-02 15:04:05")
 
-	vt.writeResultNdjson(uploadTest)
+	vt.writeResultNdjson(uploadTest, startTime)
 }
 
-func (vt *vodLoadTester) writeResultNdjson(uploadTest uploadTest) {
-	uploadTest.EndTime = time.Now()
+func (vt *vodLoadTester) writeResultNdjson(uploadTest uploadTest, startTime time.Time) {
+	endTime := time.Now()
+	elapsed := endTime.Sub(startTime)
+
+	uploadTest.EndTime = endTime.Format("2006-01-02 15:04:05")
+	uploadTest.Elapsed = uint(elapsed.Seconds())
+
 	jsonString, err := json.Marshal(uploadTest)
 	if err != nil {
 		glog.V(logs.SHORT).Infof("Error converting runTests to json: %v", err)
@@ -588,7 +702,7 @@ func (vt *vodLoadTester) doUpload(fileName string, uploadUrl string, resumable b
 	return err
 }
 
-func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId) error {
+func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId, assetID string) error {
 	taskPollDuration := time.Duration(vt.cliFlags.TaskCheckPollTime) * time.Second
 	startTime := time.Now()
 	timeout := time.Duration(vt.cliFlags.TaskCheckTimeout) * time.Second
@@ -596,7 +710,7 @@ func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId) erro
 
 		time.Sleep(taskPollDuration)
 
-		task, err := vt.lapi.GetTask(processingTask.ID)
+		task, err := vt.lapi.GetTask(processingTask.ID, false)
 		progress := ""
 
 		if err != nil {
@@ -629,6 +743,41 @@ func (vt *vodLoadTester) checkTaskProcessing(processingTask api.TaskOnlyId) erro
 		}
 
 		glog.V(logs.DEBUG).Infof("Waiting %s for task id=%s to be processed, elapsed=%s %s", taskPollDuration, processingTask.ID, time.Since(startTime), progress)
+
+	}
+}
+
+func (vt *vodLoadTester) checkAssetSource(assetID string) error {
+	taskPollDuration := time.Duration(vt.cliFlags.TaskCheckPollTime) * time.Second
+	startTime := time.Now()
+	timeout := time.Duration(vt.cliFlags.TaskCheckTimeout) * time.Second
+	for {
+
+		time.Sleep(taskPollDuration)
+
+		asset, err := vt.lapi.GetAsset(assetID, false)
+
+		if err != nil {
+			glog.Errorf("Error retrieving asset id=%s err=%v", assetID, err)
+			if strings.Contains(err.Error(), "connection reset by peer") || strings.Contains(err.Error(), "520") || strings.Contains(err.Error(), "no such host") {
+				// Retry
+				glog.V(logs.SHORT).Infof("Livepeer Studio API unreachable, retrying getting task information.... ")
+				continue
+			}
+			return fmt.Errorf("error retrieving asset id=%s: %w", assetID, err)
+		}
+
+		if time.Since(startTime) > timeout {
+			glog.Errorf("Internal timeout processing asset, asset=%s", assetID)
+			return fmt.Errorf("timeout processing asset, asset=%s", assetID)
+		}
+
+		if asset.PlaybackURL != "" {
+			glog.Infof("Source playback ready, assetId=%s", assetID)
+			return nil
+		}
+
+		glog.V(logs.DEBUG).Infof("Waiting %s for asset source id=%s to be processed, elapsed=%s", taskPollDuration, assetID, time.Since(startTime))
 
 	}
 }
