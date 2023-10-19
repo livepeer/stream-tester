@@ -14,8 +14,7 @@ RUN	go mod download
 
 COPY	.	.
 
-# RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/webrtc-load-tester/webrtc-load-tester.go
-RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/webrtc-load-tester/screenshot.go
+RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/webrtc-load-tester/webrtc-load-tester.go
 
 FROM --platform=$TARGETPLATFORM	debian:bookworm-slim
 
@@ -31,6 +30,6 @@ RUN apt update \
   && apt update && apt -y install google-chrome-stable \
   && apt clean
 
-# COPY --from=builder	/build/webrtc-load-tester	/usr/local/bin/webrtc-load-tester
-COPY --from=builder	/build/screenshot	/usr/local/bin/screenshot
+COPY --from=builder	/build/webrtc-load-tester	/usr/local/bin/webrtc-load-tester
 
+ENTRYPOINT ["webrtc-load-tester"]

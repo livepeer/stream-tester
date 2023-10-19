@@ -1,6 +1,6 @@
 // Command screenshot is a chromedp example demonstrating how to take a
 // screenshot of a specific element and of the entire browser viewport.
-package main
+package roles
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-func main() {
+func Screenshot() {
 	// create context
 	ctx, cancel := chromedp.NewContext(
 		context.Background(),
@@ -33,7 +33,7 @@ func main() {
 	// capture entire browser viewport, returning png with quality=90
 	tasks := chromedp.Tasks{
 		chromedp.Navigate(`https://lvpr.tv/?v=be56lkusq0flc869&lowLatency=force`),
-		chromedp.Sleep(20 * time.Second),
+		chromedp.Sleep(5 * time.Minute),
 		chromedp.FullScreenshot(&buf, 90),
 	}
 	if err := chromedp.Run(ctx, tasks); err != nil {
@@ -51,17 +51,5 @@ func elementScreenshot(urlstr, sel string, res *[]byte) chromedp.Tasks {
 	return chromedp.Tasks{
 		chromedp.Navigate(urlstr),
 		chromedp.Screenshot(sel, res, chromedp.NodeVisible),
-	}
-}
-
-// fullScreenshot takes a screenshot of the entire browser viewport.
-//
-// Note: chromedp.FullScreenshot overrides the device's emulation settings. Use
-// device.Reset to reset the emulation and viewport settings.
-func fullScreenshot(urlstr string, quality int, res *[]byte) chromedp.Tasks {
-	return chromedp.Tasks{
-		chromedp.Navigate(urlstr),
-		chromedp.Sleep(20 * time.Second),
-		chromedp.FullScreenshot(res, quality),
 	}
 }
