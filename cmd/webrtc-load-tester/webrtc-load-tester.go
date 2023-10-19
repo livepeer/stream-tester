@@ -31,7 +31,7 @@ type cliArguments struct {
 	StartDelayDuration    time.Duration
 }
 
-func main() {
+func main2() {
 	var cliFlags = &cliArguments{}
 
 	flag.Set("logtostderr", "true")
