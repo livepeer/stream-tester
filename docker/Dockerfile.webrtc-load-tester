@@ -1,0 +1,29 @@
+FROM --platform=$BUILDPLATFORM	golang:1-bullseye as	builder
+
+ARG	TARGETARCH
+ENV	GOARCH="${TARGETARCH}"
+
+WORKDIR	/build
+
+ENV	GOFLAGS "-mod=readonly"
+ARG	version
+
+COPY	go.mod go.sum	./
+
+RUN	go mod download
+
+COPY	.	.
+
+RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$version' -X 'github.com/livepeer/stream-tester/model.IProduction=true'" cmd/webrtc-load-tester/webrtc-load-tester.go
+
+FROM --platform=$TARGETPLATFORM	debian:bookworm-slim
+
+WORKDIR	/app
+
+RUN	apt update && \
+  apt install -yqq curl ca-certificates && \
+  apt clean
+
+COPY --from=builder	/build/webrtc-load-tester	/usr/local/bin/webrtc-load-tester
+
+ENTRYPOINT [ "webrtc-load-tester" ]
