@@ -272,61 +272,6 @@ func main() {
 	cleanup(fileName, cliFlags.Filename)
 	stats, _ := loadTester.Stats()
 	glog.Info(stats.FormatForConsole())
-	// exit(255, fileName, cliFlags.Filename, err)
-
-	/*
-		lapi := livepeer.NewLivepeer(cliFlags.APIToken, cliFlags.APIServer, nil)
-		lapi.Init()
-		glog.Infof("Choosen server: %s", lapi.GetServer())
-		ingests, err := lapi.Ingest(false)
-		if err != nil {
-			exit(255, fileName, cliFlags.Filename, err)
-		}
-		glog.Infof("Got ingests: %+v", ingests)
-		broadcasters, err := lapi.Broadcasters()
-		if err != nil {
-			exit(255, fileName, cliFlags.Filename, err)
-		}
-		glog.Infof("Got broadcasters: %+v", broadcasters)
-
-		gctx, gcancel := context.WithCancel(context.Background()) // to be used as global parent context, in the future
-
-		// sr := testers.NewHTTPLoadTester(gctx, gcancel, lapi, 0)
-		var sr model.Streamer
-		if !cliFlags.HTTPIngest {
-			sr = testers.NewStreamer(gctx, gcancel, false, true, nil, lapi)
-		} else {
-			sr = testers.NewHTTPLoadTester(gctx, gcancel, lapi, 0)
-		}
-		baseManifesID, err := sr.StartStreams(fileName, "", "1935", "", "443", *sim, 1, cliFlags.StreamDuration, false, true, true, 2, 5*time.Second, 0)
-		if err != nil {
-			exit(255, fileName, cliFlags.Filename, err)
-		}
-		glog.Infof("Base manfiest id: %s", baseManifesID)
-		exitc := make(chan os.Signal, 1)
-		signal.Notify(exitc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
-		go func() {
-			<-exitc
-			fmt.Println("Got Ctrl-C, cancelling")
-			gcancel()
-			sr.Cancel()
-			time.Sleep(2 * time.Second)
-			stats, _ := sr.Stats("")
-			fmt.Println(stats.FormatForConsole())
-			if fileName != cliFlags.Filename {
-				os.Remove(fileName)
-			}
-		}()
-		glog.Infof("Waiting for test to complete")
-		<-sr.Done()
-		<-gctx.Done()
-		time.Sleep(1 * time.Second)
-		fmt.Println("========= Stats: =========")
-		stats, _ := sr.Stats("")
-		fmt.Println(stats.FormatForConsole())
-		fmt.Println(stats.FormatErrorsForConsole())
-		exit(model.ExitCode, fileName, cliFlags.Filename, err)
-	*/
 }
 
 func randName() string {

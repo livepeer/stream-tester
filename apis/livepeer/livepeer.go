@@ -889,7 +889,6 @@ func (lapi *API) PushSegment(sid string, seqNo int, dur time.Duration, segData [
 	}
 	took := time.Since(started)
 	glog.V(model.VERBOSE).Infof("Reading body back for manifest=%s seqNo=%d took=%s profiles=%d", sid, seqNo, took, len(segments))
-	// glog.Infof("Body: %s", string(tbody))
 
 	if err != nil {
 		httpErr := fmt.Errorf(`error reading http request body for manifest=%s seqNo=%d err=%w`, sid, seqNo, err)
