@@ -39,7 +39,7 @@ RUN apt update \
   && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
   && echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
   && apt update && apt -yq install google-chrome-stable \
-  && apt cleang
+  && apt clean
 
 COPY --from=builder	/build/*.mp4	./
 COPY --from=builder	/build/webrtc-load-tester	/usr/local/bin/webrtc-load-tester
