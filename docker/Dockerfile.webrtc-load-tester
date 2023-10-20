@@ -8,6 +8,15 @@ WORKDIR	/build
 ENV	GOFLAGS "-mod=readonly"
 ARG	version
 
+RUN apt update && apt install -yq parallel
+
+RUN parallel wget https://test-harness-gcp.livepeer.fish/{} ::: \
+  official_test_source_2s_keys_24pfs.mp4 \
+  official_test_source_2s_keys_24pfs_3min.mp4 \
+  bbb_sunflower_1080p_30fps_normal_t02.mp4 \
+  bbb_sunflower_1080p_30fps_normal_1min.mp4 \
+  official_test_source_2s_keys_24pfs_30s.mp4
+
 COPY	go.mod go.sum	./
 
 RUN	go mod download
@@ -20,19 +29,19 @@ FROM --platform=$TARGETPLATFORM	debian:bookworm-slim
 
 WORKDIR	/app
 
-RUN	parallel wget https://test-harness-gcp.livepeer.fish/{} ::: official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs_3min.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_1min.mp4 official_test_source_2s_keys_24pfs_30s.mp4 && \
-  wget -qO- https://test-harness-gcp.livepeer.fish/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
-
 ENV DEBIAN_FRONTEND noninteractive
 
-# apt bulk install ca-certificates and chrome
+# apt bulk install ca-certificates, chrome and ffmpeg
 RUN apt update \
-  && apt install -yqq ca-certificates wget gnupg2 \
+  && apt install -yq ca-certificates ffmpeg \
+  # all chrome and its deps from here down
+  && apt install -yq wget gnupg2 \
   && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
   && echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
-  && apt update && apt -y install google-chrome-stable \
-  && apt clean
+  && apt update && apt -yq install google-chrome-stable \
+  && apt cleang
 
+COPY --from=builder	/build/*.mp4	./
 COPY --from=builder	/build/webrtc-load-tester	/usr/local/bin/webrtc-load-tester
 
 ENTRYPOINT ["webrtc-load-tester"]
