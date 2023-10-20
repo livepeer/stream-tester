@@ -253,7 +253,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		glog.Errorf("Error getting sessions err=%v streamId=%s playbackId=%s", err, stream.ID, stream.PlaybackID)
 		return 252, err
 	}
-	glog.Infof("Sessions: %+v streamId=%s playbackId=%s", sessions, stream.ID, stream.PlaybackID)
+	glog.V(model.DEBUG).Infof("Sessions: %+v streamId=%s playbackId=%s", sessions, stream.ID, stream.PlaybackID)
 
 	expectedSessions := 1
 	if streamTwice {
@@ -296,7 +296,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		err := fmt.Errorf("error getting sessions for stream id=%s err=%v", stream.ID, err)
 		return 252, err
 	}
-	glog.Infof("Sessions: %+v streamId=%s playbackId=%s", sessions, stream.ID, stream.PlaybackID)
+	glog.V(model.DEBUG).Infof("Sessions: %+v streamId=%s playbackId=%s", sessions, stream.ID, stream.PlaybackID)
 	if err = rt.isCancelled(); err != nil {
 		return 0, err
 	}
