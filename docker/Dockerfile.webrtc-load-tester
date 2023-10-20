@@ -20,6 +20,9 @@ FROM --platform=$TARGETPLATFORM	debian:bookworm-slim
 
 WORKDIR	/app
 
+RUN	parallel wget https://test-harness-gcp.livepeer.fish/{} ::: official_test_source_2s_keys_24pfs.mp4 official_test_source_2s_keys_24pfs_3min.mp4 bbb_sunflower_1080p_30fps_normal_t02.mp4 bbb_sunflower_1080p_30fps_normal_1min.mp4 official_test_source_2s_keys_24pfs_30s.mp4 && \
+  wget -qO- https://test-harness-gcp.livepeer.fish/official_test_source_2s_keys_24pfs_30s_hls.tar.gz | tar xvz -C .
+
 ENV DEBIAN_FRONTEND noninteractive
 
 # apt bulk install ca-certificates and chrome

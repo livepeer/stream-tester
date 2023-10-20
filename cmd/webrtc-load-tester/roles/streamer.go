@@ -1,51 +1,109 @@
 package roles
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
-	"runtime"
+	"os/exec"
+	"strings"
 	"time"
 
-	"github.com/livepeer/stream-tester/internal/utils"
-	"github.com/livepeer/stream-tester/model"
-	"github.com/peterbourgon/ff/v2"
+	"github.com/golang/glog"
 )
 
 type streamerArguments struct {
-	Verbosity int
-	Version   bool
-
-	URL          string
+	BaseURL      string
+	StreamKey    string
+	InputFile    string
 	TestDuration time.Duration
 }
 
 func Streamer() {
 	var cliFlags = streamerArguments{}
 
-	flag.Set("logtostderr", "true")
-	vFlag := flag.Lookup("v")
+	parseFlags(func(fs *flag.FlagSet) {
+		fs.StringVar(&cliFlags.BaseURL, "base-url", "rtmp://rtmp.livepeer.com/live/", "Base URL for the RTMP endpoint to stream to")
+		fs.StringVar(&cliFlags.StreamKey, "stream-key", "deadbeef", "Stream key to use for streaming")
+		fs.StringVar(&cliFlags.InputFile, "input-file", "official_test_source_2s_keys_24pfs.mp4", "Input file to stream")
+		fs.DurationVar(&cliFlags.TestDuration, "duration", 1*time.Minute, "How long to run the test")
+	})
 
-	fs := flag.NewFlagSet("webrtc-load-tester", flag.ExitOnError)
+	ctx := signalContext()
 
-	fs.IntVar(&cliFlags.Verbosity, "v", 3, "Log verbosity.  {4|5|6}")
-	fs.BoolVar(&cliFlags.Version, "version", false, "Print out the version")
+	if err := runStreamerTest(ctx, cliFlags); err != nil {
+		glog.Errorf("Error: %v\n", err)
+		os.Exit(1)
+	}
+}
 
-	fs.DurationVar(&cliFlags.TestDuration, "test-dur", 0, "How long to run overall test")
+func runStreamerTest(ctx context.Context, args streamerArguments) error {
+	url, err := buildRTMPURL(args.BaseURL, args.StreamKey)
+	if err != nil {
+		return err
+	}
 
-	_ = fs.String("config", "", "config file (optional)")
+	file := args.InputFile
+	if strings.HasPrefix(file, "http:") || strings.HasPrefix(file, "https:") {
+		file, err = downloadFile(args.InputFile)
+		if err != nil {
+			return fmt.Errorf("failed to download file: %w", err)
+		}
+		defer os.Remove(file)
+	}
 
-	ff.Parse(fs, os.Args[1:],
-		ff.WithConfigFileFlag("config"),
-		ff.WithConfigFileParser(ff.PlainParser),
-		ff.WithEnvVarPrefix("LT_WEBRTC"),
+	ctx, cancel := context.WithTimeout(ctx, args.TestDuration)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx,
+		"ffmpeg",
+		"-re",
+		"-stream_loop", "-1", // loop continuously until we stop the process
+		"-i", file,
+		"-c", "copy",
+		"-f", "flv",
+		url,
 	)
-	flag.CommandLine.Parse(nil)
-	vFlag.Value.Set(fmt.Sprintf("%d", cliFlags.Verbosity))
 
-	hostName, _ := os.Hostname()
-	fmt.Println("WebRTC Load Tester streamer version: " + model.Version)
-	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
-	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
-	fmt.Printf("Production: %v\n", model.Production)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to start ffmpeg: %w", err)
+	}
+
+	return nil
+}
+
+func buildRTMPURL(baseURL, streamKey string) (string, error) {
+	url, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+
+	return url.JoinPath(streamKey).String(), nil
+}
+
+func downloadFile(url string) (string, error) {
+	tempFile, err := os.CreateTemp("", "video-*.mp4")
+	if err != nil {
+		return "", err
+	}
+	defer tempFile.Close()
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	_, err = io.Copy(tempFile, resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return tempFile.Name(), nil
 }

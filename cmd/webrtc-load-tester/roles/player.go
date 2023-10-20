@@ -1,52 +1,72 @@
 package roles
 
 import (
+	"context"
 	"flag"
-	"fmt"
+	"log"
+	"net/url"
 	"os"
-	"runtime"
 	"time"
 
-	"github.com/livepeer/stream-tester/internal/utils"
-	"github.com/livepeer/stream-tester/model"
-	"github.com/peterbourgon/ff/v2"
+	"github.com/chromedp/chromedp"
+	"github.com/golang/glog"
 )
 
 type playerArguments struct {
-	Verbosity int
-	Version   bool
-
-	URL          string
+	BaseURL      string
+	PlaybackID   string
 	TestDuration time.Duration
 }
 
 func Player() {
 	var cliFlags = playerArguments{}
 
-	flag.Set("logtostderr", "true")
-	vFlag := flag.Lookup("v")
+	parseFlags(func(fs *flag.FlagSet) {
+		fs.StringVar(&cliFlags.BaseURL, "base-url", "https://lvpr.tv/", "Base URL for the player")
+		fs.StringVar(&cliFlags.PlaybackID, "playback-id", "deadbeef", "Playback ID to use for the player")
+		fs.DurationVar(&cliFlags.TestDuration, "duration", 1*time.Minute, "How long to run the test")
+	})
 
-	fs := flag.NewFlagSet("webrtc-load-tester", flag.ExitOnError)
+	if err := runPlayerTest(cliFlags); err != nil {
+		glog.Errorf("Error: %v\n", err)
+		os.Exit(1)
+	}
+}
 
-	fs.IntVar(&cliFlags.Verbosity, "v", 3, "Log verbosity.  {4|5|6}")
-	fs.BoolVar(&cliFlags.Version, "version", false, "Print out the version")
+func runPlayerTest(args playerArguments) error {
+	url, err := buildPlayerUrl(args.BaseURL, args.PlaybackID)
+	if err != nil {
+		return err
+	}
 
-	fs.DurationVar(&cliFlags.TestDuration, "test-dur", 0, "How long to run overall test")
-
-	_ = fs.String("config", "", "config file (optional)")
-
-	ff.Parse(fs, os.Args[1:],
-		ff.WithConfigFileFlag("config"),
-		ff.WithConfigFileParser(ff.PlainParser),
-		ff.WithEnvVarPrefix("LT_WEBRTC"),
+	ctx, cancel := chromedp.NewContext(
+		context.Background(),
+		chromedp.WithBrowserOption(
+			chromedp.WithBrowserLogf(log.Printf),
+			chromedp.WithBrowserErrorf(log.Printf),
+		),
+		// chromedp.WithDebugf(log.Printf),
 	)
-	flag.CommandLine.Parse(nil)
-	vFlag.Value.Set(fmt.Sprintf("%d", cliFlags.Verbosity))
+	defer cancel()
 
-	hostName, _ := os.Hostname()
-	fmt.Println("WebRTC Load Tester player version: " + model.Version)
-	fmt.Printf("Compiler version: %s %s\n", runtime.Compiler, runtime.Version())
-	fmt.Printf("Hostname %s OS %s IPs %v\n", hostName, runtime.GOOS, utils.GetIPs())
-	fmt.Printf("Production: %v\n", model.Production)
+	tasks := chromedp.Tasks{
+		chromedp.Navigate(url),
+		chromedp.Sleep(args.TestDuration),
+	}
+	return chromedp.Run(ctx, tasks)
+}
 
+func buildPlayerUrl(baseURL, playbackID string) (string, error) {
+	url, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+
+	query := url.Query()
+	query.Set("v", playbackID)
+	// force player to only use WebRTC playback
+	query.Set("lowLatency", "force")
+	url.RawQuery = query.Encode()
+
+	return url.String(), nil
 }
