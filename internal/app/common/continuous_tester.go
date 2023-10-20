@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/messenger"
+	"github.com/livepeer/stream-tester/model"
 )
 
 type (
@@ -82,7 +83,7 @@ func (ct *continuousTester) Start(start func(ctx context.Context) error, testDur
 			glog.Info(msg)
 			ct.sendPagerdutyEvent(nil)
 		}
-		glog.Infof("Waiting %s before next test of %s", pauseBetweenTests, ct.name)
+		glog.V(model.DEBUG).Infof("Waiting %s before next test of %s", pauseBetweenTests, ct.name)
 		select {
 		case <-ct.ctx.Done():
 			messenger.SendMessage(fmt.Sprintf("Continuous test of %s on %s cancelled", ct.name, ct.host))

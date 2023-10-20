@@ -117,8 +117,8 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		break
 	}
 	apiTry = 0
-	glog.Infof("Got broadcasters: %+v", broadcasters)
-	fmt.Printf("Streaming video file '%s'\n", fileName)
+	glog.V(model.DEBUG).Infof("Got broadcasters: %+v", broadcasters)
+	glog.V(model.DEBUG).Infof("Streaming video file '%s'\n", fileName)
 
 	if rt.useHTTP && len(broadcasters) == 0 {
 		return 254, errors.New("empty list of broadcasters")
@@ -465,8 +465,8 @@ func (rt *recordTester) checkDown(stream *api.Stream, url string, streamDuration
 		glog.Warningf("Number of renditions doesn't match! Has %d should %d. streamId=%s playbackId=%s", len(vs.SegmentsNum), len(api.StandardProfiles)+1, stream.ID, stream.PlaybackID)
 		es = 35
 	}
-	glog.Infof("Stats: %s streamId=%s playbackId=%s", vs.String(), stream.ID, stream.PlaybackID)
-	glog.Infof("Stats raw: %+v streamId=%s playbackId=%s", vs, stream.ID, stream.PlaybackID)
+	glog.V(model.DEBUG).Infof("Stats: %s streamId=%s playbackId=%s", vs.String(), stream.ID, stream.PlaybackID)
+	glog.V(model.DEBUG).Infof("Stats raw: %+v streamId=%s playbackId=%s", vs, stream.ID, stream.PlaybackID)
 	if ok, ers := vs.IsOk(streamDuration, false); !ok {
 		glog.Warningf("NOT OK! (%s) streamId=%s playbackId=%s", ers, stream.ID, stream.PlaybackID)
 		es = 36

@@ -91,7 +91,6 @@ func (bot *discordBot) init() {
 	// Add message handler
 	bot.sess.AddHandler(func(_ *discordgo.Session, m *discordgo.MessageCreate) {
 		// todo check for channel (allow to receive only direct messages and in specified channel)
-		// glog.Infof("===> mess: %s", m.Content)
 		if m.GuildID != "" && len(bot.channelID) > 0 && !utils.StringsSliceContains(bot.channelID, m.ChannelID) {
 			// ignore messages not in specified channel
 			return
@@ -274,7 +273,6 @@ func (bot *discordBot) getStreamImage(rc chan *streamDesc, sd *streamDesc) {
 		glog.Error(err)
 		return
 	}
-	// glog.Infof("Parsed uri: %+v", pvrui, pvrui.IsAbs)
 	if !pvrui.IsAbs() {
 		pvrui = masterURI.ResolveReference(pvrui)
 	}

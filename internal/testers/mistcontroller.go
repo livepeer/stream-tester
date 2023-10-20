@@ -742,10 +742,8 @@ func (mc *MistController) pullMediaPL(userName, uri string, i int, out chan *plP
 		return nil, err
 	}
 	cs := countSegments(mpl)
-	glog.V(model.VVERBOSE).Infof("Got media playlist with count=%d len=%d mc=%d segmens (%s):", mpl.Count(), mpl.Len(), cs, uri)
+	glog.V(model.VVERBOSE).Infof("Got media playlist with count=%d len=%d mc=%d segments (%s):", mpl.Count(), mpl.Len(), cs, uri)
 	glog.V(model.VVERBOSE).Info(mpl)
-	// glog.Infof("Got media playlist with count=%d len=%d mc=%d segmens (%s):", mpl.Count(), mpl.Len(), cs, uri)
-	// glog.Info(mpl)
 	if cs < 1 {
 		glog.Infof("Playlist for uri=%s has zero segments", uri)
 		out <- &plPullRes{err: ErrZeroStreams, i: i}

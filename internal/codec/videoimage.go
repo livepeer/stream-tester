@@ -1,3 +1,4 @@
+//go:build h264
 // +build h264
 
 package codec
@@ -11,6 +12,7 @@ import (
 	"github.com/livepeer/joy4/av"
 	"github.com/livepeer/joy4/codec/h264parser"
 	"github.com/livepeer/joy4/format/ts"
+	"github.com/livepeer/stream-tester/model"
 )
 
 // TSFirstImage geets mpegts file and returns firstt frame as image
@@ -43,7 +45,7 @@ func TSFirstImage(tsb []byte) *image.YCbCr {
 			videoidx = i
 		}
 		if vc, ok := st.(av.VideoCodecData); ok {
-			glog.Infof("w: %d, h: %d\n", vc.Width(), vc.Height())
+			glog.V(model.DEBUG).Infof("w: %d, h: %d\n", vc.Width(), vc.Height())
 			vcd = vc
 		}
 		if st.Type() == av.H264 {

@@ -93,7 +93,7 @@ func (t *Tester) start(numStreams, numProfiles uint) (*model.StartStreamsRes, er
 	}
 	postBody := strings.NewReader(string(startStreamReqBytes))
 
-	glog.Infof("Sending request %+v", startStreamReq)
+	glog.V(model.DEBUG).Infof("Sending request %+v", startStreamReq)
 	resp, err := t.httpClient.Post(url, contentType, postBody)
 	if err != nil {
 		glog.Errorf("start() failed: %v", err)
@@ -110,13 +110,13 @@ func (t *Tester) start(numStreams, numProfiles uint) (*model.StartStreamsRes, er
 	err = json.Unmarshal(body, response)
 	if err != nil {
 		glog.Errorf("Unmarshal failed: %v", err)
-		glog.Infof("body: %s", string(body))
+		glog.V(model.DEBUG).Infof("body: %s", string(body))
 		return response, err
 	}
 
 	t.baseManifestID = response.BaseManifestID
 
-	glog.Infof("start: %v", string(body))
+	glog.V(model.DEBUG).Infof("start: %v", string(body))
 
 	return response, nil
 }
@@ -245,7 +245,7 @@ func (t *Tester) Run(ctx context.Context, NumProfiles uint) (*Result, error) {
 	msg := fmt.Sprintf("Success degrades at **%d** streams with %d profiles: %v", numStreams, NumProfiles, stats.SuccessRate)
 	glog.Infoln(msg)
 	messenger.SendMessage(msg)
-	glog.Infof("Stats from running %d streams: %s", numStreams, stats.FormatForConsole())
+	glog.V(model.DEBUG).Infof("Stats from running %d streams: %s", numStreams, stats.FormatForConsole())
 	if emsg := stats.FormatErrorsForConsole(); emsg != "" {
 		glog.Infoln(emsg)
 	}

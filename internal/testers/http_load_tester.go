@@ -153,10 +153,6 @@ func (hlt *HTTPLoadTester) startStreams(baseManifestID, sourceFileName string, r
 		httpIngestURLTemplate := httpIngestURLTemplates[i%len(httpIngestURLTemplates)]
 		httpIngestURL := fmt.Sprintf(httpIngestURLTemplate, manifestID)
 		glog.Infof("HTTP ingest: %s", httpIngestURL)
-		// var bar *uiprogress.Bar
-		// if showProgress {
-		// 	bar = uiprogress.AddBar(totalSegments).AppendCompleted().PrependElapsed()
-		// }
 
 		up := NewHTTPStreamer(hlt.ctx, measureLatency, baseManifestID)
 		wg.Add(1)

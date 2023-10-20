@@ -383,7 +383,7 @@ func (lapi *API) CreateStream(csr CreateStreamReq) (*CreateStreamResp, error) {
 		glog.V(model.SHORT).Infof("Error marshalling create stream request %v", err)
 		return nil, err
 	}
-	glog.Infof("Sending: %s", b)
+	glog.V(model.DEBUG).Infof("Sending: %s", b)
 	u := fmt.Sprintf("%s/api/stream", lapi.choosenServer)
 	if csr.ParentID != "" {
 		u = fmt.Sprintf("%s/api/stream/%s/stream", lapi.choosenServer, csr.ParentID)
@@ -889,7 +889,6 @@ func (lapi *API) PushSegment(sid string, seqNo int, dur time.Duration, segData [
 	}
 	took := time.Since(started)
 	glog.V(model.VERBOSE).Infof("Reading body back for manifest=%s seqNo=%d took=%s profiles=%d", sid, seqNo, took, len(segments))
-	// glog.Infof("Body: %s", string(tbody))
 
 	if err != nil {
 		httpErr := fmt.Errorf(`error reading http request body for manifest=%s seqNo=%d err=%w`, sid, seqNo, err)

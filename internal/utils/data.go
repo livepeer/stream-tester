@@ -105,11 +105,9 @@ func getPercentileFloat(values []float64, percentile int) float64 {
 	var findex = float64(len(values)) * float64(percentile) / 100.0
 	if math.Ceil(findex) == math.Floor(findex) {
 		index := int(findex) - 1
-		// glog.Infof("== getPercentile of %v findex %v index %d len %d", percentile, findex, index, len(values))
 		per = (values[index] + values[index+1]) / 2
 	} else {
 		index := int(math.Round(findex)) - 1
-		// glog.Infof("== getPercentile of %v findex %v index %d len %d", percentile, findex, index, len(values))
 		per = values[index]
 	}
 	return per
@@ -124,7 +122,6 @@ func (lc *LatenciesCalculator) Add(data []time.Duration) {
 
 // Prepare ..
 func (lc *LatenciesCalculator) Prepare() {
-	// glog.Infof("=== lc len: %d", len(lc.latencies))
 	if len(lc.latencies) == 0 {
 		return
 	}
@@ -138,8 +135,6 @@ func (lc *LatenciesCalculator) Prepare() {
 		copy(lc.joined[i:], l[1:]) // first segments latency is non-representative because of long start up time
 		i += len(l) - 1
 	}
-	// glog.Infof("== src: %v", lc.latencies)
-	// glog.Infof("=== joined: %v", lc.joined)
 	lc.latencies = nil
 }
 
@@ -149,11 +144,9 @@ func GetPercentile(values []time.Duration, percentile int) time.Duration {
 	var findex = float64(len(values)) * float64(percentile) / 100.0
 	if math.Ceil(findex) == math.Floor(findex) {
 		index := int(findex) - 1
-		// glog.Infof("== getPercentile of %v findex %v index %d len %d", percentile, findex, index, len(values))
 		per = (values[index] + values[index+1]) / 2
 	} else {
 		index := int(math.Round(findex)) - 1
-		// glog.Infof("== getPercentile of %v findex %v index %d len %d", percentile, findex, index, len(values))
 		per = values[index]
 	}
 	return per
@@ -207,7 +200,6 @@ func (stp *SyncedTimesMap) SetTime(mark time.Duration, t time.Time) {
 
 // GetTime returns time for mark
 func (stp *SyncedTimesMap) GetTime(mark time.Duration, name string) (time.Time, bool) {
-	// glog.Infof("=== get for name %s", name)
 	_, file := path.Split(name)
 	m := mark / (time.Millisecond * 500)
 	// stp.m.RLock()

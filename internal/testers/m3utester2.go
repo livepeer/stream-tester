@@ -172,7 +172,6 @@ func (mut *m3utester2) VODStats() model.VODStats {
 		SegmentsNum: make(map[string]int),
 		SegmentsDur: make(map[string]time.Duration),
 	}
-	// glog.Infof("==> all results: %+v", mut.allResults)
 	for resolution, drs := range mut.allResults {
 		for _, seg := range drs {
 			vs.SegmentsDur[resolution] += seg.duration
@@ -955,7 +954,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 			return
 		}
 		if plt != m3u8.MEDIA {
-			ms.fatalEnd(fmt.Errorf("Expecting media playlist, got %d (url=%s)", plt, surl))
+			ms.fatalEnd(fmt.Errorf("expecting media playlist, got %d (url=%s)", plt, surl))
 			return
 		}
 		pl := gpl.(*m3u8.MediaPlaylist)
@@ -964,7 +963,7 @@ func (ms *m3uMediaStream) manifestPullerLoop(wowzaMode bool) {
 			ms.savePlayList.SeqNo = pl.SeqNo
 			gotManifest = true
 		}
-		glog.Infof("Got media playlist %s with %d (really %d (%d)) segments of url %s: %s", ms.resolution, len(pl.Segments), countSegments(pl), pl.Len(), surl, pl.String())
+		glog.Infof("Got media playlist %s with %d (really %d (%d)) segments of url %s", ms.resolution, len(pl.Segments), countSegments(pl), pl.Len(), surl)
 		glog.V(model.INSANE2).Info(string(b))
 		now := time.Now()
 		var lastTimeDownloadStarted time.Time

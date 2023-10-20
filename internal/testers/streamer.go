@@ -477,8 +477,6 @@ func (sr *streamer) Stats(basedManifestID string) (*model.Stats, error) {
 				}
 				glog.Infof("=====> skipping %d source segments", skipSourceSegments)
 			}
-			// glog.Infof("Downloaded segments for source=%v stream is %d:", dl.source, len(dl.downloadedSegments))
-			// glog.Infoln("\n" + strings.Join(dl.downloadedSegments, "\n"))
 			dl.mu.Unlock()
 		}
 		mt.mu.RUnlock()
@@ -490,8 +488,6 @@ func (sr *streamer) Stats(basedManifestID string) (*model.Stats, error) {
 	if !found {
 		return stats, model.ErroNotFound
 	}
-	// glog.Infof("=== source latencies: %+v", sourceLatencies)
-	// glog.Infof("=== transcoded latencies: %+v", transcodedLatencies)
 	sourceLatencies.Prepare()
 	transcodedLatencies.Prepare()
 	avg, p50, p95, p99 := sourceLatencies.Calc()
