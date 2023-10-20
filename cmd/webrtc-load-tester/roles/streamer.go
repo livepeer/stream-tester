@@ -28,7 +28,7 @@ func Streamer() {
 	parseFlags(func(fs *flag.FlagSet) {
 		fs.StringVar(&cliFlags.BaseURL, "base-url", "rtmp://rtmp.livepeer.com/live/", "Base URL for the RTMP endpoint to stream to")
 		fs.StringVar(&cliFlags.StreamKey, "stream-key", "deadbeef", "Stream key to use for streaming")
-		fs.StringVar(&cliFlags.InputFile, "input-file", "official_test_source_2s_keys_24pfs.mp4", "Input file to stream")
+		fs.StringVar(&cliFlags.InputFile, "input-file", "bbb_sunflower_1080p_30fps_2sGOP_noBframes_2min.mp4", "Input file to stream")
 		fs.DurationVar(&cliFlags.TestDuration, "duration", 1*time.Minute, "How long to run the test")
 	})
 

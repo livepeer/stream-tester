@@ -40,7 +40,8 @@ func runPlayerTest(args playerArguments) {
 			chromedp.WithBrowserLogf(log.Printf),
 			chromedp.WithBrowserErrorf(log.Printf),
 		),
-		// chromedp.WithDebugf(log.Printf),
+		chromedp.WithLogf(log.Printf),
+		chromedp.WithErrorf(log.Printf),
 	)
 	defer cancel()
 
