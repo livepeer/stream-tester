@@ -193,18 +193,17 @@ func createStream(token, presetsStr, name string) (string, *livepeer.API, error)
 }
 
 func listSessions(token, id string) error {
-	// profiles := strings.Split(presets, ",")
 	lapi := livepeer.NewLivepeer(token, server, nil)
 	lapi.Init()
 	sessions, err := lapi.GetSessionsNewR(id, false)
 	if err != nil {
 		panic(err)
 	}
-	glog.Infof("For stream id=%s got %d sessions:", id, len(sessions))
+	sessionsStr := ""
 	for _, sess := range sessions {
-		glog.Infof("%+v", sess)
-		glog.Infof("id %s recordingStatus %s recordingUrl %s Mp4Url %s", sess.ID, sess.RecordingStatus, sess.RecordingURL, sess.Mp4Url)
+		sessionsStr += fmt.Sprintf("[id %s recordingStatus %s recordingUrl %s Mp4Url %s]", sess.ID, sess.RecordingStatus, sess.RecordingURL, sess.Mp4Url)
 	}
+	glog.Infof("For stream id=%s got %d sessions: %s", id, len(sessions), sessionsStr)
 	return nil
 }
 
@@ -214,8 +213,6 @@ func transcodeSegment(token, presets, sid, seq, outFmt, name string) error {
 	lapi := livepeer.NewLivepeer(token, server, nil)
 	lapi.Init()
 	if sid == "" {
-		// sid, _, err = createStream(token, presets, "lapi_stream")
-		// prof := ffmpeg.P720p25fps16x9
 		prof := livepeer.StandardProfiles[3]
 		prof.Gop = ""
 		prof.Profile = "H264High"

@@ -273,7 +273,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *model.HlsSe
 	glog.V(model.VERBOSE).Infof("mediaType=%s params=%+v", mediaType, params)
 	if glog.V(model.VVERBOSE) {
 		for k, v := range resp.Header {
-			glog.Infof("Header '%s': '%s'", k, v)
+			glog.V(model.DEBUG).Infof("Header '%s': '%s'", k, v)
 		}
 	}
 	var segments [][]byte
@@ -294,7 +294,7 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *model.HlsSe
 			if err != nil {
 				glog.Error("Error getting mime type ", err, manifestID)
 				for k, v := range p.Header {
-					glog.Infof("Header '%s': '%s'", k, v)
+					glog.V(model.DEBUG).Infof("Header '%s': '%s'", k, v)
 				}
 			}
 			body, merr := ioutil.ReadAll(p)
@@ -315,17 +315,12 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *model.HlsSe
 			}
 		}
 	}
-	/*
-		tbody, err := ioutil.ReadAll(resp.Body)
-	*/
 	took := time.Since(started)
 	glog.V(model.VERBOSE).Infof("Reading body back for manifest=%s seqNo=%d took=%s profiles=%d", manifestID, seg.SeqNo, took, len(segments))
-	// glog.Infof("Body: %s", string(tbody))
 
 	if err != nil {
 		httpErr := fmt.Sprintf(`Error reading http request body for manifest=%s seqNo=%d err=%s`, manifestID, seg.SeqNo, err.Error())
 		glog.Error(httpErr)
-		// http.Error(w, httpErr, http.StatusInternalServerError)
 		hs.mu.Lock()
 		hs.dstats.triedToSend++
 		hs.dstats.downloadFailures++
@@ -368,9 +363,6 @@ func (hs *httpStreamer) pushSegment(httpURL, manifestID string, seg *model.HlsSe
 					srcfname := fmt.Sprintf("bad_video_%s_%d_source.ts", manifestID, seg.SeqNo)
 					ioutil.WriteFile(srcfname, seg.Data, 0644)
 					glog.Infof("Wrote bad segment to '%s', source segment to '%s'", fname, srcfname)
-					// glog.Infof("Data:\n%x", tseg)
-					// glog.Infof("Data as string:\n%s", string(tseg))
-					// panic(msg)
 					panicerr = verr
 				}
 			}

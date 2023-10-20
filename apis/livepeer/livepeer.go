@@ -383,7 +383,7 @@ func (lapi *API) CreateStream(csr CreateStreamReq) (*CreateStreamResp, error) {
 		glog.V(model.SHORT).Infof("Error marshalling create stream request %v", err)
 		return nil, err
 	}
-	glog.Infof("Sending: %s", b)
+	glog.V(model.DEBUG).Infof("Sending: %s", b)
 	u := fmt.Sprintf("%s/api/stream", lapi.choosenServer)
 	if csr.ParentID != "" {
 		u = fmt.Sprintf("%s/api/stream/%s/stream", lapi.choosenServer, csr.ParentID)

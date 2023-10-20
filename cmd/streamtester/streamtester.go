@@ -138,7 +138,7 @@ func main() {
 		panic(err)
 	}
 	if *delayStart > 0 {
-		glog.Infof("Waiting %s", *delayStart)
+		glog.V(model.DEBUG).Infof("Waiting %s", *delayStart)
 		time.Sleep(*delayStart)
 	}
 	if *infinitePull != "" {
@@ -154,12 +154,12 @@ func main() {
 		for i := 0; i < int(*sim); i++ {
 			wg.Add(1)
 			go (func(i int) {
-				glog.Infof(`Starting downloader i=%d`, i)
+				glog.V(model.DEBUG).Infof(`Starting downloader i=%d`, i)
 				downloader := testers.NewM3utester2(gctx, *infinitePull, *wowza, *mist,
 					false, *save, *streamDuration, nil, *statsOnly) // starts to download at creation
 				<-downloader.Done()
 				vs := downloader.VODStats()
-				glog.Infof("Stats: %s", vs.String())
+				glog.V(model.DEBUG).Infof("Stats: %s", vs.String())
 				wg.Done()
 			})(i)
 			time.Sleep(1 * time.Second)

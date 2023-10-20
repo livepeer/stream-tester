@@ -136,7 +136,7 @@ func main() {
 			glog.Fatalf("error getting file %s: %v\n", cliFlags.Filename, err)
 		}
 	}
-	glog.Infof("streaming video file %q", fileName)
+	glog.V(model.DEBUG).Infof("streaming video file %q", fileName)
 	var lapi *livepeer.API
 	var createdAPIStreams []string
 	cleanup := func(fn, fa string) {

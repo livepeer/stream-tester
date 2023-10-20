@@ -359,7 +359,7 @@ func main() {
 			wg.Add(1)
 			go func(ii int) {
 				les, lerr := rt.Start(fileName, *testDuration, *pauseDuration)
-				glog.Infof("===> ii=%d les=%d lerr=%v", ii, les, lerr)
+				glog.V(model.DEBUG).Infof("===> ii=%d les=%d lerr=%v", ii, les, lerr)
 				eses[ii] = les
 				if les != 0 {
 					es = les

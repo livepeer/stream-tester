@@ -133,7 +133,7 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		stats.RawTranscodedLatencies = nil
 		stats.RawTranscodeLatenciesPerStream = nil
 	}
-	glog.Infof("baseManifestID=%s", baseManifestID)
+	glog.V(model.DEBUG).Infof("baseManifestID=%s", baseManifestID)
 	if baseManifestID != "" && err == model.ErroNotFound {
 		w.WriteHeader(http.StatusNotFound)
 		emsg := fmt.Sprintf("not found stats for baseManifestID=%s", baseManifestID)
@@ -141,9 +141,7 @@ func (ss *StreamerServer) handleStats(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(emsg))
 		return
 	}
-	// glog.Infof("Lat avg %d p50 %d p95 %d p99 %d  avg %s p50 %s p95 %s p99 %s", stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95,
-	// 	stats.SourceLatencies.P99, stats.SourceLatencies.Avg, stats.SourceLatencies.P50, stats.SourceLatencies.P95, stats.SourceLatencies.P99)
-	glog.Infof("stats: %+v", stats)
+	glog.V(model.DEBUG).Infof("stats: %+v", stats)
 	b, err := json.Marshal(stats)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -164,7 +162,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	glog.Infof("Got request: '%s'", string(b))
+	glog.V(model.DEBUG).Infof("Got request: '%s'", string(b))
 	ssr := &model.StartStreamsReq{}
 	err = json.Unmarshal(b, ssr)
 	if err != nil {
@@ -180,7 +178,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		ss.lock.Unlock()
 	}
 
-	glog.Infof("Start streams request %+v", *ssr)
+	glog.V(model.DEBUG).Infof("Start streams request %+v", *ssr)
 	if ssr.Host == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Should specify 'host' field"))
@@ -212,7 +210,7 @@ func (ss *StreamerServer) handleStartStreams(w http.ResponseWriter, r *http.Requ
 		w.Write([]byte(`File ` + ssr.FileName + ` does not exists`))
 		return
 	}
-	glog.Infof("Get request: %+v", ssr)
+	glog.V(model.DEBUG).Infof("Get request: %+v", ssr)
 	ctx, cancel := context.WithCancel(context.Background())
 	if !ssr.DoNotClearStats || ss.streamer == nil {
 		if ssr.HTTPIngest {

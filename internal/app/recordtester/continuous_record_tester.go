@@ -13,6 +13,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/livepeer/stream-tester/internal/testers"
 	"github.com/livepeer/stream-tester/messenger"
+	"github.com/livepeer/stream-tester/model"
 )
 
 type (
@@ -124,7 +125,7 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 		}
 		try = 0
 		notRtmpTry = 0
-		glog.Infof("Waiting %s before next test", pauseBetweenTests)
+		glog.V(model.DEBUG).Infof("Waiting %s before next test", pauseBetweenTests)
 		select {
 		case <-crt.ctx.Done():
 			messenger.SendMessage(fmt.Sprintf("Continuous record test of %s cancelled", crt.host))

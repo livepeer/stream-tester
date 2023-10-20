@@ -172,7 +172,6 @@ func (mut *m3utester2) VODStats() model.VODStats {
 		SegmentsNum: make(map[string]int),
 		SegmentsDur: make(map[string]time.Duration),
 	}
-	// glog.Infof("==> all results: %+v", mut.allResults)
 	for resolution, drs := range mut.allResults {
 		for _, seg := range drs {
 			vs.SegmentsDur[resolution] += seg.duration
