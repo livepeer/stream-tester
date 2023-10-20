@@ -1,7 +1,8 @@
-package roles
+package utils
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -15,7 +16,7 @@ import (
 	"github.com/peterbourgon/ff/v2"
 )
 
-func parseFlags(registerVars func(*flag.FlagSet)) {
+func ParseFlags(registerVars func(*flag.FlagSet)) {
 	flag.Set("logtostderr", "true")
 
 	fs := flag.NewFlagSet("webrtc-load-tester", flag.ExitOnError)
@@ -31,12 +32,14 @@ func parseFlags(registerVars func(*flag.FlagSet)) {
 		ff.WithEnvVarPrefix("LT_WEBRTC"),
 	)
 	if err != nil {
-		glog.Fatal("Error parsing args: ", err)
+		glog.Errorf("Error parsing args: %v", err)
+		os.Exit(2)
 	}
 
 	err = flag.CommandLine.Parse(nil)
 	if err != nil {
-		glog.Fatal("Error parsing args: ", err)
+		glog.Errorf("Error parsing args: %v", err)
+		os.Exit(2)
 	}
 
 	hostName, _ := os.Hostname()
@@ -46,7 +49,16 @@ func parseFlags(registerVars func(*flag.FlagSet)) {
 	fmt.Printf("Production: %v\n", model.Production)
 }
 
-func signalContext() context.Context {
+func JSONVarFlag(fs *flag.FlagSet, dest interface{}, name, defaultValue, usage string) {
+	if err := json.Unmarshal([]byte(defaultValue), dest); err != nil {
+		panic(err)
+	}
+	fs.Func(name, usage, func(s string) error {
+		return json.Unmarshal([]byte(s), dest)
+	})
+}
+
+func SignalContext() context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer cancel()

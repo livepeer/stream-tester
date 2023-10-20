@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/cmd/webrtc-load-tester/utils"
 )
 
 type streamerArguments struct {
@@ -25,14 +26,14 @@ type streamerArguments struct {
 func Streamer() {
 	var cliFlags = streamerArguments{}
 
-	parseFlags(func(fs *flag.FlagSet) {
+	utils.ParseFlags(func(fs *flag.FlagSet) {
 		fs.StringVar(&cliFlags.BaseURL, "base-url", "rtmp://rtmp.livepeer.com/live/", "Base URL for the RTMP endpoint to stream to")
 		fs.StringVar(&cliFlags.StreamKey, "stream-key", "deadbeef", "Stream key to use for streaming")
 		fs.StringVar(&cliFlags.InputFile, "input-file", "bbb_sunflower_1080p_30fps_2sGOP_noBframes_2min.mp4", "Input file to stream")
 		fs.DurationVar(&cliFlags.TestDuration, "duration", 1*time.Minute, "How long to run the test")
 	})
 
-	ctx := signalContext()
+	ctx := utils.SignalContext()
 
 	if err := runStreamerTest(ctx, cliFlags); err != nil {
 		glog.Errorf("Error: %v\n", err)

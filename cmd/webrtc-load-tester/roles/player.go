@@ -10,24 +10,30 @@ import (
 
 	"github.com/chromedp/chromedp"
 	"github.com/golang/glog"
+	"github.com/livepeer/stream-tester/cmd/webrtc-load-tester/utils"
 )
 
 type playerArguments struct {
-	BaseURL      string
-	PlaybackID   string
-	Simultaenous uint
-	TestDuration time.Duration
+	BaseURL                 string
+	PlaybackID, PlaybackURL string // only one will be used, playbackURL takes precedence
+	Simultaenous            uint
+	TestDuration            time.Duration
 }
 
 func Player() {
 	var cliFlags = playerArguments{}
 
-	parseFlags(func(fs *flag.FlagSet) {
+	utils.ParseFlags(func(fs *flag.FlagSet) {
 		fs.StringVar(&cliFlags.BaseURL, "base-url", "https://lvpr.tv/", "Base URL for the player")
-		fs.StringVar(&cliFlags.PlaybackID, "playback-id", "deadbeef", "Playback ID to use for the player")
+		fs.StringVar(&cliFlags.PlaybackID, "playback-id", "", "Playback ID to use for the player")
+		fs.StringVar(&cliFlags.PlaybackURL, "playback-url", "", "Playback URL to use for the player. Will override any playback-id value")
 		fs.UintVar(&cliFlags.Simultaenous, "simultaneous", 1, "How many players to run simultaneously")
 		fs.DurationVar(&cliFlags.TestDuration, "duration", 1*time.Minute, "How long to run the test")
 	})
+
+	if cliFlags.PlaybackID == "" && cliFlags.PlaybackURL == "" {
+		glog.Fatal("Either playback-id or playback-url must be provided")
+	}
 
 	runPlayerTest(cliFlags)
 }
@@ -67,7 +73,7 @@ func runPlayerTest(args playerArguments) {
 }
 
 func runSinglePlayerTest(ctx context.Context, args playerArguments) error {
-	url, err := buildPlayerUrl(args.BaseURL, args.PlaybackID)
+	url, err := buildPlayerUrl(args.BaseURL, args.PlaybackID, args.PlaybackURL)
 	if err != nil {
 		return err
 	}
@@ -82,14 +88,18 @@ func runSinglePlayerTest(ctx context.Context, args playerArguments) error {
 	return chromedp.Run(ctx, tasks)
 }
 
-func buildPlayerUrl(baseURL, playbackID string) (string, error) {
+func buildPlayerUrl(baseURL, playbackID, playbackURL string) (string, error) {
 	url, err := url.Parse(baseURL)
 	if err != nil {
 		return "", err
 	}
 
 	query := url.Query()
-	query.Set("v", playbackID)
+	if playbackURL != "" {
+		query.Set("url", playbackURL)
+	} else {
+		query.Set("v", playbackID)
+	}
 	// force player to only use WebRTC playback
 	query.Set("lowLatency", "force")
 	url.RawQuery = query.Encode()

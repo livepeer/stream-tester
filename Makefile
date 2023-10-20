@@ -61,3 +61,7 @@ release:
 
 	git tag -a v$(version) -m "Release v$(version)"
 	git push origin v$(version)
+
+.PHONY: webrtc-load-test
+webrtc-load-test:
+	go run cmd/webrtc-load-tester/webrtc-load-tester.go orchestrator -config webrtc-load-tester.conf
