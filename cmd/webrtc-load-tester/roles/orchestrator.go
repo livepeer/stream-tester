@@ -42,6 +42,7 @@ type loadTestArguments struct {
 		BaseURL             string
 		RegionViewersJSON   map[string]int
 		ViewersPerWorker    int
+		MemoryPerViewerMiB  int
 		DelayBetweenRegions time.Duration
 	}
 }
@@ -68,6 +69,7 @@ func Orchestrator() {
 		fs.StringVar(&cliFlags.Playback.BaseURL, "playback-base-url", "https://monster.lvpr.tv/", "Base URL for the player page")
 		utils.JSONVarFlag(fs, &cliFlags.Playback.RegionViewersJSON, "playback-region-viewers-json", `{"us-central1":100,"europe-west2":100}`, "JSON object of Google Cloud regions to the number of viewers that should be simulated there. Notice that the values must be multiples of playback-viewers-per-worker, and up to 1000 x that")
 		fs.IntVar(&cliFlags.Playback.ViewersPerWorker, "playback-viewers-per-worker", 50, "Number of viewers to simulate per worker")
+		fs.IntVar(&cliFlags.Playback.MemoryPerViewerMiB, "playback-memory-per-viewer-mib", 100, "Amount of memory to allocate per viewer (browser tab)")
 		fs.DurationVar(&cliFlags.Playback.DelayBetweenRegions, "playback-delay-between-regions", 1*time.Minute, "How long to wait between starting jobs on different regions")
 
 		fs.StringVar(&cliFlags.APIToken, "api-token", "", "Token of the Livepeer API to be used")
@@ -284,8 +286,8 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 
 		TestID:    args.TestID,
 		NumTasks:  numTasks,
-		CPUs:      int(math.Ceil(float64(simultaneous) / 50)),         // 50 viewers per CPU
-		MemoryMiB: int(math.Ceil(float64(simultaneous*50)/512) * 512), // 50MB per viewer, rounded up to 512MB increments
+		CPUs:      int(math.Ceil(float64(simultaneous) / 50)),                                       // 50 viewers per CPU
+		MemoryMiB: int(math.Ceil(float64(simultaneous*args.Playback.MemoryPerViewerMiB)/512) * 512), // Round up to 512MB increments
 	}
 }
 
