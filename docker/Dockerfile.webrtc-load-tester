@@ -11,9 +11,9 @@ ARG	version
 RUN apt update && apt install -yq parallel
 
 RUN parallel wget https://test-harness-gcp.livepeer.fish/{} ::: \
-  bbb_sunflower_1080p_30fps_2sGOP_noBframes_2min.mp4 \
-  bbb_sunflower_1080p_60fps_2sGOP_noBframes_10s.mp4 \
-  bbb_sunflower_720p_30fps_2sGOP_noBframes_5min.mp4
+	bbb_sunflower_1080p_30fps_2sGOP_noBframes_2min.mp4 \
+	bbb_sunflower_1080p_60fps_2sGOP_noBframes_10s.mp4 \
+	bbb_sunflower_720p_30fps_2sGOP_noBframes_5min.mp4
 
 COPY	go.mod go.sum	./
 
@@ -31,13 +31,13 @@ ENV DEBIAN_FRONTEND noninteractive
 
 # apt bulk install ca-certificates, chrome and ffmpeg
 RUN apt update \
-  && apt install -yq ca-certificates ffmpeg \
-  # all chrome and its deps from here down
-  && apt install -yq wget gnupg2 \
-  && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-  && echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
-  && apt update && apt -yq install google-chrome-stable \
-  && apt clean
+	&& apt install -yq ca-certificates ffmpeg \
+	# all chrome and its deps from here down
+	&& apt install -yq wget gnupg2 \
+	&& wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+	&& echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+	&& apt update && apt -yq install google-chrome-stable \
+	&& apt clean
 
 COPY --from=builder	/build/*.mp4	./
 COPY --from=builder	/build/webrtc-load-tester	/usr/local/bin/webrtc-load-tester
