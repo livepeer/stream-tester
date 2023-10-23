@@ -39,6 +39,9 @@ type cliArguments struct {
 	APIToken          string
 	Filename          string
 	Folder            string
+	PlaybackId        string
+	StartTime         uint
+	EndTime           uint
 	VideoAmount       uint
 	OutputPath        string
 	KeepAssets        bool
@@ -56,22 +59,31 @@ type vodLoadTester struct {
 }
 
 type uploadTest struct {
-	ApiServer            string      `json:"apiServer"`
-	StartTime            string      `json:"startTime"`
-	EndTime              string      `json:"endTime"`
-	RunnerInfo           string      `json:"runnerInfo,omitempty"`
-	Kind                 string      `json:"kind,omitempty"`
-	AssetID              string      `json:"assetId,omitempty"`
-	TaskID               string      `json:"taskId,omitempty"`
-	RequestUploadSuccess uint        `json:"requestUploadSuccess,omitempty"`
-	UploadSuccess        uint        `json:"uploadSuccess,omitempty"`
-	ImportSuccess        uint        `json:"importSuccess,omitempty"`
-	TaskCheckSuccess     uint        `json:"taskCheckSuccess,omitempty"`
-	ErrorMessage         string      `json:"errorMessage,omitempty"`
-	Source               string      `json:"source,omitempty"`
-	Elapsed              uint        `json:"elapsed,omitempty"`
-	TimeToSourceReady    float64     `json:"timeToSourceReady,omitempty"`
-	ProbeData            []ProbeData `json:"data,omitempty"`
+	ApiServer            string          `json:"apiServer"`
+	StartTime            string          `json:"startTime"`
+	EndTime              string          `json:"endTime"`
+	RunnerInfo           string          `json:"runnerInfo,omitempty"`
+	Kind                 string          `json:"kind,omitempty"`
+	AssetID              string          `json:"assetId,omitempty"`
+	TaskID               string          `json:"taskId,omitempty"`
+	RequestUploadSuccess uint            `json:"requestUploadSuccess,omitempty"`
+	UploadSuccess        uint            `json:"uploadSuccess,omitempty"`
+	ImportSuccess        uint            `json:"importSuccess,omitempty"`
+	TaskCheckSuccess     uint            `json:"taskCheckSuccess,omitempty"`
+	ErrorMessage         string          `json:"errorMessage,omitempty"`
+	Source               string          `json:"source,omitempty"`
+	Elapsed              uint            `json:"elapsed,omitempty"`
+	TimeToSourceReady    float64         `json:"timeToSourceReady,omitempty"`
+	ProbeData            []ProbeData     `json:"data,omitempty"`
+	PhasesFirstSeen      PhasesFirstSeen `json:"phasesFirstSeen,omitempty"`
+}
+
+type PhasesFirstSeen struct {
+	Waiting   string `json:"waiting,omitempty"`
+	Running   string `json:"running,omitempty"`
+	Completed string `json:"completed,omitempty"`
+	Failed    string `json:"failed,omitempty"`
+	Pending   string `json:"pending,omitempty"`
 }
 
 // This is specifically for JSON imported files with these fields into the json objects
@@ -128,6 +140,9 @@ func main() {
 	fs.StringVar(&cliFlags.Folder, "folder", "", "Folder with files to upload. The tester will search in the folder for files with the following extensions: "+strings.Join(videoFormats, ", "))
 	fs.StringVar(&cliFlags.OutputPath, "output-path", "/tmp/results.ndjson", "Path to output result .ndjson file")
 	fs.BoolVar(&cliFlags.ProbeData, "probe-data", false, "Write object data in results when importing a JSON file")
+	fs.StringVar(&cliFlags.PlaybackId, "playback-id", "", "Playback ID to clip")
+	fs.UintVar(&cliFlags.StartTime, "start-time", 0, "Start time to clip")
+	fs.UintVar(&cliFlags.EndTime, "end-time", 0, "End time to clip")
 
 	// Test parameters
 	fs.UintVar(&cliFlags.VideoAmount, "video-amt", 1, "How many video to upload or import")
@@ -250,7 +265,17 @@ func main() {
 	}
 
 	if cliFlags.Clip {
-		playbackId := "afb20wapuh9cubwx"
+		if cliFlags.PlaybackId == "" {
+			glog.V(logs.SHORT).Infof("Cannot use -clip without specifying a -playback-id")
+			return
+		}
+
+		if cliFlags.StartTime == 0 || cliFlags.EndTime == 0 {
+			glog.V(logs.SHORT).Infof("Cannot use -clip without specifying -start-time and -end-time")
+			return
+		}
+
+		playbackId := cliFlags.PlaybackId
 		vt.clipTest(playbackId, runnerInfo)
 	}
 
@@ -474,8 +499,8 @@ func (vt *vodLoadTester) Clip(playbackId string, runnerInfo string, wg *sync.Wai
 
 	asset, task, err := vt.lapi.Clip(api.Clip{
 		PlaybackID: playbackId,
-		StartTime:  1697641672000,
-		EndTime:    1697641852000,
+		StartTime:  int64(vt.cliFlags.StartTime),
+		EndTime:    int64(vt.cliFlags.EndTime),
 		Name:       rndAssetName,
 	})
 
