@@ -27,6 +27,9 @@ jobs:
           - name: loadtester
             file: Dockerfile.load-tester
             platforms: linux/amd64, linux/arm64
+          - name: webrtc-load-tester
+            file: Dockerfile.webrtc-load-tester
+            platforms: linux/amd64
           - name: record-tester
             file: Dockerfile.record-tester
             platforms: linux/amd64, linux/arm64
