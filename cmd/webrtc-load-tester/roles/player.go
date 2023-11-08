@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -25,7 +24,7 @@ type playerArguments struct {
 	Simultaenous            uint
 	TestDuration            time.Duration
 
-	ScreenshotFolderOS string
+	ScreenshotFolderOS *url.URL
 	ScreenshotPeriod   time.Duration
 }
 
@@ -38,7 +37,7 @@ func Player() {
 		fs.StringVar(&cliFlags.PlaybackURL, "playback-url", "", "Playback URL to use for the player. Will override any playback-id value")
 		fs.UintVar(&cliFlags.Simultaenous, "simultaneous", 1, "How many players to run simultaneously")
 		fs.DurationVar(&cliFlags.TestDuration, "duration", 1*time.Minute, "How long to run the test")
-		fs.StringVar(&cliFlags.ScreenshotFolderOS, "screenshot-folder-os", "", "Object Store URL for a folder where to save screenshots of the player. If unset, no screenshots will be taken")
+		utils.URLVarFlag(fs, &cliFlags.ScreenshotFolderOS, "screenshot-folder-os", "", "Object Store URL for a folder where to save screenshots of the player. If unset, no screenshots will be taken")
 		fs.DurationVar(&cliFlags.ScreenshotPeriod, "screenshot-period", 1*time.Minute, "How often to take a screenshot of the player")
 	})
 
@@ -97,20 +96,19 @@ func runSinglePlayerTest(ctx context.Context, args playerArguments, idx uint) er
 		chromedp.Navigate(url),
 	}
 
-	if args.ScreenshotFolderOS == "" {
+	if args.ScreenshotFolderOS == nil {
 		tasks = append(tasks, chromedp.Sleep(args.TestDuration))
 	} else {
-		osFolder := args.ScreenshotFolderOS
-		// make sure the folder ends with a slash since NewSession just does a string concat
-		if !strings.HasSuffix(osFolder, "/") {
-			osFolder += "/"
-		}
+		hostname, _ := os.Hostname()
+		osFolder := args.ScreenshotFolderOS.
+			JoinPath(hostname, fmt.Sprintf("player-%d", idx)).
+			String()
 
 		driver, err := drivers.ParseOSURL(osFolder, true)
 		if err != nil {
 			return err
 		}
-		storage := driver.NewSession(fmt.Sprintf("player-%d", idx))
+		storage := driver.NewSession("")
 
 		// grab an initial screenshot
 		tasks = append(tasks, uploadScreenshot(storage, "screenshot-000-00:00:00.jpg"))

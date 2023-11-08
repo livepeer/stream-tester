@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
@@ -81,4 +82,30 @@ func waitSignal(sigs ...os.Signal) {
 	default:
 		glog.Infof("Got signal %d, shutting down", signal)
 	}
+}
+
+func URLVarFlag(fs *flag.FlagSet, dest **url.URL, name, value, usage string) {
+	if err := parseURL(value, dest); err != nil {
+		panic(err)
+	}
+	fs.Func(name, usage, func(s string) error {
+		return parseURL(s, dest)
+	})
+}
+
+func parseURL(s string, dest **url.URL) error {
+	if s == "" {
+		*dest = nil
+		return nil
+	}
+
+	u, err := url.Parse(s)
+	if err != nil {
+		return err
+	}
+	if _, err = url.ParseQuery(u.RawQuery); err != nil {
+		return err
+	}
+	*dest = u
+	return nil
 }

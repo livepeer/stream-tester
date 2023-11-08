@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"path"
 	"strconv"
@@ -39,11 +40,13 @@ type loadTestArguments struct {
 		InputFile string
 	}
 	Playback struct {
-		BaseURL             string
-		RegionViewersJSON   map[string]int
-		ViewersPerWorker    int
-		MemoryPerViewerMiB  int
-		DelayBetweenRegions time.Duration
+		BaseURL                string
+		RegionViewersJSON      map[string]int
+		ViewersPerWorker       int
+		MemoryPerViewerMiB     int
+		DelayBetweenRegions    time.Duration
+		BaseScreenshotFolderOS *url.URL
+		ScreenshotPeriod       time.Duration
 	}
 }
 
@@ -71,6 +74,8 @@ func Orchestrator() {
 		fs.IntVar(&cliFlags.Playback.ViewersPerWorker, "playback-viewers-per-worker", 50, "Number of viewers to simulate per worker")
 		fs.IntVar(&cliFlags.Playback.MemoryPerViewerMiB, "playback-memory-per-viewer-mib", 100, "Amount of memory to allocate per viewer (browser tab)")
 		fs.DurationVar(&cliFlags.Playback.DelayBetweenRegions, "playback-delay-between-regions", 1*time.Minute, "How long to wait between starting jobs on different regions")
+		utils.URLVarFlag(fs, &cliFlags.Playback.BaseScreenshotFolderOS, "playback-base-screenshot-folder-os", "", "Object Store URL for a folder where to save screenshots of the player. If unset, no screenshots will be taken")
+		fs.DurationVar(&cliFlags.Playback.ScreenshotPeriod, "playback-screenshot-period", 1*time.Minute, "How often to take a screenshot of the player")
 
 		fs.StringVar(&cliFlags.APIToken, "api-token", "", "Token of the Livepeer API to be used")
 		fs.StringVar(&cliFlags.APIServer, "api-server", "livepeer.monster", "Server of the Livepeer API to be used")
@@ -269,20 +274,28 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 	numTasks := viewers / args.Playback.ViewersPerWorker
 	timeout := args.TestDuration + 10*time.Minute
 
+	jobArgs := []string{
+		"-base-url", args.Playback.BaseURL,
+		"-playback-id", playbackID,
+		// TODO: Support region/node-specific playback by building the playback URL here
+		// "-playback-url", stream.PlaybackURL,
+		"-simultaneous", strconv.Itoa(simultaneous),
+		"-duration", args.TestDuration.String(),
+	}
+	if args.Playback.BaseScreenshotFolderOS != nil {
+		jobArgs = append(jobArgs,
+			"-screenshot-folder-os", args.Playback.BaseScreenshotFolderOS.JoinPath(args.TestID, region).String(),
+			"-screenshot-period", args.Playback.ScreenshotPeriod.String(),
+		)
+	}
+
 	return gcloud.JobSpec{
 		Region: region,
 
 		ContainerImage: args.ContainerImage,
 		Role:           "player",
-		Args: []string{
-			"-base-url", args.Playback.BaseURL,
-			"-playback-id", playbackID,
-			// TODO: Support region/node-specific playback by building the playback URL here
-			// "-playback-url", stream.PlaybackURL,
-			"-simultaneous", strconv.Itoa(simultaneous),
-			"-duration", args.TestDuration.String(),
-		},
-		Timeout: timeout,
+		Args:           jobArgs,
+		Timeout:        timeout,
 
 		TestID:    args.TestID,
 		NumTasks:  numTasks,
