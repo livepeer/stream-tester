@@ -111,20 +111,20 @@ func runSinglePlayerTest(ctx context.Context, args playerArguments, idx uint) er
 		storage := driver.NewSession("")
 
 		// grab an initial screenshot
-		tasks = append(tasks, uploadScreenshot(storage, "screenshot-000-00:00:00.jpg"))
+		tasks = append(tasks, uploadScreenshot(storage, screenshotName(0, 0)))
 
 		numPics := int(args.TestDuration / args.ScreenshotPeriod)
 		for picIdx := 1; picIdx <= numPics; picIdx++ {
 			tasks = append(tasks, chromedp.Sleep(args.ScreenshotPeriod))
 
 			screenshotTime := time.Duration(picIdx) * args.ScreenshotPeriod
-			name := fmt.Sprintf("screenshot-%03d-%s.jpg", picIdx, formatDuration(screenshotTime))
+			name := screenshotName(picIdx, screenshotTime)
 			tasks = append(tasks, uploadScreenshot(storage, name))
 		}
 
 		if remaining := args.TestDuration % args.ScreenshotPeriod; remaining != 0 {
 			tasks = append(tasks, chromedp.Sleep(remaining))
-			name := fmt.Sprintf("screenshot-%03d-%s.jpg", numPics+1, formatDuration(args.TestDuration))
+			name := screenshotName(numPics+1, args.TestDuration)
 			tasks = append(tasks, uploadScreenshot(storage, name))
 		}
 	}
@@ -135,7 +135,7 @@ func runSinglePlayerTest(ctx context.Context, args playerArguments, idx uint) er
 func uploadScreenshot(storage drivers.OSSession, name string) chromedp.ActionFunc {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
 		var picBuf []byte
-		screenshotAction := chromedp.FullScreenshot(&picBuf, 90)
+		screenshotAction := chromedp.FullScreenshot(&picBuf, 50)
 
 		if err := screenshotAction.Do(ctx); err != nil {
 			return err
@@ -151,8 +151,9 @@ func uploadScreenshot(storage drivers.OSSession, name string) chromedp.ActionFun
 	})
 }
 
-func formatDuration(d time.Duration) string {
-	return time.Time{}.Add(d).Format(time.TimeOnly)
+func screenshotName(idx int, d time.Duration) string {
+	timeStr := time.Time{}.Add(d).Format("15h04m05s")
+	return fmt.Sprintf("screenshot-%03d-%s.jpg", idx, timeStr)
 }
 
 func buildPlayerUrl(baseURL, playbackID, playbackURL string) (string, error) {
