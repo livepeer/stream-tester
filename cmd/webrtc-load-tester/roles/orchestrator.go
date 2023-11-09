@@ -61,7 +61,7 @@ func Orchestrator() {
 		fs.StringVar(&cliFlags.TestID, "test-id", "", "ID of previous test to recover. If not provided, a new test will be started with a random ID")
 		fs.StringVar(&cliFlags.GoogleCredentialsJSON, "google-credentials-json", "", "Google Cloud service account credentials JSON with access to Cloud Run")
 		fs.StringVar(&cliFlags.GoogleProjectID, "google-project-id", "livepeer-test", "Google Cloud project ID")
-		fs.StringVar(&cliFlags.ContainerImage, "container-image", "livepeer/webrtc-load-tester:vg-feat-webrtc-load-tester", "Container image to use for the worker jobs")
+		fs.StringVar(&cliFlags.ContainerImage, "container-image", "livepeer/webrtc-load-tester:master", "Container image to use for the worker jobs")
 
 		fs.DurationVar(&cliFlags.TestDuration, "duration", 10*time.Minute, "How long to run the test")
 
