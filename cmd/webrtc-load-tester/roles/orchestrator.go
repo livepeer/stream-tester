@@ -142,7 +142,7 @@ func runLoadTest(ctx context.Context, args loadTestArguments) error {
 	}
 
 	glog.Infof("Stream created: %s", stream.ID)
-	glog.Infof("Access the stream at: %s", path.Join(args.APIServer, "/dashboard/streams", stream.ID))
+	glog.Infof("Access the stream at: https://%s", path.Join(args.APIServer, "/dashboard/streams", stream.ID))
 
 	_, streamer, err := gcloud.CreateJob(ctx, streamerJobSpec(args, stream.StreamKey))
 	if err != nil {
