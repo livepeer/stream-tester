@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"reflect"
 	"runtime"
 	"syscall"
 
@@ -55,6 +56,10 @@ func JSONVarFlag(fs *flag.FlagSet, dest interface{}, name, defaultValue, usage s
 		panic(err)
 	}
 	fs.Func(name, usage, func(s string) error {
+		// Clear any previously set value, including the default above
+		destVal := reflect.ValueOf(dest).Elem()
+		destVal.Set(reflect.Zero(destVal.Type()))
+
 		return json.Unmarshal([]byte(s), dest)
 	})
 }
