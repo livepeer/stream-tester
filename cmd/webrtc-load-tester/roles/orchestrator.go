@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/google/uuid"
 	"github.com/livepeer/go-api-client"
 	"github.com/livepeer/stream-tester/cmd/webrtc-load-tester/gcloud"
 	"github.com/livepeer/stream-tester/cmd/webrtc-load-tester/utils"
@@ -131,18 +130,20 @@ func initClients(cliFlags loadTestArguments) {
 }
 
 func runLoadTest(ctx context.Context, args loadTestArguments) error {
-	args.TestID = uuid.New().String()
-	glog.Infof("Starting new test with ID %s", args.TestID)
-	wait(ctx, 5*time.Second)
-
 	stream, err := studioApi.CreateStream(api.CreateStreamReq{
-		Name: "webrtc-load-test-" + args.TestID,
+		Name: "webrtc-load-test-" + time.Now().UTC().Format(time.RFC3339),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create stream: %w", err)
 	}
 
 	glog.Infof("Stream created: %s", stream.ID)
+
+	// Use the stream ID as the test ID for simplicity. Helps on recovering a running test as well.
+	args.TestID = stream.ID
+	glog.Infof("Starting new test with ID %s", args.TestID)
+	wait(ctx, 5*time.Second)
+
 	glog.Infof("Access the stream at: https://%s", path.Join(args.APIServer, "/dashboard/streams", stream.ID))
 
 	_, streamer, err := gcloud.CreateJob(ctx, streamerJobSpec(args, stream.StreamKey))
@@ -201,7 +202,7 @@ func recoverLoadTest(ctx context.Context, args loadTestArguments) error {
 		}
 	}
 
-	waitTestFinished(ctx, "", executions)
+	waitTestFinished(ctx, args.TestID, executions)
 
 	return nil
 }
