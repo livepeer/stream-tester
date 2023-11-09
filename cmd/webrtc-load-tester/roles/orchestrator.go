@@ -283,8 +283,13 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 		"-duration", args.TestDuration.String(),
 	}
 	if args.Playback.BaseScreenshotFolderOS != nil {
+		testTime := time.Now().UTC().Format(time.RFC3339)
+		ssFolder := args.Playback.BaseScreenshotFolderOS.JoinPath(
+			testTime,
+			args.TestID,
+			region)
 		jobArgs = append(jobArgs,
-			"-screenshot-folder-os", args.Playback.BaseScreenshotFolderOS.JoinPath(args.TestID, region).String(),
+			"-screenshot-folder-os", ssFolder.String(),
 			"-screenshot-period", args.Playback.ScreenshotPeriod.String(),
 		)
 	}
