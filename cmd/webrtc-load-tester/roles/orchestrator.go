@@ -4,7 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"math"
+	"net/url"
 	"os"
 	"path"
 	"strconv"
@@ -40,6 +42,7 @@ type loadTestArguments struct {
 	}
 	Playback struct {
 		BaseURL             string
+		ManifestURL         string
 		RegionViewersJSON   map[string]int
 		ViewersPerWorker    int
 		MemoryPerViewerMiB  int
@@ -67,6 +70,7 @@ func Orchestrator() {
 		fs.StringVar(&cliFlags.Streamer.InputFile, "streamer-input-file", "bbb_sunflower_1080p_30fps_2sGOP_noBframes_2min.mp4", "Input file to stream")
 
 		fs.StringVar(&cliFlags.Playback.BaseURL, "playback-base-url", "https://monster.lvpr.tv/", "Base URL for the player page")
+		fs.StringVar(&cliFlags.Playback.ManifestURL, "playback-manifest-url", "", "URL for playback")
 		utils.JSONVarFlag(fs, &cliFlags.Playback.RegionViewersJSON, "playback-region-viewers-json", `{"us-central1":100,"europe-west2":100}`, "JSON object of Google Cloud regions to the number of viewers that should be simulated there. Notice that the values must be multiples of playback-viewers-per-worker, and up to 1000 x that")
 		fs.IntVar(&cliFlags.Playback.ViewersPerWorker, "playback-viewers-per-worker", 50, "Number of viewers to simulate per worker")
 		fs.IntVar(&cliFlags.Playback.MemoryPerViewerMiB, "playback-memory-per-viewer-mib", 100, "Amount of memory to allocate per viewer (browser tab)")
@@ -269,6 +273,17 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 	numTasks := viewers / args.Playback.ViewersPerWorker
 	timeout := args.TestDuration + 10*time.Minute
 
+	playbackURL := ""
+	if args.Playback.ManifestURL != "" {
+		u, err := url.Parse(args.Playback.ManifestURL)
+		if err != nil {
+			log.Println("failed to parse URL ", args.Playback.ManifestURL, err)
+		} else {
+			u = u.JoinPath("video+" + playbackID)
+			playbackURL = u.String()
+		}
+	}
+
 	return gcloud.JobSpec{
 		Region: region,
 
@@ -277,8 +292,7 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 		Args: []string{
 			"-base-url", args.Playback.BaseURL,
 			"-playback-id", playbackID,
-			// TODO: Support region/node-specific playback by building the playback URL here
-			// "-playback-url", stream.PlaybackURL,
+			"-playback-url", playbackURL,
 			"-simultaneous", strconv.Itoa(simultaneous),
 			"-duration", args.TestDuration.String(),
 		},
