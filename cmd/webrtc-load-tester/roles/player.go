@@ -103,6 +103,8 @@ func runSinglePlayerTest(ctx context.Context, args playerArguments, idx uint) er
 		chromedp.Navigate(url),
 	}
 
+	glog.Infof("Running player with env vars ", os.Environ())
+
 	if args.ScreenshotFolderOS == nil {
 		tasks = append(tasks, chromedp.Sleep(args.TestDuration))
 	} else {
