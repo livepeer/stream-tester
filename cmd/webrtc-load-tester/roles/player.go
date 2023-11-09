@@ -21,7 +21,8 @@ const uploadScreenshotTimeout = 10 * time.Second
 type playerArguments struct {
 	BaseURL                 string
 	PlaybackID, PlaybackURL string // only one will be used, playbackURL takes precedence
-	Simultaenous            uint
+	Simultaneous            uint
+	PlayerStartInterval     time.Duration
 	TestDuration            time.Duration
 
 	ScreenshotFolderOS *url.URL
@@ -35,7 +36,8 @@ func Player() {
 		fs.StringVar(&cliFlags.BaseURL, "base-url", "https://lvpr.tv/", "Base URL for the player")
 		fs.StringVar(&cliFlags.PlaybackID, "playback-id", "", "Playback ID to use for the player")
 		fs.StringVar(&cliFlags.PlaybackURL, "playback-url", "", "Playback URL to use for the player. Will override any playback-id value")
-		fs.UintVar(&cliFlags.Simultaenous, "simultaneous", 1, "How many players to run simultaneously")
+		fs.UintVar(&cliFlags.Simultaneous, "simultaneous", 1, "How many players to run simultaneously")
+		fs.DurationVar(&cliFlags.PlayerStartInterval, "player-start-interval", 2*time.Second, "How often to wait between starting the simultaneous players")
 		fs.DurationVar(&cliFlags.TestDuration, "duration", 1*time.Minute, "How long to run the test")
 		utils.URLVarFlag(fs, &cliFlags.ScreenshotFolderOS, "screenshot-folder-os", "", "Object Store URL for a folder where to save screenshots of the player. If unset, no screenshots will be taken")
 		fs.DurationVar(&cliFlags.ScreenshotPeriod, "screenshot-period", 1*time.Minute, "How often to take a screenshot of the player")
@@ -67,15 +69,20 @@ func runPlayerTest(args playerArguments) {
 		os.Exit(1)
 	}
 
-	errs := make(chan error, args.Simultaenous)
-	for i := uint(0); i < args.Simultaenous; i++ {
+	errs := make(chan error, args.Simultaneous)
+	for i := uint(0); i < args.Simultaneous; i++ {
 		i := i // avoid go's loop variable capture
+
+		if args.PlayerStartInterval > 0 {
+			time.Sleep(args.PlayerStartInterval)
+		}
+
 		go func() {
 			errs <- runSinglePlayerTest(ctx, args, i)
 		}()
 	}
 
-	for i := uint(0); i < args.Simultaenous; i++ {
+	for i := uint(0); i < args.Simultaneous; i++ {
 		err := <-errs
 		if err != nil {
 			glog.Errorf("Routine finished with error: %v\n", err)
