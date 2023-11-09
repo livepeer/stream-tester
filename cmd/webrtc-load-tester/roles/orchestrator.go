@@ -300,7 +300,7 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 
 		TestID:    args.TestID,
 		NumTasks:  numTasks,
-		CPUs:      int(math.Ceil(float64(simultaneous) / 50)),                                       // 50 viewers per CPU
+		CPUs:      int(math.Ceil(float64(simultaneous) / 5)),                                        // 5 viewers per CPU
 		MemoryMiB: int(math.Ceil(float64(simultaneous*args.Playback.MemoryPerViewerMiB)/512) * 512), // Round up to 512MB increments
 	}
 }
