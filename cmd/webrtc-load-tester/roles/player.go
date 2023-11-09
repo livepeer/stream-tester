@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -103,14 +104,11 @@ func runSinglePlayerTest(ctx context.Context, args playerArguments, idx uint) er
 		chromedp.Navigate(url),
 	}
 
-	glog.Infof("Running player with env vars ", os.Environ())
-
 	if args.ScreenshotFolderOS == nil {
 		tasks = append(tasks, chromedp.Sleep(args.TestDuration))
 	} else {
-		hostname, _ := os.Hostname()
 		osFolder := args.ScreenshotFolderOS.
-			JoinPath(hostname, fmt.Sprintf("player-%d", idx)).
+			JoinPath(getHostname(), fmt.Sprintf("player-%d", idx)).
 			String()
 
 		driver, err := drivers.ParseOSURL(osFolder, true)
@@ -182,4 +180,19 @@ func buildPlayerUrl(baseURL, playbackID, playbackURL string) (string, error) {
 	url.RawQuery = query.Encode()
 
 	return url.String(), nil
+}
+
+func getHostname() string {
+	execution := os.Getenv("CLOUD_RUN_EXECUTION")
+	taskIndex := os.Getenv("CLOUD_RUN_TASK_INDEX")
+
+	if execution != "" && taskIndex != "" {
+		// extract only the final hash on the execution name
+		parts := strings.Split(execution, "-")
+		hash := parts[len(parts)-1]
+		return fmt.Sprintf("exec-%s-task-%s", hash, taskIndex)
+	}
+
+	hostname, _ := os.Hostname()
+	return hostname
 }
