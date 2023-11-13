@@ -16,7 +16,7 @@ concurrency:
 jobs:
   build:
     name: ${{ matrix.build.name }} docker image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-m
     permissions:
       packages: write
       contents: read
