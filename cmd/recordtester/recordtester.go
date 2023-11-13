@@ -313,7 +313,7 @@ func main() {
 		Timeout:     8 * time.Second,
 	}
 	lapi, _ = api.NewAPIClientGeolocated(lApiOpts)
-	glog.Infof("Choosen server: %s", lapi.GetServer())
+	glog.Infof("Chosen server: %s", lapi.GetServer())
 
 	userAgent := model.AppName + "/" + model.Version
 	lanalyzers := testers.AnalyzerByRegion{}
