@@ -13,10 +13,10 @@ require (
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/livepeer/go-api-client v0.4.7
-	github.com/livepeer/go-livepeer v0.5.39-0.20230606164228-1b9da7f25fa8
+	github.com/livepeer/go-livepeer v0.7.1
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
-	github.com/livepeer/livepeer-data v0.7.3
+	github.com/livepeer/livepeer-data v0.7.5-0.20231004073737-06f1f383fb18
 	github.com/livepeer/m3u8 v0.11.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/peterbourgon/ff v1.7.1
@@ -63,7 +63,7 @@ require (
 	github.com/jaypipes/pcidb v1.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/livepeer/lpms v0.0.0-20230502004917-20aa13b8165e // indirect
+	github.com/livepeer/lpms v0.0.0-20231002131146-663c62246a3c // indirect
 	github.com/mattn/go-ieproxy v0.0.11 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
