@@ -42,7 +42,7 @@ type loadTestArguments struct {
 		BaseURL                string
 		RegionViewersJSON      map[string]int
 		ViewersPerWorker       int
-		ViewersPerCPU          int
+		ViewersPerCPU          float64
 		MemoryPerViewerMiB     int
 		DelayBetweenRegions    time.Duration
 		BaseScreenshotFolderOS *url.URL
@@ -72,7 +72,7 @@ func Orchestrator() {
 		fs.StringVar(&cliFlags.Playback.BaseURL, "playback-base-url", "https://monster.lvpr.tv/", "Base URL for the player page")
 		utils.JSONVarFlag(fs, &cliFlags.Playback.RegionViewersJSON, "playback-region-viewers-json", `{"us-central1":100,"europe-west2":100}`, "JSON object of Google Cloud regions to the number of viewers that should be simulated there. Notice that the values must be multiples of playback-viewers-per-worker, and up to 1000 x that")
 		fs.IntVar(&cliFlags.Playback.ViewersPerWorker, "playback-viewers-per-worker", 50, "Number of viewers to simulate per worker")
-		fs.IntVar(&cliFlags.Playback.ViewersPerCPU, "playback-viewers-per-cpu", 5, "Number of viewers to allocate per CPU on player jobs")
+		fs.Float64Var(&cliFlags.Playback.ViewersPerCPU, "playback-viewers-per-cpu", 5, "Number of viewers to allocate per CPU on player jobs")
 		fs.IntVar(&cliFlags.Playback.MemoryPerViewerMiB, "playback-memory-per-viewer-mib", 100, "Amount of memory to allocate per viewer (browser tab)")
 		fs.DurationVar(&cliFlags.Playback.DelayBetweenRegions, "playback-delay-between-regions", 1*time.Minute, "How long to wait between starting jobs on different regions")
 		utils.URLVarFlag(fs, &cliFlags.Playback.BaseScreenshotFolderOS, "playback-base-screenshot-folder-os", "", "Object Store URL for a folder where to save screenshots of the player. If unset, no screenshots will be taken")
@@ -302,7 +302,7 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 
 		TestID:    args.TestID,
 		NumTasks:  numTasks,
-		CPUs:      int(math.Ceil(float64(simultaneous) / float64(args.Playback.ViewersPerCPU))),     // Defaults to 1 CPU every 5 viewers
+		CPUs:      int(math.Ceil(float64(simultaneous) / args.Playback.ViewersPerCPU)),              // Defaults to 1 CPU every 5 viewers
 		MemoryMiB: int(math.Ceil(float64(simultaneous*args.Playback.MemoryPerViewerMiB)/512) * 512), // Round up to 512MB increments
 	}
 }
