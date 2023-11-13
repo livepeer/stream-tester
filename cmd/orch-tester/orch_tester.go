@@ -325,7 +325,7 @@ func startEmbeddedBroadcaster(ctx context.Context, bCfg broadcasterConfig, prese
 	// Start broadcaster
 	cfg := starter.DefaultLivepeerConfig()
 	cfg.Network = bCfg.network
-	cfg.MaxSessions = intPointer(200)
+	cfg.MaxSessions = stringPointer("200")
 	cfg.OrchWebhookURL = stringPointer(fmt.Sprintf("http://%s:%s/orchestrators", defaultHost, streamTesterPort))
 	cfg.EthUrl = bCfg.ethUrl
 	cfg.Datadir = bCfg.datadir
