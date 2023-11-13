@@ -556,6 +556,8 @@ github.com/livepeer/go-api-client v0.4.7 h1:pJd0Ba7TtDJDUEOiPBx9KmLm+fIB8GRbAurd
 github.com/livepeer/go-api-client v0.4.7/go.mod h1:Jdb+RI7JyzEZOHd1GUuKofwFDKMO/btTa80SdpUpYQw=
 github.com/livepeer/go-livepeer v0.5.39-0.20230606164228-1b9da7f25fa8 h1:+YfHx4tgbTlT5RQUiUebyMZk10O4+bgADFsgukuv5ZQ=
 github.com/livepeer/go-livepeer v0.5.39-0.20230606164228-1b9da7f25fa8/go.mod h1:jqlIKZXxAFX+yLC4OhsHs6eh89z1DUR64fvAtAMyC/g=
+github.com/livepeer/go-livepeer v0.7.1 h1:ubEUZYm5r0LYgQ5i+Sy8g1HNJqjVgmhcRyGiYds8648=
+github.com/livepeer/go-livepeer v0.7.1/go.mod h1:d6qTStiNmXTQ/5YLB9fhzgDV9MdXg3KmqESQpur2Ak0=
 github.com/livepeer/go-tools v0.3.0 h1:xK0mJyPWWyvj9Oi9nfLglhCtk0KM8883WB7VO1oPF8g=
 github.com/livepeer/go-tools v0.3.0/go.mod h1:qs31y68b3PQPmSr8nR8l5WQiIWI623z6pqOccqebjos=
 github.com/livepeer/joy4 v0.1.2-0.20191121080656-b2fea45cbded/go.mod h1:xkDdm+akniYxVT9KW1Y2Y7Hso6aW+rZObz3nrA9yTHw=
@@ -565,8 +567,11 @@ github.com/livepeer/leaderboard-serverless v1.0.0 h1:QqUxAEorjtfFxQO7tqTbxOLK+LF
 github.com/livepeer/leaderboard-serverless v1.0.0/go.mod h1:0H4gFyyTO3lXtqfRIwyRaWPuW0pBMXkNUDtIjHHniW0=
 github.com/livepeer/livepeer-data v0.7.3 h1:m7MQ6oMqvhsP+quA9aQnLyVn8fp/as+gliyNyB/99cU=
 github.com/livepeer/livepeer-data v0.7.3/go.mod h1:Jpf4jHK+fbWioBHRDRM1WadNT1qmY27g2YicTdO0Rtc=
+github.com/livepeer/livepeer-data v0.7.5-0.20231004073737-06f1f383fb18 h1:4oH3NqV0NvcdS44Ld3zK2tO8IUiNozIggm74yobQeZg=
+github.com/livepeer/livepeer-data v0.7.5-0.20231004073737-06f1f383fb18/go.mod h1:Jpf4jHK+fbWioBHRDRM1WadNT1qmY27g2YicTdO0Rtc=
 github.com/livepeer/lpms v0.0.0-20230502004917-20aa13b8165e h1:1n1mh6u0Hcle7+s2bobJVde71MmGH9FUu6ZD5AtfLGI=
 github.com/livepeer/lpms v0.0.0-20230502004917-20aa13b8165e/go.mod h1:Hr/JhxxPDipOVd4ZrGYWrdJfpVF8/SEI0nNr2ctAlkM=
+github.com/livepeer/lpms v0.0.0-20231002131146-663c62246a3c/go.mod h1:Hr/JhxxPDipOVd4ZrGYWrdJfpVF8/SEI0nNr2ctAlkM=
 github.com/livepeer/m3u8 v0.11.1 h1:VkUJzfNTyjy9mqsgp5JPvouwna8wGZMvd/gAfT5FinU=
 github.com/livepeer/m3u8 v0.11.1/go.mod h1:IUqAtwWPAG2CblfQa4SVzTQoDcEMPyfNOaBSxqHMS04=
 github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0=
