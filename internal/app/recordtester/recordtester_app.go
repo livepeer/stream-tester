@@ -349,7 +349,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		}
 
 		if len(assets) != 1 {
-			return 247, fmt.Errorf("unexpected numnber of assets. expected: 1 actual: %d", len(assets))
+			return 247, fmt.Errorf("unexpected number of assets. expected: 1 actual: %d", len(assets))
 		}
 		if !assets[0].SourcePlaybackReady {
 			return 246, fmt.Errorf("source playback was not ready")
