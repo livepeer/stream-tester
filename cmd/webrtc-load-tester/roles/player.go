@@ -52,6 +52,24 @@ func Player() {
 }
 
 func runPlayerTest(args playerArguments) {
+	// Create a parent context to run a single browser instance
+	ctx, cancel := chromedp.NewContext(
+		context.Background(),
+		chromedp.WithBrowserOption(
+			chromedp.WithBrowserLogf(log.Printf),
+			chromedp.WithBrowserErrorf(log.Printf),
+		),
+		chromedp.WithLogf(log.Printf),
+		chromedp.WithErrorf(log.Printf),
+	)
+	defer cancel()
+
+	// Browser is only started on the first Run call
+	if err := chromedp.Run(ctx); err != nil {
+		glog.Errorf("Error starting browser: %v\n", err)
+		os.Exit(1)
+	}
+
 	errs := make(chan error, args.Simultaneous)
 	for i := uint(0); i < args.Simultaneous; i++ {
 		i := i // avoid go's loop variable capture
@@ -61,7 +79,7 @@ func runPlayerTest(args playerArguments) {
 		}
 
 		go func() {
-			errs <- runSinglePlayerTest(args, i)
+			errs <- runSinglePlayerTest(ctx, args, i)
 		}()
 	}
 
@@ -73,21 +91,13 @@ func runPlayerTest(args playerArguments) {
 	}
 }
 
-func runSinglePlayerTest(args playerArguments, idx uint) error {
+func runSinglePlayerTest(ctx context.Context, args playerArguments, idx uint) error {
 	url, err := buildPlayerUrl(args.BaseURL, args.PlaybackID, args.PlaybackURL)
 	if err != nil {
 		return err
 	}
 
-	ctx, cancel := chromedp.NewContext(
-		context.Background(),
-		chromedp.WithBrowserOption(
-			chromedp.WithBrowserLogf(log.Printf),
-			chromedp.WithBrowserErrorf(log.Printf),
-		),
-		chromedp.WithLogf(log.Printf),
-		chromedp.WithErrorf(log.Printf),
-	)
+	ctx, cancel := chromedp.NewContext(ctx)
 	defer cancel()
 
 	tasks := chromedp.Tasks{
