@@ -301,8 +301,12 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		return 0, err
 	}
 
+	lapiNoAPIKey := api.NewAPIClient(api.ClientOptions{
+		Server:      rt.lapi.GetServer(),
+		AccessToken: "", // test playback info call without API key
+		Timeout:     8 * time.Second,
+	})
 	for _, sess := range sessions {
-		sess = sessions[0]
 		statusShould := api.RecordingStatusReady
 		if rt.useForceURL {
 			statusShould = api.RecordingStatusWaiting
@@ -330,6 +334,33 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		es, err := rt.checkDown(stream, sess.RecordingURL, testDuration)
 		if err != nil {
 			return es, err
+		}
+
+		// currently the assetID is the same as the sessionID so we could just query on that but just in case that
+		// ever changes, we can use the ListAssets call to find the asset
+		assets, _, err := rt.lapi.ListAssets(api.ListOptions{
+			Limit: 1,
+			Filters: map[string]interface{}{
+				"sourceSessionId": sess.ID,
+			},
+		})
+		if err != nil {
+			return 248, err
+		}
+
+		if len(assets) != 1 {
+			return 247, fmt.Errorf("unexpected number of assets. expected: 1 actual: %d", len(assets))
+		}
+		if !assets[0].SourcePlaybackReady {
+			return 246, fmt.Errorf("source playback was not ready")
+		}
+
+		playbackInfo, err := lapiNoAPIKey.GetPlaybackInfo(assets[0].PlaybackID)
+		if err != nil {
+			return 245, fmt.Errorf("playback info call without API key failed: %w", err)
+		}
+		if len(playbackInfo.Meta.Source) <= 0 {
+			return 244, fmt.Errorf("expected at least one source returned from playback info")
 		}
 	}
 	glog.Infof("Done Record Test. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
