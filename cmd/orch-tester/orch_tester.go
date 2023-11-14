@@ -339,6 +339,7 @@ func startEmbeddedBroadcaster(ctx context.Context, bCfg broadcasterConfig, prese
 	cfg.BlockPollingInterval = bCfg.blockPollingInterval
 	cfg.CliAddr = stringPointer(fmt.Sprintf("0.0.0.0:%s", bcastCliPort))
 	cfg.Broadcaster = boolPointer(true)
+	cfg.HttpAddr = stringPointer("127.0.0.1:8935")
 	go starter.StartLivepeer(ctx, cfg)
 }
 
