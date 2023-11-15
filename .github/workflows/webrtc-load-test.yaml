@@ -38,7 +38,7 @@ jobs:
     name: Run WebRTC load test
     runs-on: ubuntu-latest
     container:
-      image: livepeer/webrtc-load-tester:vg-chore-image-ci
+      image: livepeer/webrtc-load-tester:master
     steps:
       - name: calculate-dates-and-times
         id: timestamp
@@ -54,7 +54,7 @@ jobs:
           DISCORD_EMBEDS: >
             [{
               "title": "WebRTC load test starting",
-              "description": "A load test is starting (production=${{ inputs.production }}). Viewers: ${{ inputs.playback-region-viewers-json }}",
+              "description": "A load test is starting (production=${{ inputs.production }}). Viewers: ${{ toJSON(inputs.playback-region-viewers-json) }}",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "timestamp": "${{ steps.timestamp.outputs.date }}",
               "author": {
