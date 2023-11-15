@@ -34,7 +34,7 @@ jobs:
     name: Run WebRTC load test
     runs-on: ubuntu-latest
     container:
-      image: livepeer/webrtc-load-tester:master
+      image: livepeer/webrtc-load-tester:vg-chore-image-ci
     steps:
       - name: calculate-dates-and-times
         id: timestamp
