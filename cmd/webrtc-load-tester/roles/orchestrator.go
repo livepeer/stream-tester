@@ -4,9 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"math"
-	"net/url"
 	"os"
 	"path"
 	"strconv"
@@ -275,13 +273,7 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 
 	playbackURL := ""
 	if args.Playback.ManifestURL != "" {
-		u, err := url.Parse(args.Playback.ManifestURL)
-		if err != nil {
-			log.Println("failed to parse URL ", args.Playback.ManifestURL, err)
-		} else {
-			u = u.JoinPath("video+" + playbackID)
-			playbackURL = u.String()
-		}
+		playbackURL = fmt.Sprintf(args.Playback.ManifestURL, playbackID)
 	}
 
 	return gcloud.JobSpec{
