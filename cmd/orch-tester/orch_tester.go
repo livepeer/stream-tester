@@ -69,6 +69,7 @@ type broadcasterConfig struct {
 	datadir              *string
 	ethPassword          *string
 	maxTicketEV          *string
+	maxTotalEV           *string
 	maxPricePerUnit      *int
 	blockPollingInterval *int
 }
@@ -110,6 +111,7 @@ func main() {
 	bCfg.datadir = flag.String("datadir", "", "Directory that data is stored in")
 	bCfg.ethPassword = flag.String("ethPassword", "", "Password for existing Eth account address")
 	bCfg.maxTicketEV = flag.String("maxTicketEV", "3000000000000", "The maximum acceptable expected value for PM tickets")
+	bCfg.maxTotalEV = flag.String("maxTotalEV", "30000000000000", "The maximum total acceptable expected value for PM tickets")
 	bCfg.maxPricePerUnit = flag.Int("maxPricePerUnit", 0, "The maximum transcoding price (in wei) per 'pixelsPerUnit' a broadcaster is willing to accept. If not set explicitly, broadcaster is willing to accept ANY price")
 	bCfg.blockPollingInterval = flag.Int("blockPollingInterval", 20, "Interval in seconds at which different blockchain event services poll for blocks")
 
@@ -325,7 +327,7 @@ func startEmbeddedBroadcaster(ctx context.Context, bCfg broadcasterConfig, prese
 	// Start broadcaster
 	cfg := starter.DefaultLivepeerConfig()
 	cfg.Network = bCfg.network
-	cfg.MaxSessions = intPointer(200)
+	cfg.MaxSessions = stringPointer("200")
 	cfg.OrchWebhookURL = stringPointer(fmt.Sprintf("http://%s:%s/orchestrators", defaultHost, streamTesterPort))
 	cfg.EthUrl = bCfg.ethUrl
 	cfg.Datadir = bCfg.datadir
@@ -335,10 +337,12 @@ func startEmbeddedBroadcaster(ctx context.Context, bCfg broadcasterConfig, prese
 	cfg.HttpIngest = boolPointer(true)
 	cfg.TranscodingOptions = &presets
 	cfg.MaxTicketEV = bCfg.maxTicketEV
+	cfg.MaxTotalEV = bCfg.maxTotalEV
 	cfg.MaxPricePerUnit = bCfg.maxPricePerUnit
 	cfg.BlockPollingInterval = bCfg.blockPollingInterval
 	cfg.CliAddr = stringPointer(fmt.Sprintf("0.0.0.0:%s", bcastCliPort))
 	cfg.Broadcaster = boolPointer(true)
+	cfg.HttpAddr = stringPointer("127.0.0.1:8935")
 	go starter.StartLivepeer(ctx, cfg)
 }
 
