@@ -57,8 +57,6 @@ func JSONVarFlag(fs *flag.FlagSet, dest interface{}, name, defaultValue, usage s
 		panic(err)
 	}
 	fs.Func(name, usage, func(s string) error {
-		glog.Infof("Setting %s to: %q", name, s)
-
 		// Clear any previously set value, including the default above
 		destVal := reflect.ValueOf(dest).Elem()
 		destVal.Set(reflect.Zero(destVal.Type()))
