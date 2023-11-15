@@ -54,7 +54,7 @@ jobs:
           DISCORD_EMBEDS: >
             [{
               "title": "WebRTC load test starting",
-              "description": "A load test is starting (production=${{ inputs.production }}). Viewers: ${{ toJSON(inputs.playback-region-viewers-json) }}",
+              "description": "A load test is starting (production=${{ inputs.production }})",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "timestamp": "${{ steps.timestamp.outputs.date }}",
               "author": {
