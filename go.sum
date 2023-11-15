@@ -554,8 +554,6 @@ github.com/livepeer/catalyst-api v0.1.1 h1:WP4rHH88b+lsxo33wPCjl0yvqVDNyxkleZH1s
 github.com/livepeer/catalyst-api v0.1.1/go.mod h1:d6XPE9ehhCutWhCqqcmlYqQa+e9bf3Ke92x+gRZlzoQ=
 github.com/livepeer/go-api-client v0.4.13 h1:H0kY0boMKRTpkHGXlIGMgj0cefEYw+KUPZwx4YLjq4A=
 github.com/livepeer/go-api-client v0.4.13/go.mod h1:Jdb+RI7JyzEZOHd1GUuKofwFDKMO/btTa80SdpUpYQw=
-github.com/livepeer/go-livepeer v0.7.1 h1:ubEUZYm5r0LYgQ5i+Sy8g1HNJqjVgmhcRyGiYds8648=
-github.com/livepeer/go-livepeer v0.7.1/go.mod h1:d6qTStiNmXTQ/5YLB9fhzgDV9MdXg3KmqESQpur2Ak0=
 github.com/livepeer/go-livepeer v0.7.2-0.20231110152159-b17a70dfe719 h1:468kFmwQFaI00eNCLL8qA5XuIBMwqqVgKEXvqS7msa8=
 github.com/livepeer/go-livepeer v0.7.2-0.20231110152159-b17a70dfe719/go.mod h1:d6qTStiNmXTQ/5YLB9fhzgDV9MdXg3KmqESQpur2Ak0=
 github.com/livepeer/go-tools v0.3.0 h1:xK0mJyPWWyvj9Oi9nfLglhCtk0KM8883WB7VO1oPF8g=

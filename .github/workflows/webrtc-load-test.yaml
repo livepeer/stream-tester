@@ -1,0 +1,208 @@
+name: Run a WebRTC Load Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      production:
+        description: Whether to run the load test in production or staging
+        required: true
+        type: boolean
+        default: false
+      duration:
+        description: Duration of the test
+        required: true
+        type: string
+        default: 5m
+      playback-manifest-url:
+        description: URL of the playback manifest
+        type: string
+        required: false
+        default: ''
+      streamer-region:
+        description: Google Cloud region where to ingest from
+        type: string
+        required: true
+        default: us-central1
+      streamer-base-url:
+        description: RTMP ingest URL for the streamer
+        type: string
+        required: false
+      playback-region-viewers-json:
+        description: JSON object mapping Google Cloud region name to number of viewers. Must be multiples of 10.
+        type: string
+        required: true
+        default: '{"us-central1":20,"europe-west2":20,"asia-southeast1":20}'
+
+jobs:
+  load-test:
+    name: Run WebRTC load test
+    runs-on: ubuntu-latest
+    container:
+      image: livepeer/webrtc-load-tester:vg-chore-image-ci
+    steps:
+      - name: calculate-dates-and-times
+        id: timestamp
+        uses: lee-dohm/calculate-dates-and-times@v1.0.2
+        with:
+          format: ""
+
+      - name: Discord start notification
+        uses: Ilshidur/action-discord@0.3.2
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_USERNAME: ${{ github.triggering_actor }}
+          DISCORD_EMBEDS: >
+            [{
+              "title": "WebRTC load test starting",
+              "description": "A load test is starting (production=${{ inputs.production }}). Viewers: ${{ inputs.playback-region-viewers-json }}",
+              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "timestamp": "${{ steps.timestamp.outputs.date }}",
+              "author": {
+                "name": "${{ github.triggering_actor }}",
+                "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
+                "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
+              },
+              "fields": [{
+                "name": "Triggered timestamp",
+                "value": "${{ steps.timestamp.outputs.date }}",
+                "inline": true
+              }, {
+                "name": "Duration",
+                "value": "${{ inputs.duration }}",
+                "inline": true
+              }, {
+                "name": "Regional Viewers",
+                "value": "${{ inputs.playback-region-viewers-json }}",
+                "inline": true
+              }]
+            }]
+
+      - name: Prepare environment
+        id: env
+        run: |
+          STREAMER_BASE_URL_INPUT="${{ inputs.streamer-base-url }}"
+
+          if [ "${{ inputs.production }}" = "true" ]; then
+              API_SERVER="livepeer.com"
+              API_TOKEN="${{ secrets.LOAD_TEST_PROD_API_KEY }}"
+              STREAMER_BASE_URL="${STREAMER_BASE_URL_INPUT:-"rtmp://rtmp.livepeer.com/live/"}"
+              PLAYBACK_BASE_URL="https://lvpr.tv/"
+          else
+              API_SERVER="livepeer.monster"
+              API_TOKEN="${{ secrets.LOAD_TEST_STAGING_API_KEY }}"
+              STREAMER_BASE_URL="${STREAMER_BASE_URL_INPUT:-"rtmp://rtmp.livepeer.monster/live/"}"
+              PLAYBACK_BASE_URL="https://monster.lvpr.tv/"
+          fi
+          echo "::set-output name=api-server::${API_SERVER}"
+          echo "::set-output name=api-token::${API_TOKEN}"
+          echo "::set-output name=streamer-base-url::${STREAMER_BASE_URL}"
+          echo "::set-output name=playback-base-url::${PLAYBACK_BASE_URL}"
+
+      - name: Load Test
+        run: webrtc-load-tester orchestrator
+        env:
+          LT_WEBRTC_DURATION: ${{ inputs.duration }}
+          LT_WEBRTC_API_SERVER: ${{ steps.env.outputs.api-server }}
+          LT_WEBRTC_API_TOKEN: ${{ steps.env.outputs.api-token }}
+          LT_WEBRTC_STREAMER_REGION: ${{ inputs.streamer-region }}
+          LT_WEBRTC_STREAMER_BASE_URL: ${{ steps.env.outputs.streamer-base-url }}
+          LP_WEBRTC_STREAMER_INPUT_FILE: https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4
+          LT_WEBRTC_PLAYBACK_BASE_URL: ${{ steps.env.outputs.playback-base-url }}
+          LT_WEBRTC_PLAYBACK_MANIFEST_URL: "${{ inputs.playback-manifest-url }}"
+          LT_WEBRTC_PLAYBACK_VIEWERS_PER_WORKER: 10
+          LT_WEBRTC_PLAYBACK_VIEWERS_PER_CPU: 2
+          LT_WEBRTC_PLAYBACK_MEMORY_PER_VIEWER_MIB: 400
+          LT_WEBRTC_PLAYBACK_REGION_VIEWERS_JSON: '${{ inputs.playback-region-viewers-json }}'
+          LT_WEBRTC_PLAYBACK_BASE_SCREENSHOT_FOLDER_OS: ${{ secrets.LOAD_TEST_SCREENSHOT_FOLDER_OS }}
+          LT_WEBRTC_GOOGLE_CREDENTIALS_JSON: '${{ secrets.LOAD_TEST_GOOGLE_CREDENTIALS_JSON }}'
+
+      - name: Discord finish notification
+        uses: Ilshidur/action-discord@0.3.2
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_USERNAME: ${{ github.triggering_actor }}
+          DISCORD_EMBEDS: >
+            [{
+              "title": " WebRTC load test finished successfully",
+              "description": "The load test (production=${{ inputs.production }}) has finished successfully",
+              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "color": 24576,
+              "author": {
+                "name": "${{ github.triggering_actor }}",
+                "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
+                "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
+              },
+              "fields": [{
+                "name": "Triggered timestamp",
+                "value": "${{ steps.timestamp.outputs.date }}",
+                "inline": true
+              }, {
+                "name": "Duration",
+                "value": "${{ inputs.duration }}",
+                "inline": true
+              }, {
+                "name": "Regional Viewers",
+                "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
+                "inline": true
+              }]
+            }]
+
+      - name: Discord failure notification
+        uses: Ilshidur/action-discord@0.3.2
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_USERNAME: ${{ github.triggering_actor }}
+          DISCORD_EMBEDS: >
+            [{
+              "title": "WebRTC load test has failed! (production=${{ inputs.production }})",
+              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "color": 8388608,
+              "author": {
+                "name": "${{ github.triggering_actor }}",
+                "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
+                "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
+              },
+              "fields": [{
+                "name": "Triggered timestamp",
+                "value": "${{ steps.timestamp.outputs.date }}",
+                "inline": true
+              }, {
+                "name": "Duration",
+                "value": "${{ inputs.duration }}",
+                "inline": true
+              }, {
+                "name": "Regional Viewers",
+                "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
+                "inline": true
+              }]
+            }]
+
+      - name: Discord cancel notification
+        uses: Ilshidur/action-discord@0.3.2
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_USERNAME: ${{ github.triggering_actor }}
+          DISCORD_EMBEDS: >
+            [{
+              "title": "WebRTC load test was cancelled! (production=${{ inputs.production }})",
+              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "color": 11778048,
+              "author": {
+                "name": "${{ github.triggering_actor }}",
+                "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
+                "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
+              },
+              "fields": [{
+                "name": "Triggered timestamp",
+                "value": "${{ steps.timestamp.outputs.date }}",
+                "inline": true
+              }, {
+                "name": "Duration",
+                "value": "${{ inputs.duration }}",
+                "inline": true
+              }, {
+                "name": "Regional Viewers",
+                "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
+                "inline": true
+              }]
+            }]
