@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
+	"reflect"
 	"runtime"
 	"syscall"
 
@@ -54,6 +56,10 @@ func JSONVarFlag(fs *flag.FlagSet, dest interface{}, name, defaultValue, usage s
 		panic(err)
 	}
 	fs.Func(name, usage, func(s string) error {
+		// Clear any previously set value, including the default above
+		destVal := reflect.ValueOf(dest).Elem()
+		destVal.Set(reflect.Zero(destVal.Type()))
+
 		return json.Unmarshal([]byte(s), dest)
 	})
 }
@@ -81,4 +87,30 @@ func waitSignal(sigs ...os.Signal) {
 	default:
 		glog.Infof("Got signal %d, shutting down", signal)
 	}
+}
+
+func URLVarFlag(fs *flag.FlagSet, dest **url.URL, name, value, usage string) {
+	if err := parseURL(value, dest); err != nil {
+		panic(err)
+	}
+	fs.Func(name, usage, func(s string) error {
+		return parseURL(s, dest)
+	})
+}
+
+func parseURL(s string, dest **url.URL) error {
+	if s == "" {
+		*dest = nil
+		return nil
+	}
+
+	u, err := url.Parse(s)
+	if err != nil {
+		return err
+	}
+	if _, err = url.ParseQuery(u.RawQuery); err != nil {
+		return err
+	}
+	*dest = u
+	return nil
 }

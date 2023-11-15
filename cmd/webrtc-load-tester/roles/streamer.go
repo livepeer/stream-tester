@@ -72,8 +72,15 @@ func runStreamerTest(ctx context.Context, args streamerArguments) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start ffmpeg: %w", err)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		if err.Error() == "signal: killed" {
+			return nil
+		}
+		return fmt.Errorf("ffmpeg exited with error: %w", err)
 	}
 
 	return nil

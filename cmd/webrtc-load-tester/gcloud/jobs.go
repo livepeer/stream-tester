@@ -56,7 +56,7 @@ func CreateJob(ctx context.Context, spec JobSpec) (job *runpb.Job, exec *runpb.E
 		"webrtc-load-tester": "true",
 		"load-test-id":       spec.TestID,
 	}
-	glog.Infof("Creating job: %s", jobName)
+	glog.Infof("Creating job name=%s cpu=%d memory=%d tasks=%d", jobName, spec.CPUs, spec.MemoryMiB, spec.NumTasks)
 
 	parent := fmt.Sprintf("projects/%s/locations/%s", projectID, spec.Region)
 	createOp, err := jobsClient.CreateJob(ctx, &runpb.CreateJobRequest{
