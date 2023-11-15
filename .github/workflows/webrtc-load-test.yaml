@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       production:
-        description: Whether to run the load test in production or staging
+        description: Run the load test in production (staging if unchecked)
         required: true
         type: boolean
         default: false
@@ -14,21 +14,21 @@ on:
         type: string
         default: 5m
       playback-manifest-url:
-        description: URL of the playback manifest
+        description: URL of the playback manifest (optional, defaults to global playback)
         type: string
         required: false
         default: ''
       streamer-region:
-        description: Google Cloud region where to ingest from
+        description: Google Cloud region to stream from
         type: string
         required: true
         default: us-central1
       streamer-base-url:
-        description: RTMP ingest URL for the streamer
+        description: RTMP ingest URL for the streamer (optional, defaults to global ingest)
         type: string
         required: false
       playback-region-viewers-json:
-        description: JSON object mapping Google Cloud region name to number of viewers. Must be multiples of 10.
+        description: JSON mapping Google Cloud region to desired number of viewers
         type: string
         required: true
         default: '{"us-central1":20,"europe-west2":20,"asia-southeast1":20}'
