@@ -1,7 +1,6 @@
 name: Run a WebRTC Load Test in Production
 
 on:
-  push: {}
   workflow_dispatch:
     inputs:
       duration:
@@ -43,38 +42,38 @@ jobs:
         with:
           format: ""
 
-      - name: Discord start notification
-        uses: Ilshidur/action-discord@0.3.2
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          DISCORD_USERNAME: ${{ github.triggering_actor }}
-          DISCORD_EMBEDS: >
-            [{
-              "title": "Production WebRTC load test starting",
-              "description": "A load test is starting on the production environment. Viewers: ${{ inputs.playback-region-viewers-json }}",
-              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "timestamp": "${{ steps.timestamp.outputs.date }}",
-              "author": {
-                "name": "${{ github.triggering_actor }}",
-                "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
-                "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
-              },
-              "fields": [{
-                "name": "Triggered timestamp",
-                "value": "${{ steps.timestamp.outputs.date }}",
-                "inline": true
-              }, {
-                "name": "Duration",
-                "value": "${{ inputs.duration }}",
-                "inline": true
-              }, {
-                "name": "Regional Viewers",
-                "value": "${{ inputs.playback-region-viewers-json }}",
-                "inline": true
-              }]
-            }]
+      # - name: Discord start notification
+      #   uses: Ilshidur/action-discord@0.3.2
+      #   env:
+      #     DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      #     DISCORD_USERNAME: ${{ github.triggering_actor }}
+      #     DISCORD_EMBEDS: >
+      #       [{
+      #         "title": "Production WebRTC load test starting",
+      #         "description": "A load test is starting on the production environment. Viewers: ${{ inputs.playback-region-viewers-json }}",
+      #         "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+      #         "timestamp": "${{ steps.timestamp.outputs.date }}",
+      #         "author": {
+      #           "name": "${{ github.triggering_actor }}",
+      #           "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
+      #           "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
+      #         },
+      #         "fields": [{
+      #           "name": "Triggered timestamp",
+      #           "value": "${{ steps.timestamp.outputs.date }}",
+      #           "inline": true
+      #         }, {
+      #           "name": "Duration",
+      #           "value": "${{ inputs.duration }}",
+      #           "inline": true
+      #         }, {
+      #           "name": "Regional Viewers",
+      #           "value": "${{ inputs.playback-region-viewers-json }}",
+      #           "inline": true
+      #         }]
+      #       }]
 
-      - name: ansible-playbook plays/deploy-prod.yml
+      - name: Load Test
         run: webrtc-load-tester orchestrator
         env:
           LT_WEBRTC_DURATION: ${{ inputs.duration }}
@@ -92,95 +91,93 @@ jobs:
           LT_WEBRTC_PLAYBACK_BASE_SCREENSHOT_FOLDER_OS: ${{ secrets.LOAD_TEST_SCREENSHOT_FOLDER_OS }}
           LT_WEBRTC_GOOGLE_CREDENTIALS_JSON: '${{ secrets.LOAD_TEST_GOOGLE_CREDENTIALS_JSON }}'
 
-      - name: Discord finish notification
-        uses: Ilshidur/action-discord@0.3.2
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          DISCORD_USERNAME: ${{ github.triggering_actor }}
-          DISCORD_EMBEDS: >
-            [{
-              "title": "Production WebRTC load test finished successfully",
-              "description": "The load test on the production environment has finished successfully",
-              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "color": 24576,
-              "author": {
-                "name": "${{ github.triggering_actor }}",
-                "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
-                "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
-              },
-              "fields": [{
-                "name": "Triggered timestamp",
-                "value": "${{ steps.timestamp.outputs.date }}",
-                "inline": true
-              }, {
-                "name": "Duration",
-                "value": "${{ inputs.duration }}",
-                "inline": true
-              }, {
-                "name": "Regional Viewers",
-                "value": "${{ inputs.playback-region-viewers-json }}",
-                "inline": true
-              }]
-            }]
+      # - name: Discord finish notification
+      #   uses: Ilshidur/action-discord@0.3.2
+      #   env:
+      #     DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      #     DISCORD_USERNAME: ${{ github.triggering_actor }}
+      #     DISCORD_EMBEDS: >
+      #       [{
+      #         "title": "Production WebRTC load test finished successfully",
+      #         "description": "The load test on the production environment has finished successfully",
+      #         "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+      #         "color": 24576,
+      #         "author": {
+      #           "name": "${{ github.triggering_actor }}",
+      #           "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
+      #           "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
+      #         },
+      #         "fields": [{
+      #           "name": "Triggered timestamp",
+      #           "value": "${{ steps.timestamp.outputs.date }}",
+      #           "inline": true
+      #         }, {
+      #           "name": "Duration",
+      #           "value": "${{ inputs.duration }}",
+      #           "inline": true
+      #         }, {
+      #           "name": "Regional Viewers",
+      #           "value": "${{ inputs.playback-region-viewers-json }}",
+      #           "inline": true
+      #         }]
+      #       }]
 
-      - name: Discord failure notification
-        if: ${{ inputs.actually_deploy == 'true' && failure() }}
-        uses: Ilshidur/action-discord@0.3.2
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          DISCORD_USERNAME: ${{ github.triggering_actor }}
-          DISCORD_EMBEDS: >
-            [{
-              "title": "Production WebRTC load test has failed!",
-              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "color": 8388608,
-              "author": {
-                "name": "${{ github.triggering_actor }}",
-                "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
-                "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
-              },
-              "fields": [{
-                "name": "Triggered timestamp",
-                "value": "${{ steps.timestamp.outputs.date }}",
-                "inline": true
-              }, {
-                "name": "Duration",
-                "value": "${{ inputs.duration }}",
-                "inline": true
-              }, {
-                "name": "Regional Viewers",
-                "value": "${{ inputs.playback-region-viewers-json }}",
-                "inline": true
-              }]
-            }]
+      # - name: Discord failure notification
+      #   uses: Ilshidur/action-discord@0.3.2
+      #   env:
+      #     DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      #     DISCORD_USERNAME: ${{ github.triggering_actor }}
+      #     DISCORD_EMBEDS: >
+      #       [{
+      #         "title": "Production WebRTC load test has failed!",
+      #         "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+      #         "color": 8388608,
+      #         "author": {
+      #           "name": "${{ github.triggering_actor }}",
+      #           "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
+      #           "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
+      #         },
+      #         "fields": [{
+      #           "name": "Triggered timestamp",
+      #           "value": "${{ steps.timestamp.outputs.date }}",
+      #           "inline": true
+      #         }, {
+      #           "name": "Duration",
+      #           "value": "${{ inputs.duration }}",
+      #           "inline": true
+      #         }, {
+      #           "name": "Regional Viewers",
+      #           "value": "${{ inputs.playback-region-viewers-json }}",
+      #           "inline": true
+      #         }]
+      #       }]
 
-      - name: Discord cancel notification
-        if: ${{ inputs.actually_deploy == 'true' && cancelled() }}
-        uses: Ilshidur/action-discord@0.3.2
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          DISCORD_USERNAME: ${{ github.triggering_actor }}
-          DISCORD_EMBEDS: >
-            [{
-              "title": "Production WebRTC load test was cancelled!",
-              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "color": 11778048,
-              "author": {
-                "name": "${{ github.triggering_actor }}",
-                "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
-                "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
-              },
-              "fields": [{
-                "name": "Triggered timestamp",
-                "value": "${{ steps.timestamp.outputs.date }}",
-                "inline": true
-              }, {
-                "name": "Duration",
-                "value": "${{ inputs.duration }}",
-                "inline": true
-              }, {
-                "name": "Regional Viewers",
-                "value": "${{ inputs.playback-region-viewers-json }}",
-                "inline": true
-              }]
-            }]
+      # - name: Discord cancel notification
+      #   uses: Ilshidur/action-discord@0.3.2
+      #   env:
+      #     DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      #     DISCORD_USERNAME: ${{ github.triggering_actor }}
+      #     DISCORD_EMBEDS: >
+      #       [{
+      #         "title": "Production WebRTC load test was cancelled!",
+      #         "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+      #         "color": 11778048,
+      #         "author": {
+      #           "name": "${{ github.triggering_actor }}",
+      #           "url": "${{ github.server_url }}/${{ github.triggering_actor }}",
+      #           "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
+      #         },
+      #         "fields": [{
+      #           "name": "Triggered timestamp",
+      #           "value": "${{ steps.timestamp.outputs.date }}",
+      #           "inline": true
+      #         }, {
+      #           "name": "Duration",
+      #           "value": "${{ inputs.duration }}",
+      #           "inline": true
+      #         }, {
+      #           "name": "Regional Viewers",
+      #           "value": "${{ inputs.playback-region-viewers-json }}",
+      #           "inline": true
+      #         }]
+      #       }]
