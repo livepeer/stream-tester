@@ -82,7 +82,7 @@ jobs:
         run: |
           STREAMER_BASE_URL_INPUT="${{ inputs.streamer-base-url }}"
 
-          if [ "${{ inputs.production }}" == "true" ]; then
+          if [ "${{ inputs.production }}" = "true" ]; then
               API_SERVER="livepeer.com"
               API_TOKEN="${{ secrets.LOAD_TEST_PROD_API_KEY }}"
               STREAMER_BASE_URL="${STREAMER_BASE_URL_INPUT:-"rtmp://rtmp.livepeer.com/live/"}"
