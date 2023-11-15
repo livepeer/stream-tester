@@ -7,7 +7,7 @@ on:
         description: Duration of the test
         required: true
         type: string
-        default: 10m
+        default: 5m
       playback-manifest-url:
         description: URL of the playback manifest
         type: string
@@ -27,7 +27,7 @@ on:
         description: JSON object mapping Google Cloud region name to number of viewers. Must be multiples of 10.
         type: string
         required: true
-        default: '{"us-central1":40,"europe-west2":40,"asia-southeast1":20}'
+        default: '{"us-central1":20,"europe-west2":20,"asia-southeast1":20}'
 
 jobs:
   load-test:
