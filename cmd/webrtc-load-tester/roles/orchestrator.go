@@ -111,7 +111,6 @@ func Orchestrator() {
 func initClients(cliFlags loadTestArguments) {
 	studioApi = api.NewAPIClient(api.ClientOptions{Server: cliFlags.APIServer, AccessToken: cliFlags.APIToken})
 
-	glog.Infof("Creating Google client with creds: %q", cliFlags.GoogleCredentialsJSON)
 	err := gcloud.InitClients(context.Background(), cliFlags.GoogleCredentialsJSON, cliFlags.GoogleProjectID)
 	if err != nil {
 		glog.Errorf("Error initializing cloud run client: %v", err)
