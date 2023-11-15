@@ -1,6 +1,7 @@
 name: Run a WebRTC Load Test in Production
 
 on:
+  push: {}
   workflow_dispatch:
     inputs:
       duration:
