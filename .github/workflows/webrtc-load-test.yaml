@@ -149,6 +149,7 @@ jobs:
 
       - name: Discord failure notification
         uses: Ilshidur/action-discord@0.3.2
+        if: failure()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           DISCORD_USERNAME: ${{ github.triggering_actor }}
@@ -179,6 +180,7 @@ jobs:
 
       - name: Discord cancel notification
         uses: Ilshidur/action-discord@0.3.2
+        if: cancelled()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           DISCORD_USERNAME: ${{ github.triggering_actor }}
