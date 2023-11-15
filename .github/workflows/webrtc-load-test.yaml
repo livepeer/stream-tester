@@ -106,7 +106,7 @@ jobs:
           LT_WEBRTC_API_TOKEN: ${{ steps.env.outputs.api-token }}
           LT_WEBRTC_STREAMER_REGION: ${{ inputs.streamer-region }}
           LT_WEBRTC_STREAMER_BASE_URL: ${{ steps.env.outputs.streamer-base-url }}
-          LP_WEBRTC_STREAMER_INPUT_FILE: https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4
+          LT_WEBRTC_STREAMER_INPUT_FILE: https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4
           LT_WEBRTC_PLAYBACK_BASE_URL: ${{ steps.env.outputs.playback-base-url }}
           LT_WEBRTC_PLAYBACK_MANIFEST_URL: "${{ inputs.playback-manifest-url }}"
           LT_WEBRTC_PLAYBACK_VIEWERS_PER_WORKER: 10
