@@ -71,8 +71,8 @@ jobs:
                 "value": "${{ inputs.duration }}",
                 "inline": true
               }, {
-                "name": "Regional Viewers",
-                "value": "${{ inputs.playback-region-viewers-json }}",
+                "name": "Viewers",
+                "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
                 "inline": true
               }]
             }]
@@ -141,7 +141,7 @@ jobs:
                 "value": "${{ inputs.duration }}",
                 "inline": true
               }, {
-                "name": "Regional Viewers",
+                "name": "Viewers",
                 "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
                 "inline": true
               }]
@@ -171,7 +171,7 @@ jobs:
                 "value": "${{ inputs.duration }}",
                 "inline": true
               }, {
-                "name": "Regional Viewers",
+                "name": "Viewers",
                 "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
                 "inline": true
               }]
@@ -201,7 +201,7 @@ jobs:
                 "value": "${{ inputs.duration }}",
                 "inline": true
               }, {
-                "name": "Regional Viewers",
+                "name": "Viewers",
                 "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
                 "inline": true
               }]
