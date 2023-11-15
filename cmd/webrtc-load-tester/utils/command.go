@@ -32,6 +32,7 @@ func ParseFlags(registerVars func(*flag.FlagSet)) {
 		ff.WithConfigFileFlag("config"),
 		ff.WithConfigFileParser(ff.PlainParser),
 		ff.WithEnvVarPrefix("LT_WEBRTC"),
+		ff.WithEnvVarIgnoreCommas(true),
 	)
 	if err != nil {
 		glog.Errorf("Error parsing args: %v", err)
