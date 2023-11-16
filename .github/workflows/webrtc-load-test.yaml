@@ -68,6 +68,10 @@ jobs:
                 "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
               },
               "fields": [{
+                "name": "Environment",
+                "value": "${{ inputs.environment }}",
+                "inline": true
+              }, {
                 "name": "Triggered timestamp",
                 "value": "${{ steps.timestamp.outputs.date }}",
                 "inline": true
@@ -76,8 +80,16 @@ jobs:
                 "value": "${{ inputs.duration }}",
                 "inline": true
               }, {
-                "name": "Viewers",
+                "name": "Streamer region",
+                "value": "${{ inputs.streamer-region }}",
+                "inline": true
+              }, {
+                "name": "Viewers regions",
                 "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
+                "inline": true
+              }, {
+                "name": "Single-node target",
+                "value": "${{ inputs.region }}-${{ inputs.pod-index }}",
                 "inline": true
               }]
             }]
@@ -151,16 +163,12 @@ jobs:
                 "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
               },
               "fields": [{
+                "name": "Environment",
+                "value": "${{ inputs.environment }}",
+                "inline": true
+              }, {
                 "name": "Triggered timestamp",
                 "value": "${{ steps.timestamp.outputs.date }}",
-                "inline": true
-              }, {
-                "name": "Duration",
-                "value": "${{ inputs.duration }}",
-                "inline": true
-              }, {
-                "name": "Viewers",
-                "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
                 "inline": true
               }]
             }]
@@ -182,16 +190,12 @@ jobs:
                 "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
               },
               "fields": [{
+                "name": "Environment",
+                "value": "${{ inputs.environment }}",
+                "inline": true
+              }, {
                 "name": "Triggered timestamp",
                 "value": "${{ steps.timestamp.outputs.date }}",
-                "inline": true
-              }, {
-                "name": "Duration",
-                "value": "${{ inputs.duration }}",
-                "inline": true
-              }, {
-                "name": "Viewers",
-                "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
                 "inline": true
               }]
             }]
@@ -213,16 +217,12 @@ jobs:
                 "icon_url": "${{ github.server_url }}/${{ github.triggering_actor }}.png?s=32"
               },
               "fields": [{
+                "name": "Environment",
+                "value": "${{ inputs.environment }}",
+                "inline": true
+              }, {
                 "name": "Triggered timestamp",
                 "value": "${{ steps.timestamp.outputs.date }}",
-                "inline": true
-              }, {
-                "name": "Duration",
-                "value": "${{ inputs.duration }}",
-                "inline": true
-              }, {
-                "name": "Viewers",
-                "value": ${{ toJSON(inputs.playback-region-viewers-json) }},
                 "inline": true
               }]
             }]
