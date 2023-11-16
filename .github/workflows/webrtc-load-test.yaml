@@ -100,7 +100,7 @@ jobs:
 
           # Override with inputs
 
-          if [ -n "${{ inputs.region }}" ] && [ -n "${{ inputs.pod }}" ]; then
+          if [ -n "${{ inputs.region }}" ] && [ -n "${{ inputs.pod-index }}" ]; then
               if [ "${{ inputs.environment }}" = "production" ]; then
                   STREAMER_BASE_URL="rtmp://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/live"
                   PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/webrtc/video+%s"
