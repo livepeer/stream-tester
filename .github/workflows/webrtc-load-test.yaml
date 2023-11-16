@@ -3,6 +3,12 @@ name: Run a WebRTC Load Test
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: Environment to load test
+        required: true
+        type: choice
+        options: [ "production", "staging" ]
+        default: "staging"
       duration:
         description: Duration of the test
         required: true
@@ -23,12 +29,6 @@ on:
         type: string
         required: false
         default: 'https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4'
-      environment:
-        description: Environment to load test
-        required: true
-        type: choice
-        options: [ "production", "staging" ]
-        default: "staging"
       region:
         description: "(Optional) Single-node test: Region of node to be tested (also needs pod index below). e.g.: mdw"
         type: string
