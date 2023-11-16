@@ -18,6 +18,11 @@ on:
         type: string
         required: true
         default: '{"us-central1":20,"europe-west2":20,"asia-southeast1":20}'
+      streamer-input-file:
+        description: File to stream on the load test
+        type: string
+        required: false
+        default: 'https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4'
       region:
         description: "(Optional) Single-node test: Region of node to be tested (also needs pod index below). e.g.: mdw"
         type: string
@@ -136,7 +141,7 @@ jobs:
           LT_WEBRTC_API_TOKEN: ${{ steps.env.outputs.api-token }}
           LT_WEBRTC_STREAMER_REGION: ${{ inputs.streamer-region }}
           LT_WEBRTC_STREAMER_BASE_URL: ${{ steps.env.outputs.streamer-base-url }}
-          LT_WEBRTC_STREAMER_INPUT_FILE: https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4
+          LT_WEBRTC_STREAMER_INPUT_FILE: ${{ inputs.streamer-input-file }}
           LT_WEBRTC_PLAYBACK_BASE_URL: ${{ steps.env.outputs.playback-base-url }}
           LT_WEBRTC_PLAYBACK_MANIFEST_URL: "${{ steps.env.outputs.playback-manifest-url }}"
           LT_WEBRTC_PLAYBACK_VIEWERS_PER_WORKER: 10
