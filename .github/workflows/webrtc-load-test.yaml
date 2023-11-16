@@ -3,36 +3,45 @@ name: Run a WebRTC Load Test
 on:
   workflow_dispatch:
     inputs:
-      production:
-        description: Run the load test in production (staging if unchecked)
-        required: true
-        type: boolean
-        default: false
       duration:
         description: Duration of the test
         required: true
         type: string
         default: 5m
-      playback-manifest-url:
-        description: URL of the playback manifest (optional, defaults to global playback)
-        type: string
-        required: false
-        default: ''
       streamer-region:
         description: Google Cloud region to stream from
         type: string
         required: true
         default: us-central1
-      streamer-base-url:
-        description: RTMP ingest URL for the streamer (optional, defaults to global ingest)
-        type: string
-        required: false
       playback-region-viewers-json:
         description: JSON mapping Google Cloud region to desired number of viewers
         type: string
         required: true
         default: '{"us-central1":20,"europe-west2":20,"asia-southeast1":20}'
-
+      region:
+        description: "(Optional) Single-node test: Region of node to be tested (also needs pod index below). e.g.: mdw"
+        type: string
+        required: false
+      pod-index:
+        description: "(Optional) Single-node test: Index of the Catalyst pod to be tested (also needs region above). e.g.: 0"
+        type: string
+        required: false
+        default: ''
+      streamer-base-url:
+        description: (Optional) Custom RTMP ingest URL for the streamer (overrides single-node test). Defaults to global ingest.
+        type: string
+        required: false
+      playback-manifest-url:
+        description: (Optional) Custom URL for the playback manifest (overrides single-node test). Defaults to global playback.
+        type: string
+        required: false
+        default: ''
+      environment:
+        description: What environment to run the load test on
+        required: true
+        type: choice
+        options: [ "production", "staging" ]
+        default: "staging"
 jobs:
   load-test:
     name: Run WebRTC load test
@@ -54,7 +63,7 @@ jobs:
           DISCORD_EMBEDS: >
             [{
               "title": "WebRTC load test starting",
-              "description": "A load test is starting (production=${{ inputs.production }})",
+              "description": "A load test is starting (env=${{ inputs.environment }})",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "timestamp": "${{ steps.timestamp.outputs.date }}",
               "author": {
@@ -80,23 +89,44 @@ jobs:
       - name: Prepare environment
         id: env
         run: |
-          STREAMER_BASE_URL_INPUT="${{ inputs.streamer-base-url }}"
-
-          if [ "${{ inputs.production }}" = "true" ]; then
+          # Base configs
+          if [ "${{ inputs.environment }}" = "production" ]; then
               API_SERVER="livepeer.com"
               API_TOKEN="${{ secrets.LOAD_TEST_PROD_API_KEY }}"
-              STREAMER_BASE_URL="${STREAMER_BASE_URL_INPUT:-"rtmp://rtmp.livepeer.com/live/"}"
+              STREAMER_BASE_URL="rtmp://rtmp.livepeer.com/live/"
               PLAYBACK_BASE_URL="https://lvpr.tv/"
           else
               API_SERVER="livepeer.monster"
               API_TOKEN="${{ secrets.LOAD_TEST_STAGING_API_KEY }}"
-              STREAMER_BASE_URL="${STREAMER_BASE_URL_INPUT:-"rtmp://rtmp.livepeer.monster/live/"}"
+              STREAMER_BASE_URL="rtmp://rtmp.livepeer.monster/live/"
               PLAYBACK_BASE_URL="https://monster.lvpr.tv/"
           fi
+
+          # Override with inputs
+
+          if [ -n "${{ inputs.region }}" ] && [ -n "${{ inputs.pod }}" ]; then
+              if [ "${{ inputs.environment }}" = "production" ]; then
+                  STREAMER_BASE_URL="rtmp://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/live"
+                  PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/webrtc/video+%s"
+              else
+                  STREAMER_BASE_URL="rtmp://${{ inputs.region }}-staging-staging-catalyst-${{ inputs.pod-index }}.livepeer.monster/live"
+                  PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-staging-staging-catalyst-${{ inputs.pod-index }}.livepeer.monster/webrtc/video+%s"
+              fi
+          fi
+
+          if [ -n "${{ inputs.streamer-base-url }}" ]; then
+              STREAMER_BASE_URL="${{ inputs.streamer-base-url }}"
+          fi
+
+          if [ -n "${{ inputs.playback-manifest-url }}" ]; then
+              PLAYBACK_MANIFEST_URL="${{ inputs.playback-manifest-url }}"
+          fi
+
           echo "::set-output name=api-server::${API_SERVER}"
           echo "::set-output name=api-token::${API_TOKEN}"
           echo "::set-output name=streamer-base-url::${STREAMER_BASE_URL}"
           echo "::set-output name=playback-base-url::${PLAYBACK_BASE_URL}"
+          echo "::set-output name=playback-manifest-url::${PLAYBACK_MANIFEST_URL}"
 
       - name: Load Test
         run: webrtc-load-tester orchestrator
@@ -108,7 +138,7 @@ jobs:
           LT_WEBRTC_STREAMER_BASE_URL: ${{ steps.env.outputs.streamer-base-url }}
           LT_WEBRTC_STREAMER_INPUT_FILE: https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4
           LT_WEBRTC_PLAYBACK_BASE_URL: ${{ steps.env.outputs.playback-base-url }}
-          LT_WEBRTC_PLAYBACK_MANIFEST_URL: "${{ inputs.playback-manifest-url }}"
+          LT_WEBRTC_PLAYBACK_MANIFEST_URL: "${{ steps.env.outputs.playback-manifest-url }}"
           LT_WEBRTC_PLAYBACK_VIEWERS_PER_WORKER: 10
           LT_WEBRTC_PLAYBACK_VIEWERS_PER_CPU: 2
           LT_WEBRTC_PLAYBACK_MEMORY_PER_VIEWER_MIB: 400
@@ -124,7 +154,7 @@ jobs:
           DISCORD_EMBEDS: >
             [{
               "title": " WebRTC load test finished successfully",
-              "description": "The load test (production=${{ inputs.production }}) has finished successfully",
+              "description": "The load test (env=${{ inputs.environment }}) has finished successfully",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 24576,
               "author": {
@@ -155,7 +185,7 @@ jobs:
           DISCORD_USERNAME: ${{ github.triggering_actor }}
           DISCORD_EMBEDS: >
             [{
-              "title": "WebRTC load test has failed! (production=${{ inputs.production }})",
+              "title": "WebRTC load test has failed! (env=${{ inputs.environment }})",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 8388608,
               "author": {
@@ -186,7 +216,7 @@ jobs:
           DISCORD_USERNAME: ${{ github.triggering_actor }}
           DISCORD_EMBEDS: >
             [{
-              "title": "WebRTC load test was cancelled! (production=${{ inputs.production }})",
+              "title": "WebRTC load test was cancelled! (env=${{ inputs.environment }})",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 11778048,
               "author": {
