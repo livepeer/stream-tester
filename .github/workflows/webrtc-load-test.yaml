@@ -27,7 +27,7 @@ on:
       streamer-input-file:
         description: File to stream on the load test
         type: string
-        required: false
+        required: true
         default: 'https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4'
       region:
         description: "(Optional) Single-node test: Region of node to be tested (also needs pod index below). e.g.: mdw"
