@@ -14,7 +14,7 @@ on:
         required: true
         default: us-central1
       playback-region-viewers-json:
-        description: JSON mapping Google Cloud region to desired number of viewers
+        description: Map of Google Cloud region to desired number of viewers
         type: string
         required: true
         default: '{"us-central1":20,"europe-west2":20,"asia-southeast1":20}'
@@ -23,6 +23,12 @@ on:
         type: string
         required: false
         default: 'https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4'
+      environment:
+        description: Environment to load test
+        required: true
+        type: choice
+        options: [ "production", "staging" ]
+        default: "staging"
       region:
         description: "(Optional) Single-node test: Region of node to be tested (also needs pod index below). e.g.: mdw"
         type: string
@@ -32,21 +38,6 @@ on:
         type: string
         required: false
         default: ''
-      streamer-base-url:
-        description: (Optional) Custom RTMP ingest URL for the streamer (overrides single-node test). Defaults to global ingest.
-        type: string
-        required: false
-      playback-manifest-url:
-        description: (Optional) Custom URL for the playback manifest (overrides single-node test). Defaults to global playback.
-        type: string
-        required: false
-        default: ''
-      environment:
-        description: What environment to run the load test on
-        required: true
-        type: choice
-        options: [ "production", "staging" ]
-        default: "staging"
 jobs:
   load-test:
     name: Run WebRTC load test
@@ -117,14 +108,6 @@ jobs:
                   STREAMER_BASE_URL="rtmp://${{ inputs.region }}-staging-staging-catalyst-${{ inputs.pod-index }}.livepeer.monster/live"
                   PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-staging-staging-catalyst-${{ inputs.pod-index }}.livepeer.monster/webrtc/video+%s"
               fi
-          fi
-
-          if [ -n "${{ inputs.streamer-base-url }}" ]; then
-              STREAMER_BASE_URL="${{ inputs.streamer-base-url }}"
-          fi
-
-          if [ -n "${{ inputs.playback-manifest-url }}" ]; then
-              PLAYBACK_MANIFEST_URL="${{ inputs.playback-manifest-url }}"
           fi
 
           echo "::set-output name=api-server::${API_SERVER}"
