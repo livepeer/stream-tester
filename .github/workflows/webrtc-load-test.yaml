@@ -1,4 +1,5 @@
 name: Run a WebRTC Load Test
+run-name: ${{ inputs.duration }} WebRTC Load Test prod=${{ inputs.production }} ${{ inputs.playback-region-viewers-json }}
 
 on:
   workflow_dispatch:
