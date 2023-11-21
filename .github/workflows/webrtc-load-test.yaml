@@ -119,22 +119,20 @@ jobs:
 
           # Override with inputs
 
-          if [ "${{ inputs.playback-protocol }}" = "HLS" ]; then
-              PLAYBACK_BASE_URL="${PLAYBACK_BASE_URL}?lowLatency=false"
-          fi
-
           if [ -n "${{ inputs.region }}" ] && [ -n "${{ inputs.pod-index }}" ]; then
               if [ "${{ inputs.environment }}" = "production" ]; then
                   STREAMER_BASE_URL="rtmp://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/live"
                   PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/webrtc/video+%s"
                   if [ "${{ inputs.playback-protocol }}" = "HLS" ]; then
-                      PLAYBACK_BASE_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/hls/video+%s/index.m3u8"
+                      PLAYBACK_BASE_URL="${PLAYBACK_BASE_URL}?lowLatency=false"
+                      PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/hls/video+%s/index.m3u8"
                   fi
               else
                   STREAMER_BASE_URL="rtmp://${{ inputs.region }}-staging-staging-catalyst-${{ inputs.pod-index }}.livepeer.monster/live"
                   PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-staging-staging-catalyst-${{ inputs.pod-index }}.livepeer.monster/webrtc/video+%s"
                   if [ "${{ inputs.playback-protocol }}" = "HLS" ]; then
-                      PLAYBACK_BASE_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.livepeer.monster/hls/video+%s/index.m3u8"
+                      PLAYBACK_BASE_URL="${PLAYBACK_BASE_URL}?lowLatency=false"
+                      PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.livepeer.monster/hls/video+%s/index.m3u8"
                   fi
               fi
           fi
