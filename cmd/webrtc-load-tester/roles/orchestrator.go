@@ -150,11 +150,14 @@ func runLoadTest(ctx context.Context, args loadTestArguments) error {
 
 	glog.Infof("Access the stream at: https://%s", path.Join(args.APIServer, "/dashboard/streams", stream.ID))
 
-	_, streamer, err := gcloud.CreateJob(ctx, streamerJobSpec(args, stream.StreamKey))
+	var jobsToDelete []string
+	defer func() { gcloud.DeleteJobs(jobsToDelete) }()
+
+	streamerJob, streamer, err := gcloud.CreateJob(ctx, streamerJobSpec(args, stream.StreamKey))
 	if err != nil {
 		return fmt.Errorf("failed to create streamer job: %w", err)
 	}
-	defer gcloud.DeleteJob(args.Streamer.Region, streamer.Job)
+	jobsToDelete = append(jobsToDelete, streamerJob.Name)
 
 	glog.Infof("Streamer job created on region %s: %s (execution: %s)", args.Streamer.Region, streamer.Job, streamer.Name)
 
@@ -163,11 +166,11 @@ func runLoadTest(ctx context.Context, args loadTestArguments) error {
 		glog.Infof("Waiting %s before starting player in %s", args.Playback.DelayBetweenRegions, region)
 		wait(ctx, args.Playback.DelayBetweenRegions)
 
-		_, viewer, err := gcloud.CreateJob(ctx, playerJobSpec(args, region, numViewers, stream.PlaybackID))
+		viewerJob, viewer, err := gcloud.CreateJob(ctx, playerJobSpec(args, region, numViewers, stream.PlaybackID))
 		if err != nil {
 			return fmt.Errorf("failed to create player job: %w", err)
 		}
-		defer gcloud.DeleteJob(region, viewer.Job)
+		jobsToDelete = append(jobsToDelete, viewerJob.Name)
 
 		glog.Infof("Player job created on region %s: %s (execution: %s)", region, viewer.Job, viewer.Name)
 		executions = append(executions, viewer.Name)
@@ -185,9 +188,10 @@ func recoverLoadTest(ctx context.Context, args loadTestArguments) error {
 	glog.Infof("Recovering test with ID %s", args.TestID)
 	wait(ctx, 5*time.Second)
 
-	// TODO: Find the stream by name using the testID
-
 	var executions []string
+	var jobsToDelete []string
+	defer func() { gcloud.DeleteJobs(jobsToDelete) }()
+
 	for region := range args.Playback.RegionViewersJSON {
 		regionExecs, err := gcloud.ListExecutions(ctx, region, args.TestID)
 		if err != nil {
@@ -198,10 +202,10 @@ func recoverLoadTest(ctx context.Context, args loadTestArguments) error {
 		for _, exec := range regionExecs {
 			executions = append(executions, exec.Name)
 
-			if job := exec.Job; !ownedJobs[job] {
+			if job := gcloud.FullJobName(region, exec.Job); !ownedJobs[job] {
 				ownedJobs[job] = true
 				glog.Infof("Taking ownership of %s job on region %s", job, region)
-				defer gcloud.DeleteJob(region, job)
+				jobsToDelete = append(jobsToDelete, job)
 			}
 		}
 	}
