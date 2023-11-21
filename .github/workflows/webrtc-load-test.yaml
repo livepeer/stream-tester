@@ -39,6 +39,12 @@ on:
         type: string
         required: false
         default: ''
+      playback-protocol:
+        description: "Protocol to use for playback"
+        required: true
+        type: choice
+        options: [ "WebRTC", "HLS" ]
+        default: "WebRTC"
 jobs:
   load-test:
     name: Run WebRTC load test
@@ -112,6 +118,10 @@ jobs:
           fi
 
           # Override with inputs
+
+          if [ "${{ inputs.playback-protocol }}" = "HLS" ]; then
+              PLAYBACK_BASE_URL="${PLAYBACK_BASE_URL}?lowLatency=false"
+          fi
 
           if [ -n "${{ inputs.region }}" ] && [ -n "${{ inputs.pod-index }}" ]; then
               if [ "${{ inputs.environment }}" = "production" ]; then
