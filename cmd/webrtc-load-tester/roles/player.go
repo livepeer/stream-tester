@@ -175,8 +175,10 @@ func buildPlayerUrl(baseURL, playbackID, playbackURL string) (string, error) {
 	} else {
 		query.Set("v", playbackID)
 	}
-	// force player to only use WebRTC playback
-	query.Set("lowLatency", "force")
+	// Force player to only use WebRTC playback by default, but allow base URL to override it
+	if !query.Has("lowLatency") {
+		query.Set("lowLatency", "force")
+	}
 	url.RawQuery = query.Encode()
 
 	return url.String(), nil
