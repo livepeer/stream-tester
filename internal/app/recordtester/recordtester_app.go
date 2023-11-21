@@ -306,6 +306,9 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		AccessToken: "", // test playback info call without API key
 		Timeout:     8 * time.Second,
 	})
+	if code, err := checkPlaybackInfo(stream.PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
+		return code, err
+	}
 	for _, sess := range sessions {
 		statusShould := api.RecordingStatusReady
 		if rt.useForceURL {
@@ -355,17 +358,31 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			return 246, fmt.Errorf("source playback was not ready")
 		}
 
-		playbackInfo, err := lapiNoAPIKey.GetPlaybackInfo(assets[0].PlaybackID)
-		if err != nil {
-			return 245, fmt.Errorf("playback info call without API key failed: %w", err)
-		}
-		if len(playbackInfo.Meta.Source) <= 0 {
-			return 244, fmt.Errorf("expected at least one source returned from playback info")
+		if code, err := checkPlaybackInfo(assets[0].PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
+			return code, err
 		}
 	}
 	glog.Infof("Done Record Test. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 
 	rt.lapi.DeleteStream(stream.ID)
+	return 0, nil
+}
+
+func checkPlaybackInfo(playbackID string, withKey, withoutKey *api.Client) (int, error) {
+	playbackInfo, err := withKey.GetPlaybackInfo(playbackID)
+	if err != nil {
+		return 245, fmt.Errorf("playback info call failed for %s: %w", playbackID, err)
+	}
+	if len(playbackInfo.Meta.Source) <= 0 {
+		return 244, fmt.Errorf("expected at least one source returned for %s", playbackID)
+	}
+	playbackInfo, err = withoutKey.GetPlaybackInfo(playbackID)
+	if err != nil {
+		return 245, fmt.Errorf("playback info call without API key failed for %s: %w", playbackID, err)
+	}
+	if len(playbackInfo.Meta.Source) <= 0 {
+		return 244, fmt.Errorf("expected at least one source returned without API key for %s", playbackID)
+	}
 	return 0, nil
 }
 
