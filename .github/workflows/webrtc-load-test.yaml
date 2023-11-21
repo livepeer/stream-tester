@@ -26,10 +26,16 @@ on:
         required: true
         default: '{"us-central1":20,"europe-west2":20,"asia-southeast1":20}'
       streamer-input-file:
-        description: File to stream on the load test
+        description: File to ingest
         type: string
         required: true
         default: 'https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4'
+      playback-protocol:
+        description: Playback protocol
+        required: true
+        type: choice
+        options: [ "WebRTC", "HLS" ]
+        default: "WebRTC"
       region:
         description: "(Optional) Single-node test: Region of node to be tested (also needs pod index below). e.g.: mdw"
         type: string
@@ -39,12 +45,6 @@ on:
         type: string
         required: false
         default: ''
-      playback-protocol:
-        description: "Protocol to use for playback"
-        required: true
-        type: choice
-        options: [ "WebRTC", "HLS" ]
-        default: "WebRTC"
 jobs:
   load-test:
     name: Run WebRTC load test
@@ -127,9 +127,15 @@ jobs:
               if [ "${{ inputs.environment }}" = "production" ]; then
                   STREAMER_BASE_URL="rtmp://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/live"
                   PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/webrtc/video+%s"
+                  if [ "${{ inputs.playback-protocol }}" = "HLS" ]; then
+                      PLAYBACK_BASE_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.lp-playback.studio/hls/video+%s/index.m3u8"
+                  fi
               else
                   STREAMER_BASE_URL="rtmp://${{ inputs.region }}-staging-staging-catalyst-${{ inputs.pod-index }}.livepeer.monster/live"
                   PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-staging-staging-catalyst-${{ inputs.pod-index }}.livepeer.monster/webrtc/video+%s"
+                  if [ "${{ inputs.playback-protocol }}" = "HLS" ]; then
+                      PLAYBACK_BASE_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.livepeer.monster/hls/video+%s/index.m3u8"
+                  fi
               fi
           fi
 
