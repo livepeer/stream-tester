@@ -20,7 +20,8 @@ import (
 const jobsPollingInterval = 1 * time.Minute
 
 type loadTestArguments struct {
-	TestID string // set one to recover a running test. auto-generated if not provided
+	TestID   string // set one to recover a running test. auto-generated if not provided
+	StreamID string
 
 	// Google Cloud
 	GoogleCredentialsJSON string
@@ -60,6 +61,7 @@ func Orchestrator() {
 
 	utils.ParseFlags(func(fs *flag.FlagSet) {
 		fs.StringVar(&cliFlags.TestID, "test-id", "", "ID of previous test to recover. If not provided, a new test will be started with a random ID")
+		fs.StringVar(&cliFlags.StreamID, "stream-id", "", "ID of existing stream to use. Notice that this will be used as the test ID as well but spawn new jobs instead of recovering existing ones")
 		fs.StringVar(&cliFlags.GoogleCredentialsJSON, "google-credentials-json", "", "Google Cloud service account credentials JSON with access to Cloud Run")
 		fs.StringVar(&cliFlags.GoogleProjectID, "google-project-id", "livepeer-test", "Google Cloud project ID")
 		fs.StringVar(&cliFlags.ContainerImage, "container-image", "livepeer/webrtc-load-tester:master", "Container image to use for the worker jobs")
@@ -133,15 +135,23 @@ func initClients(cliFlags loadTestArguments) {
 	glog.Infof("Total number of viewers: %d\n", totalViewers)
 }
 
-func runLoadTest(ctx context.Context, args loadTestArguments) error {
-	stream, err := studioApi.CreateStream(api.CreateStreamReq{
-		Name: "webrtc-load-test-" + time.Now().UTC().Format(time.RFC3339),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create stream: %w", err)
+func runLoadTest(ctx context.Context, args loadTestArguments) (err error) {
+	var stream *api.Stream
+	if args.StreamID != "" {
+		stream, err = studioApi.GetStream(args.StreamID, false)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve stream: %w", err)
+		}
+		glog.Infof("Retrieved stream with name: %s", stream.Name)
+	} else {
+		stream, err = studioApi.CreateStream(api.CreateStreamReq{
+			Name: "webrtc-load-test-" + time.Now().UTC().Format(time.RFC3339),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create stream: %w", err)
+		}
+		glog.Infof("Stream created: %s", stream.ID)
 	}
-
-	glog.Infof("Stream created: %s", stream.ID)
 
 	// Use the stream ID as the test ID for simplicity. Helps on recovering a running test as well.
 	args.TestID = stream.ID
