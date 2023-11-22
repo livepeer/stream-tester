@@ -60,7 +60,7 @@ jobs:
     name: Run ${{ inputs.playback-protocol }} load test
     runs-on: ubuntu-latest
     container:
-      image: livepeer/webrtc-load-tester:master
+      image: livepeer/webrtc-load-tester:vg-feat-wrtc-lt-new-protos
     steps:
       - name: calculate-dates-and-times
         id: timestamp
