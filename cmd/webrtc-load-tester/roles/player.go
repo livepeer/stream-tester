@@ -265,12 +265,7 @@ func derivePublicKey(privateKey string) (string, error) {
 		return "", err
 	}
 
-	pubKey, err := pk.PublicKey.ECDH()
-	if err != nil {
-		return "", err
-	}
-
-	pubKeyPKIX, err := x509.MarshalPKIXPublicKey(pubKey)
+	pubKeyPKIX, err := x509.MarshalPKIXPublicKey(&pk.PublicKey)
 	if err != nil {
 		return "", err
 	}
