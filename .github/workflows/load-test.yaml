@@ -1,5 +1,5 @@
-name: Run a WebRTC Load Test
-run-name: WebRTC Load Test ${{ inputs.environment }} ${{ inputs.duration }} ${{ inputs.playback-region-viewers-json }}
+name: Run a Load Test
+run-name: ${{ inputs.playback-protocol }} load Test ${{ inputs.environment }} ${{ inputs.duration }} ${{ inputs.playback-region-viewers-json }}
 
 on:
   workflow_dispatch:
@@ -47,7 +47,7 @@ on:
         default: ''
 jobs:
   load-test:
-    name: Run WebRTC load test
+    name: Run ${{ inputs.playback-protocol }} load test
     runs-on: ubuntu-latest
     container:
       image: livepeer/webrtc-load-tester:master
@@ -65,7 +65,7 @@ jobs:
           DISCORD_USERNAME: ${{ github.triggering_actor }}
           DISCORD_EMBEDS: >
             [{
-              "title": "WebRTC load test starting",
+              "title": "${{ inputs.playback-protocol }} load test starting",
               "description": "A load test is starting (env=${{ inputs.environment }})",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "timestamp": "${{ steps.timestamp.outputs.date }}",
@@ -132,7 +132,7 @@ jobs:
                   PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-staging-staging-catalyst-${{ inputs.pod-index }}.livepeer.monster/webrtc/video+%s"
                   if [ "${{ inputs.playback-protocol }}" = "HLS" ]; then
                       PLAYBACK_BASE_URL="${PLAYBACK_BASE_URL}?lowLatency=false"
-                      PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-prod-catalyst-${{ inputs.pod-index }}.livepeer.monster/hls/video+%s/index.m3u8"
+                      PLAYBACK_MANIFEST_URL="https://${{ inputs.region }}-staging-staging-catalyst-${{ inputs.pod-index }}.livepeer.monster/hls/video+%s/index.m3u8"
                   fi
               fi
           fi
@@ -168,7 +168,7 @@ jobs:
           DISCORD_USERNAME: ${{ github.triggering_actor }}
           DISCORD_EMBEDS: >
             [{
-              "title": " WebRTC load test finished successfully",
+              "title": "${{ inputs.playback-protocol }} load test finished successfully",
               "description": "The load test (env=${{ inputs.environment }}) has finished successfully",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 24576,
@@ -196,7 +196,7 @@ jobs:
           DISCORD_USERNAME: ${{ github.triggering_actor }}
           DISCORD_EMBEDS: >
             [{
-              "title": "WebRTC load test has failed! (env=${{ inputs.environment }})",
+              "title": "${{ inputs.playback-protocol }} load test has failed! (env=${{ inputs.environment }})",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 8388608,
               "author": {
@@ -223,7 +223,7 @@ jobs:
           DISCORD_USERNAME: ${{ github.triggering_actor }}
           DISCORD_EMBEDS: >
             [{
-              "title": "WebRTC load test was cancelled! (env=${{ inputs.environment }})",
+              "title": "${{ inputs.playback-protocol }} load test was cancelled! (env=${{ inputs.environment }})",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 11778048,
               "author": {
