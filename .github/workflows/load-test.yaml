@@ -124,7 +124,12 @@ jobs:
               API_TOKEN="${{ secrets.LOAD_TEST_PROD_API_KEY }}"
               STREAMER_BASE_URL="rtmp://rtmp.livepeer.com/live/"
               PLAYBACK_BASE_URL="https://lvpr.tv/"
+
               if [ "${{ inputs.access-control }}" = "true" ]; then
+                  if [ -z "${{ inputs.region }}" ] && [ -z "${{ inputs.pod-index }}" ]; then
+                      echo "Error: access-control is only available for single node tests"
+                      exit 1
+                  fi
                   PLAYBACK_JWT_PRIVATE_KEY="${{ secrets.LOAD_TEST_PROD_JWT_PRIVATE_KEY }}"
               fi
           else
@@ -132,7 +137,12 @@ jobs:
               API_TOKEN="${{ secrets.LOAD_TEST_STAGING_API_KEY }}"
               STREAMER_BASE_URL="rtmp://rtmp.livepeer.monster/live/"
               PLAYBACK_BASE_URL="https://monster.lvpr.tv/"
+
               if [ "${{ inputs.access-control }}" = "true" ]; then
+                  if [ -z "${{ inputs.region }}" ] && [ -z "${{ inputs.pod-index }}" ]; then
+                      echo "Error: access-control is only available for single node tests"
+                      exit 1
+                  fi
                   PLAYBACK_JWT_PRIVATE_KEY="${{ secrets.LOAD_TEST_STAGING_JWT_PRIVATE_KEY }}"
               fi
           fi
