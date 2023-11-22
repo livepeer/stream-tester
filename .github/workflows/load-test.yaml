@@ -49,10 +49,9 @@ on:
         description: "(Optional) Single-node test: Index of the Catalyst pod to be tested (also needs region above). e.g.: 0"
         type: string
         required: false
-      stream-id:
+      extra-args:
         description:
-          (Optional) ID of an existing stream to use for the test. Useful for
-          testing custom stream configurations like with CDN.
+          (Optional) Additional arguments to send to load test orchestrator
         type: string
         required: false
 jobs:
@@ -175,7 +174,7 @@ jobs:
           echo "::set-output name=playback-jwt-private-key::${PLAYBACK_JWT_PRIVATE_KEY}"
 
       - name: Load Test
-        run: webrtc-load-tester orchestrator
+        run: webrtc-load-tester orchestrator ${{ inputs.extra-args }}
         env:
           LT_WEBRTC_DURATION: ${{ inputs.duration }}
           LT_WEBRTC_API_SERVER: ${{ steps.env.outputs.api-server }}
