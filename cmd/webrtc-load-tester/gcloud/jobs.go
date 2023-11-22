@@ -52,7 +52,7 @@ type JobSpec struct {
 }
 
 func CreateJob(ctx context.Context, spec JobSpec) (job *runpb.Job, exec *runpb.Execution, err error) {
-	jobName := fmt.Sprintf("webrtc-load-tester-%s-%s-%s", spec.TestID[:8], spec.Role, spec.Region)
+	jobName := fmt.Sprintf("load-tester-%s-%s-%s", spec.TestID[:8], spec.Role, spec.Region)
 	labels := map[string]string{
 		"webrtc-load-tester": "true",
 		"load-test-id":       spec.TestID,
