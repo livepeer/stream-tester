@@ -16,12 +16,23 @@ on:
         type: string
         default: 5m
       streamer-region:
-        description: Google Cloud region to stream from
+        description: Streamer region (from Google Cloud)
         type: string
         required: true
         default: us-central1
+      playback-protocol:
+        description: Playback protocol
+        required: true
+        type: choice
+        options: [ "WebRTC", "HLS" ]
+        default: "WebRTC"
+      access-control:
+        description: Whether to enable access control
+        type: boolean
+        required: true
+        default: false
       playback-region-viewers-json:
-        description: Map of Google Cloud region to desired number of viewers
+        description: Number of viewers per region (from Google Cloud)
         type: string
         required: true
         default: '{"us-central1":20,"europe-west2":20,"asia-southeast1":20}'
@@ -30,21 +41,20 @@ on:
         type: string
         required: true
         default: 'https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4'
-      playback-protocol:
-        description: Playback protocol
-        required: true
-        type: choice
-        options: [ "WebRTC", "HLS" ]
-        default: "WebRTC"
       region:
         description: "(Optional) Single-node test: Region of node to be tested (also needs pod index below). e.g.: mdw"
         type: string
         required: false
       pod-index:
         description: "(Optional) Single-node test: Index of the Catalyst pod to be tested (also needs region above). e.g.: 0"
+        type: number
+        required: false
+      stream-id:
+        description:
+          (Optional) ID of an existing stream to use for the test. Useful for
+          testing custom stream configurations like with CDN.
         type: string
         required: false
-        default: ''
 jobs:
   load-test:
     name: Run ${{ inputs.playback-protocol }} load test
@@ -110,11 +120,17 @@ jobs:
               API_TOKEN="${{ secrets.LOAD_TEST_PROD_API_KEY }}"
               STREAMER_BASE_URL="rtmp://rtmp.livepeer.com/live/"
               PLAYBACK_BASE_URL="https://lvpr.tv/"
+              if [ "${{ inputs.access-control }}" = "true" ]; then
+                  PLAYBACK_JWT_PRIVATE_KEY="${{ secrets.LOAD_TEST_PROD_JWT_PRIVATE_KEY }}"
+              fi
           else
               API_SERVER="livepeer.monster"
               API_TOKEN="${{ secrets.LOAD_TEST_STAGING_API_KEY }}"
               STREAMER_BASE_URL="rtmp://rtmp.livepeer.monster/live/"
               PLAYBACK_BASE_URL="https://monster.lvpr.tv/"
+              if [ "${{ inputs.access-control }}" = "true" ]; then
+                  PLAYBACK_JWT_PRIVATE_KEY="${{ secrets.LOAD_TEST_STAGING_JWT_PRIVATE_KEY }}"
+              fi
           fi
 
           # Override with inputs
@@ -142,6 +158,7 @@ jobs:
           echo "::set-output name=streamer-base-url::${STREAMER_BASE_URL}"
           echo "::set-output name=playback-base-url::${PLAYBACK_BASE_URL}"
           echo "::set-output name=playback-manifest-url::${PLAYBACK_MANIFEST_URL}"
+          echo "::set-output name=playback-jwt-private-key::${PLAYBACK_JWT_PRIVATE_KEY}"
 
       - name: Load Test
         run: webrtc-load-tester orchestrator
@@ -149,11 +166,13 @@ jobs:
           LT_WEBRTC_DURATION: ${{ inputs.duration }}
           LT_WEBRTC_API_SERVER: ${{ steps.env.outputs.api-server }}
           LT_WEBRTC_API_TOKEN: ${{ steps.env.outputs.api-token }}
+          LT_WEBRTC_STREAM_ID: ${{ inputs.stream-id }}
           LT_WEBRTC_STREAMER_REGION: ${{ inputs.streamer-region }}
           LT_WEBRTC_STREAMER_BASE_URL: ${{ steps.env.outputs.streamer-base-url }}
           LT_WEBRTC_STREAMER_INPUT_FILE: ${{ inputs.streamer-input-file }}
           LT_WEBRTC_PLAYBACK_BASE_URL: ${{ steps.env.outputs.playback-base-url }}
           LT_WEBRTC_PLAYBACK_MANIFEST_URL: "${{ steps.env.outputs.playback-manifest-url }}"
+          LT_WEBRTC_PLAYBACK_JWT_PRIVATE_KEY: ${{ steps.env.outputs.playback-jwt-private-key }}
           LT_WEBRTC_PLAYBACK_VIEWERS_PER_WORKER: 10
           LT_WEBRTC_PLAYBACK_VIEWERS_PER_CPU: 2
           LT_WEBRTC_PLAYBACK_MEMORY_PER_VIEWER_MIB: 400
