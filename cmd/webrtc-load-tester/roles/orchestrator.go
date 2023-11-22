@@ -41,6 +41,8 @@ type loadTestArguments struct {
 	}
 	Playback struct {
 		BaseURL                string
+		ManifestURL            string
+		JWTPrivateKey          string
 		RegionViewersJSON      map[string]int
 		ViewersPerWorker       int
 		ViewersPerCPU          float64
@@ -48,7 +50,6 @@ type loadTestArguments struct {
 		DelayBetweenRegions    time.Duration
 		BaseScreenshotFolderOS *url.URL
 		ScreenshotPeriod       time.Duration
-		ManifestURL            string
 	}
 }
 
@@ -74,6 +75,7 @@ func Orchestrator() {
 
 		fs.StringVar(&cliFlags.Playback.BaseURL, "playback-base-url", "https://monster.lvpr.tv/", "Base URL for the player page")
 		fs.StringVar(&cliFlags.Playback.ManifestURL, "playback-manifest-url", "", "URL for playback")
+		fs.StringVar(&cliFlags.Playback.JWTPrivateKey, "playback-jwt-private-key", "", "Private key to sign JWT tokens for access controlled playback")
 		utils.JSONVarFlag(fs, &cliFlags.Playback.RegionViewersJSON, "playback-region-viewers-json", `{"us-central1":100,"europe-west2":100}`, "JSON object of Google Cloud regions to the number of viewers that should be simulated there. Notice that the values must be multiples of playback-viewers-per-worker, and up to 1000 x that")
 		fs.IntVar(&cliFlags.Playback.ViewersPerWorker, "playback-viewers-per-worker", 10, "Number of viewers to simulate per worker")
 		fs.Float64Var(&cliFlags.Playback.ViewersPerCPU, "playback-viewers-per-cpu", 2, "Number of viewers to allocate per CPU on player jobs")
@@ -144,8 +146,14 @@ func runLoadTest(ctx context.Context, args loadTestArguments) (err error) {
 		}
 		glog.Infof("Retrieved stream with name: %s", stream.Name)
 	} else {
+		var playbackPolicy *api.PlaybackPolicy
+		if args.Playback.JWTPrivateKey != "" {
+			playbackPolicy = &api.PlaybackPolicy{Type: "jwt"}
+		}
+
 		stream, err = studioApi.CreateStream(api.CreateStreamReq{
-			Name: "webrtc-load-test-" + time.Now().UTC().Format(time.RFC3339),
+			Name:           "webrtc-load-test-" + time.Now().UTC().Format(time.RFC3339),
+			PlaybackPolicy: playbackPolicy,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create stream: %w", err)
@@ -302,6 +310,7 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 		"-base-url", args.Playback.BaseURL,
 		"-playback-id", playbackID,
 		"-playback-url", playbackURL,
+		"-jwt-private-key", args.Playback.JWTPrivateKey,
 		"-simultaneous", strconv.Itoa(simultaneous),
 		"-duration", args.TestDuration.String(),
 	}
