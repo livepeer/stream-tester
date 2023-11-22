@@ -152,7 +152,7 @@ func runLoadTest(ctx context.Context, args loadTestArguments) (err error) {
 		}
 
 		stream, err = studioApi.CreateStream(api.CreateStreamReq{
-			Name:           "webrtc-load-test-" + time.Now().UTC().Format(time.RFC3339),
+			Name:           "load-test-" + time.Now().UTC().Format(time.RFC3339),
 			PlaybackPolicy: playbackPolicy,
 		})
 		if err != nil {
