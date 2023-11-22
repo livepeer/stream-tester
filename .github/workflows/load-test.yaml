@@ -27,7 +27,7 @@ on:
         options: [ "WebRTC", "HLS" ]
         default: "WebRTC"
       access-control:
-        description: Whether to enable access control
+        description: Enable JWT access control
         type: boolean
         required: true
         default: false
@@ -47,7 +47,7 @@ on:
         required: false
       pod-index:
         description: "(Optional) Single-node test: Index of the Catalyst pod to be tested (also needs region above). e.g.: 0"
-        type: number
+        type: string
         required: false
       stream-id:
         description:
