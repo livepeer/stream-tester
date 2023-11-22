@@ -20,7 +20,8 @@ import (
 const jobsPollingInterval = 1 * time.Minute
 
 type loadTestArguments struct {
-	TestID string // set one to recover a running test. auto-generated if not provided
+	TestID   string // set one to recover a running test. auto-generated if not provided
+	StreamID string
 
 	// Google Cloud
 	GoogleCredentialsJSON string
@@ -40,6 +41,8 @@ type loadTestArguments struct {
 	}
 	Playback struct {
 		BaseURL                string
+		ManifestURL            string
+		JWTPrivateKey          string
 		RegionViewersJSON      map[string]int
 		ViewersPerWorker       int
 		ViewersPerCPU          float64
@@ -47,7 +50,6 @@ type loadTestArguments struct {
 		DelayBetweenRegions    time.Duration
 		BaseScreenshotFolderOS *url.URL
 		ScreenshotPeriod       time.Duration
-		ManifestURL            string
 	}
 }
 
@@ -60,6 +62,7 @@ func Orchestrator() {
 
 	utils.ParseFlags(func(fs *flag.FlagSet) {
 		fs.StringVar(&cliFlags.TestID, "test-id", "", "ID of previous test to recover. If not provided, a new test will be started with a random ID")
+		fs.StringVar(&cliFlags.StreamID, "stream-id", "", "ID of existing stream to use. Notice that this will be used as the test ID as well but spawn new jobs instead of recovering existing ones")
 		fs.StringVar(&cliFlags.GoogleCredentialsJSON, "google-credentials-json", "", "Google Cloud service account credentials JSON with access to Cloud Run")
 		fs.StringVar(&cliFlags.GoogleProjectID, "google-project-id", "livepeer-test", "Google Cloud project ID")
 		fs.StringVar(&cliFlags.ContainerImage, "container-image", "livepeer/webrtc-load-tester:master", "Container image to use for the worker jobs")
@@ -72,6 +75,7 @@ func Orchestrator() {
 
 		fs.StringVar(&cliFlags.Playback.BaseURL, "playback-base-url", "https://monster.lvpr.tv/", "Base URL for the player page")
 		fs.StringVar(&cliFlags.Playback.ManifestURL, "playback-manifest-url", "", "URL for playback")
+		fs.StringVar(&cliFlags.Playback.JWTPrivateKey, "playback-jwt-private-key", "", "Private key to sign JWT tokens for access controlled playback")
 		utils.JSONVarFlag(fs, &cliFlags.Playback.RegionViewersJSON, "playback-region-viewers-json", `{"us-central1":100,"europe-west2":100}`, "JSON object of Google Cloud regions to the number of viewers that should be simulated there. Notice that the values must be multiples of playback-viewers-per-worker, and up to 1000 x that")
 		fs.IntVar(&cliFlags.Playback.ViewersPerWorker, "playback-viewers-per-worker", 10, "Number of viewers to simulate per worker")
 		fs.Float64Var(&cliFlags.Playback.ViewersPerCPU, "playback-viewers-per-cpu", 2, "Number of viewers to allocate per CPU on player jobs")
@@ -133,15 +137,29 @@ func initClients(cliFlags loadTestArguments) {
 	glog.Infof("Total number of viewers: %d\n", totalViewers)
 }
 
-func runLoadTest(ctx context.Context, args loadTestArguments) error {
-	stream, err := studioApi.CreateStream(api.CreateStreamReq{
-		Name: "webrtc-load-test-" + time.Now().UTC().Format(time.RFC3339),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create stream: %w", err)
-	}
+func runLoadTest(ctx context.Context, args loadTestArguments) (err error) {
+	var stream *api.Stream
+	if args.StreamID != "" {
+		stream, err = studioApi.GetStream(args.StreamID, false)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve stream: %w", err)
+		}
+		glog.Infof("Retrieved stream with name: %s", stream.Name)
+	} else {
+		var playbackPolicy *api.PlaybackPolicy
+		if args.Playback.JWTPrivateKey != "" {
+			playbackPolicy = &api.PlaybackPolicy{Type: "jwt"}
+		}
 
-	glog.Infof("Stream created: %s", stream.ID)
+		stream, err = studioApi.CreateStream(api.CreateStreamReq{
+			Name:           "load-test-" + time.Now().UTC().Format(time.RFC3339),
+			PlaybackPolicy: playbackPolicy,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create stream: %w", err)
+		}
+		glog.Infof("Stream created: %s", stream.ID)
+	}
 
 	// Use the stream ID as the test ID for simplicity. Helps on recovering a running test as well.
 	args.TestID = stream.ID
@@ -150,11 +168,14 @@ func runLoadTest(ctx context.Context, args loadTestArguments) error {
 
 	glog.Infof("Access the stream at: https://%s", path.Join(args.APIServer, "/dashboard/streams", stream.ID))
 
-	_, streamer, err := gcloud.CreateJob(ctx, streamerJobSpec(args, stream.StreamKey))
+	var jobsToDelete []string
+	defer func() { gcloud.DeleteJobs(jobsToDelete) }()
+
+	streamerJob, streamer, err := gcloud.CreateJob(ctx, streamerJobSpec(args, stream.StreamKey))
 	if err != nil {
 		return fmt.Errorf("failed to create streamer job: %w", err)
 	}
-	defer gcloud.DeleteJob(args.Streamer.Region, streamer.Job)
+	jobsToDelete = append(jobsToDelete, streamerJob.Name)
 
 	glog.Infof("Streamer job created on region %s: %s (execution: %s)", args.Streamer.Region, streamer.Job, streamer.Name)
 
@@ -163,11 +184,11 @@ func runLoadTest(ctx context.Context, args loadTestArguments) error {
 		glog.Infof("Waiting %s before starting player in %s", args.Playback.DelayBetweenRegions, region)
 		wait(ctx, args.Playback.DelayBetweenRegions)
 
-		_, viewer, err := gcloud.CreateJob(ctx, playerJobSpec(args, region, numViewers, stream.PlaybackID))
+		viewerJob, viewer, err := gcloud.CreateJob(ctx, playerJobSpec(args, region, numViewers, stream.PlaybackID))
 		if err != nil {
 			return fmt.Errorf("failed to create player job: %w", err)
 		}
-		defer gcloud.DeleteJob(region, viewer.Job)
+		jobsToDelete = append(jobsToDelete, viewerJob.Name)
 
 		glog.Infof("Player job created on region %s: %s (execution: %s)", region, viewer.Job, viewer.Name)
 		executions = append(executions, viewer.Name)
@@ -185,9 +206,10 @@ func recoverLoadTest(ctx context.Context, args loadTestArguments) error {
 	glog.Infof("Recovering test with ID %s", args.TestID)
 	wait(ctx, 5*time.Second)
 
-	// TODO: Find the stream by name using the testID
-
 	var executions []string
+	var jobsToDelete []string
+	defer func() { gcloud.DeleteJobs(jobsToDelete) }()
+
 	for region := range args.Playback.RegionViewersJSON {
 		regionExecs, err := gcloud.ListExecutions(ctx, region, args.TestID)
 		if err != nil {
@@ -198,10 +220,10 @@ func recoverLoadTest(ctx context.Context, args loadTestArguments) error {
 		for _, exec := range regionExecs {
 			executions = append(executions, exec.Name)
 
-			if job := exec.Job; !ownedJobs[job] {
+			if job := gcloud.FullJobName(region, exec.Job); !ownedJobs[job] {
 				ownedJobs[job] = true
 				glog.Infof("Taking ownership of %s job on region %s", job, region)
-				defer gcloud.DeleteJob(region, job)
+				jobsToDelete = append(jobsToDelete, job)
 			}
 		}
 	}
@@ -288,6 +310,7 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 		"-base-url", args.Playback.BaseURL,
 		"-playback-id", playbackID,
 		"-playback-url", playbackURL,
+		"-jwt-private-key", args.Playback.JWTPrivateKey,
 		"-simultaneous", strconv.Itoa(simultaneous),
 		"-duration", args.TestDuration.String(),
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	run "cloud.google.com/go/run/apiv2"
@@ -51,7 +52,7 @@ type JobSpec struct {
 }
 
 func CreateJob(ctx context.Context, spec JobSpec) (job *runpb.Job, exec *runpb.Execution, err error) {
-	jobName := fmt.Sprintf("webrtc-load-tester-%s-%s-%s", spec.TestID[:8], spec.Role, spec.Region)
+	jobName := fmt.Sprintf("load-tester-%s-%s-%s", spec.TestID[:8], spec.Role, spec.Region)
 	labels := map[string]string{
 		"webrtc-load-tester": "true",
 		"load-test-id":       spec.TestID,
@@ -110,15 +111,17 @@ func CreateJob(ctx context.Context, spec JobSpec) (job *runpb.Job, exec *runpb.E
 	return job, exec, nil
 }
 
+func FullJobName(region, name string) string {
+	return fmt.Sprintf("projects/%s/locations/%s/jobs/%s", projectID, region, name)
+}
+
 // DeleteJob is meant to in background/defer so it doesn't get a ctx and doesn't return an error
-func DeleteJob(region, name string) {
+func DeleteJob(name string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
-	fullJobName := fmt.Sprintf("projects/%s/locations/%s/jobs/%s", projectID, region, name)
-
 	it := executionsClient.ListExecutions(ctx, &runpb.ListExecutionsRequest{
-		Parent:   fullJobName,
+		Parent:   name,
 		PageSize: 1000,
 	})
 
@@ -146,7 +149,7 @@ func DeleteJob(region, name string) {
 	}
 
 	glog.Infof("Deleting job: %s", simpleName(name))
-	deleteOp, err := jobsClient.DeleteJob(ctx, &runpb.DeleteJobRequest{Name: fullJobName})
+	deleteOp, err := jobsClient.DeleteJob(ctx, &runpb.DeleteJobRequest{Name: name})
 	if err != nil {
 		glog.Errorf("Error deleting job %s: %v\n", name, err)
 		return
@@ -157,6 +160,20 @@ func DeleteJob(region, name string) {
 		glog.Errorf("Error waiting for job deletion: %v\n", err)
 		return
 	}
+}
+
+// DeleteJobs is a convenience to delete multiple jobs in parallel
+func DeleteJobs(jobs []string) {
+	wg := sync.WaitGroup{}
+	wg.Add(len(jobs))
+
+	for _, job := range jobs {
+		go func(job string) {
+			defer wg.Done()
+			DeleteJob(job)
+		}(job)
+	}
+	wg.Wait()
 }
 
 func CheckExecutionStatus(ctx context.Context, name string) (finished bool) {

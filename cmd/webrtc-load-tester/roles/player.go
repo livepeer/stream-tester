@@ -3,6 +3,9 @@ package roles
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"flag"
 	"fmt"
 	"log"
@@ -12,6 +15,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/glog"
 	"github.com/livepeer/go-tools/drivers"
 	"github.com/livepeer/stream-tester/cmd/webrtc-load-tester/utils"
@@ -22,6 +26,7 @@ const uploadScreenshotTimeout = 10 * time.Second
 type playerArguments struct {
 	BaseURL                 string
 	PlaybackID, PlaybackURL string // only one will be used, playbackURL takes precedence
+	JWTPrivateKey           string
 	Simultaneous            uint
 	PlayerStartInterval     time.Duration
 	TestDuration            time.Duration
@@ -37,6 +42,7 @@ func Player() {
 		fs.StringVar(&cliFlags.BaseURL, "base-url", "https://lvpr.tv/", "Base URL for the player")
 		fs.StringVar(&cliFlags.PlaybackID, "playback-id", "", "Playback ID to use for the player")
 		fs.StringVar(&cliFlags.PlaybackURL, "playback-url", "", "Playback URL to use for the player. Will override any playback-id value")
+		fs.StringVar(&cliFlags.JWTPrivateKey, "jwt-private-key", "", "Private key to use for signing JWT tokens in access controlled playback")
 		fs.UintVar(&cliFlags.Simultaneous, "simultaneous", 1, "How many players to run simultaneously")
 		fs.DurationVar(&cliFlags.PlayerStartInterval, "player-start-interval", 2*time.Second, "How often to wait between starting the simultaneous players")
 		fs.DurationVar(&cliFlags.TestDuration, "duration", 1*time.Minute, "How long to run the test")
@@ -92,7 +98,20 @@ func runPlayerTest(args playerArguments) {
 }
 
 func runSinglePlayerTest(ctx context.Context, args playerArguments, idx uint) error {
-	url, err := buildPlayerUrl(args.BaseURL, args.PlaybackID, args.PlaybackURL)
+	playbackURL := args.PlaybackURL
+	if args.JWTPrivateKey != "" {
+		if playbackURL == "" {
+			return fmt.Errorf("playback-url must be provided when using JWT")
+		}
+
+		jwt, err := signJwt(args.PlaybackID, args.JWTPrivateKey, 2*args.TestDuration)
+		if err != nil {
+			return err
+		}
+		playbackURL = addQuery(playbackURL, "jwt", jwt)
+	}
+
+	url, err := buildPlayerUrl(args.BaseURL, args.PlaybackID, playbackURL)
 	if err != nil {
 		return err
 	}
@@ -164,24 +183,19 @@ func screenshotName(idx int, d time.Duration) string {
 }
 
 func buildPlayerUrl(baseURL, playbackID, playbackURL string) (string, error) {
-	url, err := url.Parse(baseURL)
-	if err != nil {
-		return "", err
-	}
+	url := baseURL
 
-	query := url.Query()
 	if playbackURL != "" {
-		query.Set("url", playbackURL)
+		url = addQuery(url, "url", playbackURL)
 	} else {
-		query.Set("v", playbackID)
+		url = addQuery(url, "v", playbackID)
 	}
 	// Force player to only use WebRTC playback by default, but allow base URL to override it
-	if !query.Has("lowLatency") {
-		query.Set("lowLatency", "force")
+	if !strings.Contains(url, "lowLatency=") {
+		url = addQuery(url, "lowLatency", "true")
 	}
-	url.RawQuery = query.Encode()
 
-	return url.String(), nil
+	return url, nil
 }
 
 func getHostname() string {
@@ -197,4 +211,69 @@ func getHostname() string {
 
 	hostname, _ := os.Hostname()
 	return hostname
+}
+
+func addQuery(urlStr, name, value string) string {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		panic(fmt.Errorf("invalid URL (%s): %w", urlStr, err))
+	}
+
+	query := u.Query()
+	query.Set(name, value)
+	u.RawQuery = query.Encode()
+
+	return u.String()
+}
+
+func signJwt(playbackID, privateKey string, ttl time.Duration) (string, error) {
+	decodedPrivateKey, _ := base64.StdEncoding.DecodeString(privateKey)
+	bytesPrivateKey := []byte(decodedPrivateKey)
+
+	pk, err := jwt.ParseECPrivateKeyFromPEM(bytesPrivateKey)
+	if err != nil {
+		return "", err
+	}
+
+	publicKey, err := derivePublicKey(privateKey)
+	if err != nil {
+		return "", err
+	}
+
+	unsignedToken := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
+		"sub": playbackID,
+		"pub": publicKey,
+		"exp": time.Now().Add(ttl).Unix(),
+	})
+
+	token, err := unsignedToken.SignedString(pk)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+func derivePublicKey(privateKey string) (string, error) {
+	decodedPrivateKey, err := base64.StdEncoding.DecodeString(privateKey)
+	if err != nil {
+		return "", err
+	}
+
+	pk, err := jwt.ParseECPrivateKeyFromPEM([]byte(decodedPrivateKey))
+	if err != nil {
+		return "", err
+	}
+
+	pubKeyPKIX, err := x509.MarshalPKIXPublicKey(&pk.PublicKey)
+	if err != nil {
+		return "", err
+	}
+
+	pubKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: pubKeyPKIX,
+	})
+
+	return base64.StdEncoding.EncodeToString(pubKeyPEM), nil
 }
