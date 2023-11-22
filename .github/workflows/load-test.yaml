@@ -76,7 +76,7 @@ jobs:
           DISCORD_EMBEDS: >
             [{
               "title": "${{ inputs.playback-protocol }} load test starting",
-              "description": "A load test is starting (env=${{ inputs.environment }})",
+              "description": "A load test is starting in **${{ inputs.environment }}**",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "timestamp": "${{ steps.timestamp.outputs.date }}",
               "author": {
@@ -107,6 +107,10 @@ jobs:
               }, {
                 "name": "Single-node target",
                 "value": "${{ inputs.region }}-${{ inputs.pod-index }}",
+                "inline": true
+              }, {
+                "name": "Access control",
+                "value": "${{ inputs.access-control }}",
                 "inline": true
               }]
             }]
@@ -188,7 +192,7 @@ jobs:
           DISCORD_EMBEDS: >
             [{
               "title": "${{ inputs.playback-protocol }} load test finished successfully",
-              "description": "The load test (env=${{ inputs.environment }}) has finished successfully",
+              "description": "The load test has finished successfully",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 24576,
               "author": {
@@ -215,7 +219,7 @@ jobs:
           DISCORD_USERNAME: ${{ github.triggering_actor }}
           DISCORD_EMBEDS: >
             [{
-              "title": "${{ inputs.playback-protocol }} load test has failed! (env=${{ inputs.environment }})",
+              "title": "${{ inputs.playback-protocol }} load test has failed!,
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 8388608,
               "author": {
@@ -242,7 +246,7 @@ jobs:
           DISCORD_USERNAME: ${{ github.triggering_actor }}
           DISCORD_EMBEDS: >
             [{
-              "title": "${{ inputs.playback-protocol }} load test was cancelled! (env=${{ inputs.environment }})",
+              "title": "${{ inputs.playback-protocol }} load test was cancelled!",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 11778048,
               "author": {
