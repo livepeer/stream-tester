@@ -179,7 +179,6 @@ jobs:
           LT_WEBRTC_DURATION: ${{ inputs.duration }}
           LT_WEBRTC_API_SERVER: ${{ steps.env.outputs.api-server }}
           LT_WEBRTC_API_TOKEN: ${{ steps.env.outputs.api-token }}
-          LT_WEBRTC_STREAM_ID: ${{ inputs.stream-id }}
           LT_WEBRTC_STREAMER_REGION: ${{ inputs.streamer-region }}
           LT_WEBRTC_STREAMER_BASE_URL: ${{ steps.env.outputs.streamer-base-url }}
           LT_WEBRTC_STREAMER_INPUT_FILE: ${{ inputs.streamer-input-file }}
