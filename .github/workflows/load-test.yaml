@@ -227,7 +227,7 @@ jobs:
           DISCORD_USERNAME: ${{ github.triggering_actor }}
           DISCORD_EMBEDS: >
             [{
-              "title": "${{ inputs.playback-protocol }} load test has failed!,
+              "title": "${{ inputs.playback-protocol }} load test has failed!",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 8388608,
               "author": {
