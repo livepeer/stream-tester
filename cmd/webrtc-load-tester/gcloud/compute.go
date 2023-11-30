@@ -81,6 +81,14 @@ func CreateVMTemplate(ctx context.Context, spec VMTemplateSpec) (url, name strin
 						Key:   "gce-container-declaration",
 						Value: googleapi.String(string(containerSpec)),
 					},
+					{
+						Key:   "google-monitoring-enabled",
+						Value: googleapi.String("true"),
+					},
+					{
+						Key:   "google-logging-enabled",
+						Value: googleapi.String("true"),
+					},
 				},
 			}},
 	}
