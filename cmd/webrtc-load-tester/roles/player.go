@@ -126,11 +126,13 @@ func runSinglePlayerTest(ctx context.Context, args playerArguments, idx uint) er
 	if args.ScreenshotFolderOS == nil {
 		tasks = append(tasks, chromedp.Sleep(args.TestDuration))
 	} else {
-		osFolder := args.ScreenshotFolderOS.
-			JoinPath(getHostname(), fmt.Sprintf("player-%d", idx)).
-			String()
+		osFolder := args.ScreenshotFolderOS
+		if region := getRegion(); region != "" {
+			osFolder = osFolder.JoinPath(region)
+		}
+		osFolder = osFolder.JoinPath(getHostname(), fmt.Sprintf("player-%d", idx))
 
-		driver, err := drivers.ParseOSURL(osFolder, true)
+		driver, err := drivers.ParseOSURL(osFolder.String(), true)
 		if err != nil {
 			return err
 		}
@@ -211,6 +213,15 @@ func getHostname() string {
 
 	hostname, _ := os.Hostname()
 	return hostname
+}
+
+func getRegion() string {
+	if zone := os.Getenv("ZONE"); zone != "" {
+		return zone
+	} else if gceZone := os.Getenv("GCE_ZONE"); gceZone != "" {
+		return gceZone
+	}
+	return ""
 }
 
 func addQuery(urlStr, name, value string) string {

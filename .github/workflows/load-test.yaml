@@ -186,8 +186,7 @@ jobs:
           LT_WEBRTC_PLAYBACK_MANIFEST_URL: "${{ steps.env.outputs.playback-manifest-url }}"
           LT_WEBRTC_PLAYBACK_JWT_PRIVATE_KEY: ${{ steps.env.outputs.playback-jwt-private-key }}
           LT_WEBRTC_PLAYBACK_VIEWERS_PER_WORKER: 10
-          LT_WEBRTC_PLAYBACK_VIEWERS_PER_CPU: 2
-          LT_WEBRTC_PLAYBACK_MEMORY_PER_VIEWER_MIB: 400
+          LT_WEBRTC_PLAYBACK_MACHINE_TYPE: n2-highcpu-4
           LT_WEBRTC_PLAYBACK_REGION_VIEWERS_JSON: '${{ inputs.playback-region-viewers-json }}'
           LT_WEBRTC_PLAYBACK_BASE_SCREENSHOT_FOLDER_OS: ${{ secrets.LOAD_TEST_SCREENSHOT_FOLDER_OS }}
           LT_WEBRTC_GOOGLE_CREDENTIALS_JSON: '${{ secrets.LOAD_TEST_GOOGLE_CREDENTIALS_JSON }}'
@@ -227,7 +226,7 @@ jobs:
           DISCORD_USERNAME: ${{ github.triggering_actor }}
           DISCORD_EMBEDS: >
             [{
-              "title": "${{ inputs.playback-protocol }} load test has failed!,
+              "title": "${{ inputs.playback-protocol }} load test has failed!",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
               "color": 8388608,
               "author": {

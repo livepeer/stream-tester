@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"math"
 	"net/url"
 	"os"
 	"path"
@@ -17,7 +16,7 @@ import (
 	"github.com/livepeer/stream-tester/cmd/webrtc-load-tester/utils"
 )
 
-const jobsPollingInterval = 1 * time.Minute
+const statusPollingInterval = 30 * time.Second
 
 type loadTestArguments struct {
 	TestID   string // set one to recover a running test. auto-generated if not provided
@@ -45,8 +44,7 @@ type loadTestArguments struct {
 		JWTPrivateKey          string
 		RegionViewersJSON      map[string]int
 		ViewersPerWorker       int
-		ViewersPerCPU          float64
-		MemoryPerViewerMiB     int
+		MachineType            string
 		DelayBetweenRegions    time.Duration
 		BaseScreenshotFolderOS *url.URL
 		ScreenshotPeriod       time.Duration
@@ -78,8 +76,7 @@ func Orchestrator() {
 		fs.StringVar(&cliFlags.Playback.JWTPrivateKey, "playback-jwt-private-key", "", "Private key to sign JWT tokens for access controlled playback")
 		utils.JSONVarFlag(fs, &cliFlags.Playback.RegionViewersJSON, "playback-region-viewers-json", `{"us-central1":100,"europe-west2":100}`, "JSON object of Google Cloud regions to the number of viewers that should be simulated there. Notice that the values must be multiples of playback-viewers-per-worker, and up to 1000 x that")
 		fs.IntVar(&cliFlags.Playback.ViewersPerWorker, "playback-viewers-per-worker", 10, "Number of viewers to simulate per worker")
-		fs.Float64Var(&cliFlags.Playback.ViewersPerCPU, "playback-viewers-per-cpu", 2, "Number of viewers to allocate per CPU on player jobs")
-		fs.IntVar(&cliFlags.Playback.MemoryPerViewerMiB, "playback-memory-per-viewer-mib", 300, "Amount of memory to allocate per viewer (browser tab)")
+		fs.StringVar(&cliFlags.Playback.MachineType, "playback-machine-type", "n2-highcpu-4", "Machine type to use for player jobs")
 		fs.DurationVar(&cliFlags.Playback.DelayBetweenRegions, "playback-delay-between-regions", 1*time.Minute, "How long to wait between starting jobs on different regions")
 		utils.URLVarFlag(fs, &cliFlags.Playback.BaseScreenshotFolderOS, "playback-base-screenshot-folder-os", "", "Object Store URL for a folder where to save screenshots of the player. If unset, no screenshots will be taken")
 		fs.DurationVar(&cliFlags.Playback.ScreenshotPeriod, "playback-screenshot-period", 1*time.Minute, "How often to take a screenshot of the player")
@@ -168,33 +165,46 @@ func runLoadTest(ctx context.Context, args loadTestArguments) (err error) {
 
 	glog.Infof("Access the stream at: https://%s", path.Join(args.APIServer, "/dashboard/streams", stream.ID))
 
-	var jobsToDelete []string
-	defer func() { gcloud.DeleteJobs(jobsToDelete) }()
-
-	streamerJob, streamer, err := gcloud.CreateJob(ctx, streamerJobSpec(args, stream.StreamKey))
+	streamerSpec := streamerVMSpec(args, stream.StreamKey)
+	streamerTemplateURL, streamerTemplateName, err := gcloud.CreateVMTemplate(ctx, streamerVMSpec(args, stream.StreamKey))
 	if err != nil {
-		return fmt.Errorf("failed to create streamer job: %w", err)
+		return fmt.Errorf("failed to create streamer VM template: %w", err)
 	}
-	jobsToDelete = append(jobsToDelete, streamerJob.Name)
+	defer gcloud.DeleteVMTemplate(streamerTemplateName)
 
-	glog.Infof("Streamer job created on region %s: %s (execution: %s)", args.Streamer.Region, streamer.Job, streamer.Name)
+	playerSpec := playerVMSpec(args, stream.PlaybackID)
+	playerTemplateURL, playerTemplateName, err := gcloud.CreateVMTemplate(ctx, playerSpec)
+	if err != nil {
+		return fmt.Errorf("failed to create player VM template: %w", err)
+	}
+	defer gcloud.DeleteVMTemplate(playerTemplateName)
 
-	executions := []string{streamer.Name}
+	var createdVMGroups []gcloud.VMGroupInfo
+	defer func() { gcloud.DeleteVMGroups(createdVMGroups) }()
+
+	streamerGroup, err := gcloud.CreateVMGroup(ctx, streamerSpec, streamerTemplateURL, args.Streamer.Region, 1)
+	if err != nil {
+		return fmt.Errorf("failed to create streamer VM group: %w", err)
+	}
+	createdVMGroups = append(createdVMGroups, gcloud.VMGroupInfo{args.Streamer.Region, streamerGroup})
+
+	glog.Infof("Streamer VM created on region %s: %s", args.Streamer.Region, streamerGroup)
+
 	for region, numViewers := range args.Playback.RegionViewersJSON {
 		glog.Infof("Waiting %s before starting player in %s", args.Playback.DelayBetweenRegions, region)
 		wait(ctx, args.Playback.DelayBetweenRegions)
 
-		viewerJob, viewer, err := gcloud.CreateJob(ctx, playerJobSpec(args, region, numViewers, stream.PlaybackID))
+		numInstances := int64(numViewers / args.Playback.ViewersPerWorker)
+		viewerGroup, err := gcloud.CreateVMGroup(ctx, playerSpec, playerTemplateURL, region, numInstances)
 		if err != nil {
-			return fmt.Errorf("failed to create player job: %w", err)
+			return fmt.Errorf("failed to create player VM group in %s: %w", region, err)
 		}
-		jobsToDelete = append(jobsToDelete, viewerJob.Name)
+		createdVMGroups = append(createdVMGroups, gcloud.VMGroupInfo{region, viewerGroup})
 
-		glog.Infof("Player job created on region %s: %s (execution: %s)", region, viewer.Job, viewer.Name)
-		executions = append(executions, viewer.Name)
+		glog.Infof("Player VM group created on region %s: %s", region, viewerGroup)
 	}
 
-	waitTestFinished(ctx, stream.ID, executions)
+	waitTestFinished(ctx, stream.ID, createdVMGroups, false)
 
 	return nil
 }
@@ -206,79 +216,80 @@ func recoverLoadTest(ctx context.Context, args loadTestArguments) error {
 	glog.Infof("Recovering test with ID %s", args.TestID)
 	wait(ctx, 5*time.Second)
 
-	var executions []string
-	var jobsToDelete []string
-	defer func() { gcloud.DeleteJobs(jobsToDelete) }()
+	templates, err := gcloud.ListVMTemplates(ctx, args.TestID)
+	if err != nil {
+		return fmt.Errorf("failed to list VM templates: %w", err)
+	}
+	for _, template := range templates {
+		defer gcloud.DeleteVMTemplate(template)
+	}
+
+	var vmGroups []gcloud.VMGroupInfo
+	defer func() { gcloud.DeleteVMGroups(vmGroups) }()
 
 	for region := range args.Playback.RegionViewersJSON {
-		regionExecs, err := gcloud.ListExecutions(ctx, region, args.TestID)
+		regionGroups, err := gcloud.ListVMGroups(ctx, region, args.TestID)
 		if err != nil {
 			return fmt.Errorf("failed to list executions on region %s: %w", region, err)
 		}
 
-		ownedJobs := map[string]bool{}
-		for _, exec := range regionExecs {
-			executions = append(executions, exec.Name)
-
-			if job := gcloud.FullJobName(region, exec.Job); !ownedJobs[job] {
-				ownedJobs[job] = true
-				glog.Infof("Taking ownership of %s job on region %s", job, region)
-				jobsToDelete = append(jobsToDelete, job)
-			}
+		for _, group := range regionGroups {
+			vmGroups = append(vmGroups, gcloud.VMGroupInfo{region, group})
 		}
 	}
 
-	waitTestFinished(ctx, args.TestID, executions)
+	waitTestFinished(ctx, args.TestID, vmGroups, true)
 
 	return nil
 }
 
-func waitTestFinished(ctx context.Context, streamID string, executions []string) {
+func waitTestFinished(ctx context.Context, streamID string, vmGroups []gcloud.VMGroupInfo, isRecover bool) {
 	glog.Infof("Waiting for test to finish...")
 
-	ticker := time.NewTicker(jobsPollingInterval)
+	ticker := time.NewTicker(statusPollingInterval)
 	defer ticker.Stop()
 
+	// assume the stream was already active if we're recovering a running test
+	streamWasActive := isRecover
 	for {
+		stream, err := studioApi.GetStream(streamID, false)
+		if err != nil {
+			glog.Errorf("Error getting stream status: %v\n", err)
+			continue
+		}
+		streamWasActive = streamWasActive || stream.IsActive
+
+		glog.Infof("Stream status: isActive=%v lastSeen=%s sourceDurationSec=%.2f sourceSegments=%d transcodedSegments=%d",
+			stream.IsActive, time.UnixMilli(stream.LastSeen).Format(time.RFC3339), stream.SourceSegmentsDuration, stream.SourceSegments, stream.TranscodedSegments)
+
+		for _, group := range vmGroups {
+			err := gcloud.CheckVMGroupStatus(ctx, group.Region, group.Name)
+			if err != nil {
+				glog.Errorf("Error checking VM group status: %v\n", err)
+			}
+		}
+
+		// we consider the test finished if we saw the stream active at least
+		// once and then it went inactive.
+		if streamWasActive && !stream.IsActive {
+			glog.Infof("Test finished")
+			break
+		}
+
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
-
-		if streamID != "" {
-			stream, err := studioApi.GetStream(streamID, false)
-			if err != nil {
-				glog.Errorf("Error getting stream status: %v\n", err)
-				continue
-			}
-
-			glog.Infof("Stream status: lastSeen=%s sourceDurationSec=%.2f sourceSegments=%d transcodedSegments=%d",
-				time.UnixMilli(stream.LastSeen).Format(time.RFC3339), stream.SourceSegmentsDuration, stream.SourceSegments, stream.TranscodedSegments)
-		}
-
-		allFinished := true
-		for _, exec := range executions {
-			finished := gcloud.CheckExecutionStatus(ctx, exec)
-			allFinished = allFinished && finished
-		}
-
-		if allFinished {
-			glog.Infof("Test finished")
-			break
-		}
 	}
 }
 
-func streamerJobSpec(args loadTestArguments, streamKey string) gcloud.JobSpec {
+func streamerVMSpec(args loadTestArguments, streamKey string) gcloud.VMTemplateSpec {
 	// Stream for a little longer since viewers join slowly
-	additionalStreamDelay := args.Playback.DelayBetweenRegions * time.Duration(1+len(args.Playback.RegionViewersJSON))
+	additionalStreamDelay := args.Playback.DelayBetweenRegions*time.Duration(len(args.Playback.RegionViewersJSON)) + 3*time.Minute
 	duration := args.TestDuration + additionalStreamDelay
-	timeout := duration + 10*time.Minute
 
-	return gcloud.JobSpec{
-		Region: args.Streamer.Region,
-
+	return gcloud.VMTemplateSpec{
 		ContainerImage: args.ContainerImage,
 		Role:           "streamer",
 		Args: []string{
@@ -287,19 +298,15 @@ func streamerJobSpec(args loadTestArguments, streamKey string) gcloud.JobSpec {
 			"-input-file", args.Streamer.InputFile,
 			"-duration", duration.String(),
 		},
-		Timeout: timeout,
 
-		TestID:    args.TestID,
-		NumTasks:  1,
-		CPUs:      1,
-		MemoryMiB: 512,
+		TestID:      args.TestID,
+		MachineType: "n1-standard-1",
 	}
 }
 
-func playerJobSpec(args loadTestArguments, region string, viewers int, playbackID string) gcloud.JobSpec {
+func playerVMSpec(args loadTestArguments, playbackID string) gcloud.VMTemplateSpec {
 	simultaneous := args.Playback.ViewersPerWorker
-	numTasks := viewers / args.Playback.ViewersPerWorker
-	timeout := args.TestDuration + 10*time.Minute
+	// numTasks := viewers / args.Playback.ViewersPerWorker
 
 	playbackURL := ""
 	if args.Playback.ManifestURL != "" {
@@ -316,38 +323,19 @@ func playerJobSpec(args loadTestArguments, region string, viewers int, playbackI
 	}
 	if args.Playback.BaseScreenshotFolderOS != nil {
 		jobArgs = append(jobArgs,
-			"-screenshot-folder-os", args.Playback.BaseScreenshotFolderOS.JoinPath(args.TestID, region).String(),
+			"-screenshot-folder-os", args.Playback.BaseScreenshotFolderOS.JoinPath(args.TestID).String(),
 			"-screenshot-period", args.Playback.ScreenshotPeriod.String(),
 		)
 	}
 
-	return gcloud.JobSpec{
-		Region: region,
-
+	return gcloud.VMTemplateSpec{
 		ContainerImage: args.ContainerImage,
 		Role:           "player",
 		Args:           jobArgs,
-		Timeout:        timeout,
 
-		TestID:    args.TestID,
-		NumTasks:  numTasks,
-		CPUs:      allowedCPUValue(float64(simultaneous) / args.Playback.ViewersPerCPU),             // Defaults to 1 CPU every 2 viewers
-		MemoryMiB: int(math.Ceil(float64(simultaneous*args.Playback.MemoryPerViewerMiB)/128) * 128), // Round up to 128MB increments
+		TestID:      args.TestID,
+		MachineType: args.Playback.MachineType,
 	}
-}
-
-// allowedCPUValue returns the first allowed value for the CPU equal or higher than the requested value. The allowed
-// values for the CPU are [1 2 4 6 8]. Cloud Run supports values <1 but we don't.
-func allowedCPUValue(viewersPerCPU float64) int {
-	allowedValues := []int{1, 2, 4, 6, 8}
-	cpuInt := int(math.Ceil(viewersPerCPU))
-
-	for _, v := range allowedValues {
-		if v >= cpuInt {
-			return v
-		}
-	}
-	return allowedValues[len(allowedValues)-1]
 }
 
 func wait(ctx context.Context, dur time.Duration) {
