@@ -30,7 +30,7 @@ type VMTemplateSpec struct {
 }
 
 func CreateVMTemplate(ctx context.Context, spec VMTemplateSpec) (url, name string, err error) {
-	templateName := fmt.Sprintf("load-tester-%s-%s", spec.TestID[:8], spec.Role)
+	name = fmt.Sprintf("load-tester-%s-%s", spec.TestID[:8], spec.Role)
 
 	containerSpec, err := yaml.Marshal(konlet.ContainerSpec{
 		Spec: konlet.ContainerSpecStruct{
@@ -48,7 +48,7 @@ func CreateVMTemplate(ctx context.Context, spec VMTemplateSpec) (url, name strin
 	}
 
 	template := &compute.InstanceTemplate{
-		Name:        templateName,
+		Name:        name,
 		Description: "test-id=" + spec.TestID,
 		Properties: &compute.InstanceProperties{
 			MachineType: spec.MachineType,
@@ -95,7 +95,7 @@ func CreateVMTemplate(ctx context.Context, spec VMTemplateSpec) (url, name strin
 		return "", "", fmt.Errorf("error creating GCE instance template: %w", err)
 	}
 
-	template, err = computeClient.InstanceTemplates.Get(projectID, templateName).Context(ctx).Do()
+	template, err = computeClient.InstanceTemplates.Get(projectID, name).Context(ctx).Do()
 	if err != nil {
 		return "", "", fmt.Errorf("error getting GCE instance template: %w", err)
 	}

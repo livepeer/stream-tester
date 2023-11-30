@@ -216,9 +216,6 @@ func recoverLoadTest(ctx context.Context, args loadTestArguments) error {
 	glog.Infof("Recovering test with ID %s", args.TestID)
 	wait(ctx, 5*time.Second)
 
-	var vmGroups []gcloud.VMGroupInfo
-	defer func() { gcloud.DeleteVMGroups(vmGroups) }()
-
 	templates, err := gcloud.ListVMTemplates(ctx, args.TestID)
 	if err != nil {
 		return fmt.Errorf("failed to list VM templates: %w", err)
@@ -226,6 +223,9 @@ func recoverLoadTest(ctx context.Context, args loadTestArguments) error {
 	for _, template := range templates {
 		defer gcloud.DeleteVMTemplate(template)
 	}
+
+	var vmGroups []gcloud.VMGroupInfo
+	defer func() { gcloud.DeleteVMGroups(vmGroups) }()
 
 	for region := range args.Playback.RegionViewersJSON {
 		regionGroups, err := gcloud.ListVMGroups(ctx, region, args.TestID)
