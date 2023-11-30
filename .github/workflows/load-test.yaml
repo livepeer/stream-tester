@@ -185,8 +185,8 @@ jobs:
           LT_WEBRTC_PLAYBACK_BASE_URL: ${{ steps.env.outputs.playback-base-url }}
           LT_WEBRTC_PLAYBACK_MANIFEST_URL: "${{ steps.env.outputs.playback-manifest-url }}"
           LT_WEBRTC_PLAYBACK_JWT_PRIVATE_KEY: ${{ steps.env.outputs.playback-jwt-private-key }}
-          LT_WEBRTC_PLAYBACK_VIEWERS_PER_WORKER: 10
-          LT_WEBRTC_PLAYBACK_MACHINE_TYPE: n2-highcpu-4
+          LT_WEBRTC_PLAYBACK_VIEWERS_PER_WORKER: 40
+          LT_WEBRTC_PLAYBACK_MACHINE_TYPE: n2-highcpu-16
           LT_WEBRTC_PLAYBACK_REGION_VIEWERS_JSON: '${{ inputs.playback-region-viewers-json }}'
           LT_WEBRTC_PLAYBACK_BASE_SCREENSHOT_FOLDER_OS: ${{ secrets.LOAD_TEST_SCREENSHOT_FOLDER_OS }}
           LT_WEBRTC_GOOGLE_CREDENTIALS_JSON: '${{ secrets.LOAD_TEST_GOOGLE_CREDENTIALS_JSON }}'
