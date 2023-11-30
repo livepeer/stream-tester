@@ -165,15 +165,22 @@ func runLoadTest(ctx context.Context, args loadTestArguments) (err error) {
 
 	glog.Infof("Access the stream at: https://%s", path.Join(args.APIServer, "/dashboard/streams", stream.ID))
 
-	var createdVMGroups []gcloud.VMGroupInfo
-	defer func() { gcloud.DeleteVMGroups(createdVMGroups) }()
-
 	streamerSpec := streamerVMSpec(args, stream.StreamKey)
 	streamerTemplateURL, streamerTemplateName, err := gcloud.CreateVMTemplate(ctx, streamerVMSpec(args, stream.StreamKey))
 	if err != nil {
 		return fmt.Errorf("failed to create streamer VM template: %w", err)
 	}
 	defer gcloud.DeleteVMTemplate(streamerTemplateName)
+
+	playerSpec := playerVMSpec(args, stream.PlaybackID)
+	playerTemplateURL, playerTemplateName, err := gcloud.CreateVMTemplate(ctx, playerSpec)
+	if err != nil {
+		return fmt.Errorf("failed to create player VM template: %w", err)
+	}
+	defer gcloud.DeleteVMTemplate(playerTemplateName)
+
+	var createdVMGroups []gcloud.VMGroupInfo
+	defer func() { gcloud.DeleteVMGroups(createdVMGroups) }()
 
 	streamerGroup, err := gcloud.CreateVMGroup(ctx, streamerSpec, streamerTemplateURL, args.Streamer.Region, 1)
 	if err != nil {
@@ -182,13 +189,6 @@ func runLoadTest(ctx context.Context, args loadTestArguments) (err error) {
 	createdVMGroups = append(createdVMGroups, gcloud.VMGroupInfo{args.Streamer.Region, streamerGroup})
 
 	glog.Infof("Streamer VM created on region %s: %s", args.Streamer.Region, streamerGroup)
-
-	playerSpec := playerVMSpec(args, stream.PlaybackID)
-	playerTemplateURL, playerTemplateName, err := gcloud.CreateVMTemplate(ctx, playerSpec)
-	if err != nil {
-		return fmt.Errorf("failed to create player VM template: %w", err)
-	}
-	defer gcloud.DeleteVMTemplate(playerTemplateName)
 
 	for region, numViewers := range args.Playback.RegionViewersJSON {
 		glog.Infof("Waiting %s before starting player in %s", args.Playback.DelayBetweenRegions, region)
