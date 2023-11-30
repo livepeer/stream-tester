@@ -12,7 +12,7 @@ require (
 	github.com/golang/glog v1.1.2
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
-	github.com/livepeer/go-api-client v0.4.14-0.20231122152358-8756b0dfa4f4
+	github.com/livepeer/go-api-client v0.4.14-0.20231130155418-dd87e78bea93
 	github.com/livepeer/go-livepeer v0.7.2-0.20231110152159-b17a70dfe719
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
@@ -97,7 +97,7 @@ require (
 	google.golang.org/genproto v0.0.0-20231016165738-49dd2c1f3d0b // indirect
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.0 // indirect
 )
@@ -110,6 +110,7 @@ require (
 
 require (
 	cloud.google.com/go/run v1.3.1
+	github.com/GoogleCloudPlatform/konlet v0.0.0-20221118094820-015a8324dd48
 	github.com/chromedp/chromedp v0.9.3
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/livepeer/catalyst-api v0.1.1

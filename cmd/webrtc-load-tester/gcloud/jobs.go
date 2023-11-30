@@ -10,6 +10,7 @@ import (
 	run "cloud.google.com/go/run/apiv2"
 	"cloud.google.com/go/run/apiv2/runpb"
 	"github.com/golang/glog"
+	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -29,6 +30,11 @@ func InitClients(ctx context.Context, credentialsJSON, credsProjectID string) (e
 	}
 
 	executionsClient, err = run.NewExecutionsClient(ctx, credsOpt)
+	if err != nil {
+		return err
+	}
+
+	computeClient, err = compute.NewService(ctx, credsOpt)
 	if err != nil {
 		return err
 	}
