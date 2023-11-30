@@ -70,7 +70,7 @@ func CreateVMTemplate(ctx context.Context, spec VMTemplateSpec) (url, name strin
 						{
 							Name:        "External NAT",
 							Type:        "ONE_TO_ONE_NAT",
-							NetworkTier: "STANDARD",
+							NetworkTier: "PREMIUM",
 						},
 					},
 				},
