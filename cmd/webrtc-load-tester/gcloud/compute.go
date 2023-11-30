@@ -150,7 +150,7 @@ func CreateVMGroup(ctx context.Context, spec VMTemplateSpec, templateURL, region
 // DeleteVMGroup deletes a VM group and waits for the operation to complete. It
 // doesn't receive a ctx because it's meant to run as a cleanup on shutdown.
 func DeleteVMGroup(region, groupName string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	glog.Infof("Deleting VM group: %s", groupName)
