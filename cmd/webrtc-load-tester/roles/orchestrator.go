@@ -286,7 +286,7 @@ func waitTestFinished(ctx context.Context, streamID string, vmGroups []gcloud.VM
 
 func streamerVMSpec(args loadTestArguments, streamKey string) gcloud.VMTemplateSpec {
 	// Stream for a little longer since viewers join slowly
-	additionalStreamDelay := args.Playback.DelayBetweenRegions * time.Duration(1+len(args.Playback.RegionViewersJSON))
+	additionalStreamDelay := args.Playback.DelayBetweenRegions*time.Duration(len(args.Playback.RegionViewersJSON)) + 3*time.Minute
 	duration := args.TestDuration + additionalStreamDelay
 
 	return gcloud.VMTemplateSpec{
