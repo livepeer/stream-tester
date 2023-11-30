@@ -59,7 +59,7 @@ jobs:
     name: Run ${{ inputs.playback-protocol }} load test
     runs-on: ubuntu-latest
     container:
-      image: livepeer/webrtc-load-tester:vg-fix-goog-band-limit
+      image: livepeer/webrtc-load-tester:master
     steps:
       - name: calculate-dates-and-times
         id: timestamp
@@ -179,7 +179,6 @@ jobs:
           LT_WEBRTC_DURATION: ${{ inputs.duration }}
           LT_WEBRTC_API_SERVER: ${{ steps.env.outputs.api-server }}
           LT_WEBRTC_API_TOKEN: ${{ steps.env.outputs.api-token }}
-          LT_WEBRTC_CONTAINER_IMAGE: livepeer/webrtc-load-tester:vg-fix-goog-band-limit
           LT_WEBRTC_STREAMER_REGION: ${{ inputs.streamer-region }}
           LT_WEBRTC_STREAMER_BASE_URL: ${{ steps.env.outputs.streamer-base-url }}
           LT_WEBRTC_STREAMER_INPUT_FILE: ${{ inputs.streamer-input-file }}
