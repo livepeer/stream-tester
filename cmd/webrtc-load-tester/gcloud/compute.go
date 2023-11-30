@@ -107,6 +107,7 @@ func DeleteVMTemplate(templateName string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
+	glog.Infof("Deleting VM template: %s", templateName)
 	op, err := computeClient.InstanceTemplates.Delete(projectID, templateName).Context(ctx).Do()
 	if err != nil {
 		glog.Errorf("error deleting GCE instance template: %v", err)
@@ -144,7 +145,9 @@ func DeleteVMGroup(region, groupName string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 
+	glog.Infof("Deleting VM group: %s", groupName)
 	op, err := computeClient.RegionInstanceGroupManagers.Delete(projectID, region, groupName).Context(ctx).Do()
+
 	if err != nil {
 		glog.Errorf("error deleting VM group %s: %v", groupName, err)
 		return
@@ -170,6 +173,8 @@ func DeleteVMGroups(groups []VMGroupInfo) {
 			DeleteVMGroup(group.Region, group.Name)
 		}(group)
 	}
+
+	wg.Wait()
 }
 
 func CheckVMGroupStatus(ctx context.Context, region, groupName string) error {
@@ -239,7 +244,11 @@ func waitForOperation(ctx context.Context, op *compute.Operation) (err error) {
 
 		if currentOp.Status == "DONE" {
 			if currentOp.Error != nil {
-				return fmt.Errorf("operation error: %v", currentOp.Error.Errors)
+				errMsgs := []string{}
+				for _, err := range currentOp.Error.Errors {
+					errMsgs = append(errMsgs, err.Message)
+				}
+				return fmt.Errorf("operation error: %v", strings.Join(errMsgs, "; "))
 			}
 			return nil
 		}

@@ -16,7 +16,7 @@ import (
 	"github.com/livepeer/stream-tester/cmd/webrtc-load-tester/utils"
 )
 
-const jobsPollingInterval = 1 * time.Minute
+const statusPollingInterval = 30 * time.Second
 
 type loadTestArguments struct {
 	TestID   string // set one to recover a running test. auto-generated if not provided
@@ -204,7 +204,7 @@ func runLoadTest(ctx context.Context, args loadTestArguments) (err error) {
 		glog.Infof("Player VM group created on region %s: %s", region, viewerGroup)
 	}
 
-	waitTestFinished(ctx, stream.ID, createdVMGroups)
+	waitTestFinished(ctx, stream.ID, createdVMGroups, false)
 
 	return nil
 }
@@ -238,25 +238,20 @@ func recoverLoadTest(ctx context.Context, args loadTestArguments) error {
 		}
 	}
 
-	waitTestFinished(ctx, args.TestID, vmGroups)
+	waitTestFinished(ctx, args.TestID, vmGroups, true)
 
 	return nil
 }
 
-func waitTestFinished(ctx context.Context, streamID string, vmGroups []gcloud.VMGroupInfo) {
+func waitTestFinished(ctx context.Context, streamID string, vmGroups []gcloud.VMGroupInfo, isRecover bool) {
 	glog.Infof("Waiting for test to finish...")
 
-	ticker := time.NewTicker(jobsPollingInterval)
+	ticker := time.NewTicker(statusPollingInterval)
 	defer ticker.Stop()
 
-	streamWasActive := false
+	// assume the stream was already active if we're recovering a running test
+	streamWasActive := isRecover
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-
 		stream, err := studioApi.GetStream(streamID, false)
 		if err != nil {
 			glog.Errorf("Error getting stream status: %v\n", err)
@@ -279,6 +274,12 @@ func waitTestFinished(ctx context.Context, streamID string, vmGroups []gcloud.VM
 		if streamWasActive && !stream.IsActive {
 			glog.Infof("Test finished")
 			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
 		}
 	}
 }
