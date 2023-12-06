@@ -91,19 +91,21 @@ func (crt *continuousRecordTester) Start(fileName string, testDuration, pauseDur
 			messenger.SendFatalMessage(msg)
 		} else if err != nil || es != 0 {
 			var re *testers.RTMPError
-			if errors.As(err, &re) && try < 4 {
+			if errors.As(err, &re) && try < 2 {
 				msg := fmt.Sprintf(":rotating_light: Test of %s ended with RTMP err=%v errCode=%v try=%d, trying %s time",
 					crt.host, err, es, try, getNth(try+2))
 				messenger.SendMessage(msg)
 				try++
+				glog.Info("Waiting 10 seconds before next try...")
 				time.Sleep(10 * time.Second)
 				continue
 			}
-			if notRtmpTry < 3 {
+			if notRtmpTry < 2 {
 				msg := fmt.Sprintf(":rotating_light: Test of %s ended with some err=%v errCode=%v try=%d, trying %s time",
 					crt.host, err, es, notRtmpTry, getNth(notRtmpTry+2))
 				messenger.SendMessage(msg)
 				notRtmpTry++
+				glog.Info("Waiting 5 seconds before next try...")
 				time.Sleep(5 * time.Second)
 				continue
 			}
@@ -202,7 +204,7 @@ func (crt *continuousRecordTester) Done() <-chan struct{} {
 	return crt.ctx.Done()
 }
 
-var nth = []string{"0", "first", "second", "third", "forth", "fifth"}
+var nth = []string{"0", "first", "second", "third"}
 
 func getNth(i int) string {
 	if i > 0 && i < len(nth) {
