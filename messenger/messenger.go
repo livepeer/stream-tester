@@ -111,6 +111,8 @@ func Init(ctx context.Context, WebhookURL, UserName, UsersToNotify, botToken, ch
 	if WebhookURL != "" {
 		msgCh = make(chan []byte, 64)
 		go sendLoop()
+	} else {
+		glog.Info("Discord webhook url is not provided")
 	}
 }
 
