@@ -42,6 +42,10 @@ monitor:
 api-transcoder:
 	go build -ldflags="$(ldflags)" cmd/api-transcoder/api-transcoder.go
 
+.PHONY: webrtc-load-tester
+webrtc-load-tester:
+	go build -ldflags="$(ldflags)" -o "$(GO_BUILD_DIR)" cmd/webrtc-load-tester/webrtc-load-tester.go
+
 .PHONY: docker
 docker:
 	docker build -f docker/Dockerfile -t livepeer/streamtester:latest --build-arg version=$(shell git describe --dirty) .

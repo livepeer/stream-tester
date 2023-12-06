@@ -30,6 +30,7 @@ type playerArguments struct {
 	Simultaneous            uint
 	PlayerStartInterval     time.Duration
 	TestDuration            time.Duration
+	Headless                bool
 
 	ScreenshotFolderOS *url.URL
 	ScreenshotPeriod   time.Duration
@@ -48,6 +49,7 @@ func Player() {
 		fs.DurationVar(&cliFlags.TestDuration, "duration", 1*time.Minute, "How long to run the test")
 		utils.URLVarFlag(fs, &cliFlags.ScreenshotFolderOS, "screenshot-folder-os", "", "Object Store URL for a folder where to save screenshots of the player. If unset, no screenshots will be taken")
 		fs.DurationVar(&cliFlags.ScreenshotPeriod, "screenshot-period", 1*time.Minute, "How often to take a screenshot of the player")
+		fs.BoolVar(&cliFlags.Headless, "headless", true, "Run Chrome in headless mode (no-GUI)")
 	})
 
 	if cliFlags.PlaybackID == "" && cliFlags.PlaybackURL == "" {
@@ -59,8 +61,18 @@ func Player() {
 
 func runPlayerTest(args playerArguments) {
 	// Create a parent context to run a single browser instance
+	opts := chromedp.DefaultExecAllocatorOptions[:]
+	if !args.Headless {
+		opts = append(opts,
+			chromedp.Flag("headless", false),
+			chromedp.Flag("hide-scrollbars", false),
+			chromedp.Flag("mute-audio", false),
+		)
+	}
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	defer cancel()
 	ctx, cancel := chromedp.NewContext(
-		context.Background(),
+		allocCtx,
 		chromedp.WithBrowserOption(
 			chromedp.WithBrowserLogf(log.Printf),
 			chromedp.WithBrowserErrorf(log.Printf),
