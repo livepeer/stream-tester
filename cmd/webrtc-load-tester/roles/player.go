@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/url"
 	"os"
 	"strings"
@@ -93,7 +94,8 @@ func runPlayerTest(args playerArguments) {
 		i := i // avoid go's loop variable capture
 
 		if args.PlayerStartInterval > 0 {
-			time.Sleep(args.PlayerStartInterval)
+			dur := (0.5 + rand.Float64()) * float64(args.PlayerStartInterval)
+			time.Sleep(time.Duration(dur))
 		}
 
 		go func() {
