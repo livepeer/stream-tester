@@ -45,6 +45,7 @@ type loadTestArguments struct {
 		RegionViewersJSON      map[string]int
 		ViewersPerWorker       int
 		MachineType            string
+		PlayerStartInterval    time.Duration
 		DelayBetweenRegions    time.Duration
 		BaseScreenshotFolderOS *url.URL
 		ScreenshotPeriod       time.Duration
@@ -77,6 +78,7 @@ func Orchestrator() {
 		utils.JSONVarFlag(fs, &cliFlags.Playback.RegionViewersJSON, "playback-region-viewers-json", `{"us-central1":100,"europe-west2":100}`, "JSON object of Google Cloud regions to the number of viewers that should be simulated there. Notice that the values must be multiples of playback-viewers-per-worker, and up to 1000 x that")
 		fs.IntVar(&cliFlags.Playback.ViewersPerWorker, "playback-viewers-per-worker", 10, "Number of viewers to simulate per worker")
 		fs.StringVar(&cliFlags.Playback.MachineType, "playback-machine-type", "n2-highcpu-4", "Machine type to use for player jobs")
+		fs.DurationVar(&cliFlags.Playback.PlayerStartInterval, "playback-player-start-interval", 2*time.Second, "How often to wait between starting the simultaneous player tabs on a single worker node")
 		fs.DurationVar(&cliFlags.Playback.DelayBetweenRegions, "playback-delay-between-regions", 1*time.Minute, "How long to wait between starting jobs on different regions")
 		utils.URLVarFlag(fs, &cliFlags.Playback.BaseScreenshotFolderOS, "playback-base-screenshot-folder-os", "", "Object Store URL for a folder where to save screenshots of the player. If unset, no screenshots will be taken")
 		fs.DurationVar(&cliFlags.Playback.ScreenshotPeriod, "playback-screenshot-period", 1*time.Minute, "How often to take a screenshot of the player")
@@ -306,7 +308,6 @@ func streamerVMSpec(args loadTestArguments, streamKey string) gcloud.VMTemplateS
 
 func playerVMSpec(args loadTestArguments, playbackID string) gcloud.VMTemplateSpec {
 	simultaneous := args.Playback.ViewersPerWorker
-	// numTasks := viewers / args.Playback.ViewersPerWorker
 
 	playbackURL := ""
 	if args.Playback.ManifestURL != "" {
@@ -319,6 +320,7 @@ func playerVMSpec(args loadTestArguments, playbackID string) gcloud.VMTemplateSp
 		"-playback-url", playbackURL,
 		"-jwt-private-key", args.Playback.JWTPrivateKey,
 		"-simultaneous", strconv.Itoa(simultaneous),
+		"-player-start-interval", args.Playback.PlayerStartInterval.String(),
 		"-duration", args.TestDuration.String(),
 	}
 	if args.Playback.BaseScreenshotFolderOS != nil {
