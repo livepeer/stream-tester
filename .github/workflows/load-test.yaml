@@ -40,7 +40,7 @@ on:
         description: File to ingest
         type: string
         required: true
-        default: 'https://storage.googleapis.com/lp_testharness_assets/countdown_720p_30fps_2sGOP_noBframes_5min.mp4'
+        default: 'https://test-harness-gcp.livepeer.fish/countdown_720p_30fps_2sGOP_noBframes_5min.mp4'
       region:
         description: "(Optional) Single-node test: Region of node to be tested (also needs pod index below). e.g.: mdw"
         type: string
@@ -50,8 +50,7 @@ on:
         type: string
         required: false
       extra-args:
-        description:
-          (Optional) Additional arguments to send to load test orchestrator
+        description: "(Optional) Additional arguments to send to load test orchestrator"
         type: string
         required: false
 jobs:
