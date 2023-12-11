@@ -31,9 +31,12 @@ type loadTestArguments struct {
 	APIServer string
 	APIToken  string
 
+	StreamProfiles []api.Profile
+
 	// Test config
 	TestDuration time.Duration
-	Streamer     struct {
+
+	Streamer struct {
 		Region    string
 		BaseURL   string
 		InputFile string
@@ -66,6 +69,10 @@ func Orchestrator() {
 		fs.StringVar(&cliFlags.GoogleProjectID, "google-project-id", "livepeer-test", "Google Cloud project ID")
 		fs.StringVar(&cliFlags.ContainerImage, "container-image", "livepeer/webrtc-load-tester:master", "Container image to use for the worker jobs")
 
+		fs.StringVar(&cliFlags.APIToken, "api-token", "", "Token of the Livepeer API to be used")
+		fs.StringVar(&cliFlags.APIServer, "api-server", "livepeer.monster", "Server of the Livepeer API to be used")
+		utils.JSONVarFlag(fs, &cliFlags.StreamProfiles, "stream-profiles", `null`, "JSON array of stream profiles to use")
+
 		fs.DurationVar(&cliFlags.TestDuration, "duration", 10*time.Minute, "How long to run the test")
 
 		fs.StringVar(&cliFlags.Streamer.BaseURL, "streamer-base-url", "rtmp://rtmp.livepeer.monster/live/", "Base URL for the RTMP endpoint to stream to")
@@ -82,9 +89,6 @@ func Orchestrator() {
 		fs.DurationVar(&cliFlags.Playback.DelayBetweenRegions, "playback-delay-between-regions", 1*time.Minute, "How long to wait between starting jobs on different regions")
 		utils.URLVarFlag(fs, &cliFlags.Playback.BaseScreenshotFolderOS, "playback-base-screenshot-folder-os", "", "Object Store URL for a folder where to save screenshots of the player. If unset, no screenshots will be taken")
 		fs.DurationVar(&cliFlags.Playback.ScreenshotPeriod, "playback-screenshot-period", 1*time.Minute, "How often to take a screenshot of the player")
-
-		fs.StringVar(&cliFlags.APIToken, "api-token", "", "Token of the Livepeer API to be used")
-		fs.StringVar(&cliFlags.APIServer, "api-server", "livepeer.monster", "Server of the Livepeer API to be used")
 	})
 
 	initClients(cliFlags)
@@ -153,6 +157,7 @@ func runLoadTest(ctx context.Context, args loadTestArguments) (err error) {
 		stream, err = studioApi.CreateStream(api.CreateStreamReq{
 			Name:           "load-test-" + time.Now().UTC().Format(time.RFC3339),
 			PlaybackPolicy: playbackPolicy,
+			Profiles:       args.StreamProfiles,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create stream: %w", err)
