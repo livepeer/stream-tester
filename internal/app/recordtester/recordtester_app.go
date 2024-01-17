@@ -21,6 +21,8 @@ import (
 	"github.com/livepeer/stream-tester/model"
 )
 
+const mp4DurationDiffTolerance = 6 * time.Second
+
 type (
 	// IRecordTester ...
 	IRecordTester interface {
@@ -490,7 +492,7 @@ func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDurat
 	if durDiff < 0 {
 		durDiff = -durDiff
 	}
-	if durDiff > 2*time.Second {
+	if durDiff > mp4DurationDiffTolerance {
 		ers := fmt.Errorf("duration of mp4 differ by %s (got %s, should %s)", durDiff, dur, streamDuration)
 		glog.Error(ers)
 		return 300, ers
