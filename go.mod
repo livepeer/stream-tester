@@ -21,7 +21,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/peterbourgon/ff v1.7.1
 	github.com/peterbourgon/ff/v2 v2.0.1
-	github.com/prometheus/client_golang v1.15.1
+	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/common v0.44.0
 	github.com/rabbitmq/amqp091-go v1.8.1 // indirect
 	github.com/rabbitmq/rabbitmq-stream-go-client v1.1.2 // indirect
