@@ -164,11 +164,17 @@ func (crt *continuousRecordTester) sendPagerdutyEvent(rt IRecordTester, err erro
 		}
 		return
 	}
+
+	summary := fmt.Sprintf("%s%s %s for `%s` error: %v", lopriPrefix, componentName, crt.pagerDutyComponent, crt.host, err)
+	if len(summary) > 1024 {
+		summary = summary[:1024] // summary can be 1024 chars max
+	}
+
 	event.Payload = &pagerduty.V2Payload{
 		Source:    crt.host,
 		Component: crt.pagerDutyComponent,
 		Severity:  severity,
-		Summary:   fmt.Sprintf("%s%s %s for `%s` error: %v", lopriPrefix, componentName, crt.pagerDutyComponent, crt.host, err),
+		Summary:   summary,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 	sid := rt.StreamID()
