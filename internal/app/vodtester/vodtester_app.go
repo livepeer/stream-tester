@@ -77,6 +77,8 @@ func (vt *vodTester) Start(fileName string, vodImportUrl string, taskPollDuratio
 			return fmt.Errorf("error in export task taskId=%s: %w", exportTask.ID, err)
 		}
 
+		vt.Lapi.DeleteAsset(importAsset.ID)
+
 		return nil
 	})
 
@@ -194,6 +196,8 @@ func (vt *vodTester) directUploadTester(fileName string, taskPollDuration time.D
 		return fmt.Errorf("error checking playback: %w", err)
 	}
 
+	vt.Lapi.DeleteAsset(uploadAsset.ID)
+
 	return nil
 }
 
@@ -247,6 +251,8 @@ func (vt *vodTester) resumableUploadTester(fileName string, taskPollDuration tim
 		glog.Errorf("Error checking playback assetId=%s err=%v", uploadAsset.ID, err)
 		return fmt.Errorf("error checking playback: %w", err)
 	}
+
+	vt.Lapi.DeleteAsset(uploadAsset.ID)
 
 	return nil
 }

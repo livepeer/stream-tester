@@ -363,10 +363,13 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 		if code, err := checkPlaybackInfo(assets[0].PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
 			return code, err
 		}
+
+		rt.lapi.DeleteAsset(assets[0].ID)
 	}
 	glog.Infof("Done Record Test. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 
 	rt.lapi.DeleteStream(stream.ID)
+
 	return 0, nil
 }
 
