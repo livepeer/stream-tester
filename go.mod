@@ -9,10 +9,10 @@ require (
 	github.com/Necroforger/dgrouter v0.0.0-20200517224846-e66453b957c1
 	github.com/PagerDuty/go-pagerduty v1.7.0
 	github.com/bwmarrin/discordgo v0.27.1
-	github.com/golang/glog v1.1.2
+	github.com/golang/glog v1.2.1
 	github.com/gosuri/uilive v0.0.3 // indirect
 	github.com/gosuri/uiprogress v0.0.1
-	github.com/livepeer/go-api-client v0.4.14-0.20231130155418-dd87e78bea93
+	github.com/livepeer/go-api-client v0.4.24-0.20240605154204-90c95287ac6a
 	github.com/livepeer/go-livepeer v0.7.2-0.20231110152159-b17a70dfe719
 	github.com/livepeer/joy4 v0.1.2-0.20220210094601-95e4d28f5f07
 	github.com/livepeer/leaderboard-serverless v1.0.0
