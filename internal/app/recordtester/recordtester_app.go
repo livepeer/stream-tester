@@ -51,6 +51,7 @@ type (
 		Analyzers           testers.AnalyzerByRegion
 		Ingest              *api.Ingest
 		RecordObjectStoreId string
+		RecordingSpec       *api.RecordingSpec
 		UseForceURL         bool
 		RecordingWaitTime   time.Duration
 		UseHTTP             bool
@@ -65,6 +66,7 @@ type (
 		lanalyzers          testers.AnalyzerByRegion
 		ingest              *api.Ingest
 		recordObjectStoreId string
+		recordingSpec       *api.RecordingSpec
 		useForceURL         bool
 		recordingWaitTime   time.Duration
 		useHTTP             bool
@@ -89,6 +91,7 @@ func NewRecordTester(gctx context.Context, opts RecordTesterOptions, serfOpts Se
 		ctx:                 ctx,
 		cancel:              cancel,
 		recordObjectStoreId: opts.RecordObjectStoreId,
+		recordingSpec:       opts.RecordingSpec,
 		useForceURL:         opts.UseForceURL,
 		recordingWaitTime:   opts.RecordingWaitTime,
 		useHTTP:             opts.UseHTTP,
@@ -132,7 +135,12 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	var stream *api.Stream
 	for {
-		stream, err = rt.lapi.CreateStream(api.CreateStreamReq{Name: streamName, Record: true, RecordObjectStoreId: rt.recordObjectStoreId})
+		stream, err = rt.lapi.CreateStream(api.CreateStreamReq{
+			Name:                streamName,
+			Record:              true,
+			RecordingSpec:       rt.recordingSpec,
+			RecordObjectStoreId: rt.recordObjectStoreId,
+		})
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -418,7 +426,13 @@ func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL str
 	var err error
 	apiTry := 0
 	for {
-		session, err = rt.lapi.CreateStream(api.CreateStreamReq{Name: streamName, Record: true, RecordObjectStoreId: rt.recordObjectStoreId, ParentID: stream.ID})
+		session, err = rt.lapi.CreateStream(api.CreateStreamReq{
+			Name:                streamName,
+			Record:              true,
+			RecordingSpec:       rt.recordingSpec,
+			RecordObjectStoreId: rt.recordObjectStoreId,
+			ParentID:            stream.ID,
+		})
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
