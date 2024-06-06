@@ -338,13 +338,13 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			return 0, err
 		}
 		if rt.mp4 {
-			es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration)
+			es, err := rt.checkRecordingMp4(stream, sess.Mp4Url, testDuration)
 			if err != nil {
 				return es, err
 			}
 		}
 
-		es, err := rt.checkDown(stream, sess.RecordingURL, testDuration)
+		es, err := rt.checkRecordingHls(stream, sess.RecordingURL, testDuration)
 		if err != nil {
 			return es, err
 		}
@@ -463,7 +463,7 @@ func (rt *recordTester) isCancelled() error {
 	return nil
 }
 
-func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
+func (rt *recordTester) checkRecordingMp4(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
 	es := 0
 	started := time.Now()
 	glog.V(model.VERBOSE).Infof("Downloading mp4 url=%s streamId=%s playbackId=%s", url, stream.ID, stream.PlaybackID)
@@ -514,7 +514,7 @@ func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDurat
 	return es, nil
 }
 
-func (rt *recordTester) checkDown(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
+func (rt *recordTester) checkRecordingHls(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
 	es := 0
 	started := time.Now()
 	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil, false)
@@ -525,7 +525,11 @@ func (rt *recordTester) checkDown(stream *api.Stream, url string, streamDuration
 	}
 	vs := downloader.VODStats()
 	rt.vodStats = vs
-	if len(vs.SegmentsNum) != len(api.StandardProfiles)+1 {
+	expectedProfiles := len(api.StandardProfiles) + 1
+	if rt.recordingSpec != nil && rt.recordingSpec.Profiles != nil {
+		expectedProfiles = len(*rt.recordingSpec.Profiles) + 1
+	}
+	if len(vs.SegmentsNum) != expectedProfiles {
 		glog.Warningf("Number of renditions doesn't match! Has %d should %d. streamId=%s playbackId=%s", len(vs.SegmentsNum), len(api.StandardProfiles)+1, stream.ID, stream.PlaybackID)
 		es = 35
 	}
