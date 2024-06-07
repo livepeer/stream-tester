@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -255,6 +256,16 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	if err := rt.isCancelled(); err != nil {
 		return 0, err
 	}
+
+	lapiNoAPIKey := api.NewAPIClient(api.ClientOptions{
+		Server:      rt.lapi.GetServer(),
+		AccessToken: "", // test playback info call without API key
+		Timeout:     8 * time.Second,
+	})
+	if code, err := checkPlaybackInfo(stream.PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
+		return code, err
+	}
+
 	glog.Infof("Waiting 10 seconds. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 	time.Sleep(10 * time.Second)
 	// now get sessions
@@ -292,33 +303,84 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	}
 
 	glog.Infof("Streaming done, waiting for recording URL to appear. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
+
+	deadline := time.Now().Add(rt.recordingWaitTime)
 	if rt.useForceURL {
-		time.Sleep(5 * time.Second)
-	} else {
-		time.Sleep(rt.recordingWaitTime)
-	}
-	if err = rt.isCancelled(); err != nil {
-		return 0, err
+		deadline = time.Now().Add(5 * time.Second)
 	}
 
-	sessions, err = rt.lapi.GetSessionsNew(stream.ID, rt.useForceURL)
+	// For checking if sourcePlayback was available we see if at least 1 session
+	// recording (asset) got a playbackUrl before the processing was done.
+	var sourcePlayback bool
+	for errCode, errs := -1, []error{}; errCode != 0; {
+		if time.Now().After(deadline) {
+			errsStrs := make([]string, len(errs))
+			for i, err := range errs {
+				errsStrs[i] = err.Error()
+			}
+			err := fmt.Errorf("timeout waiting for recording URL to appear: %s", strings.Join(errsStrs, "; "))
+			return errCode, err
+		} else if err = rt.isCancelled(); err != nil {
+			return 0, err
+		}
+		time.Sleep(5 * time.Second)
+
+		errCode, errs = 0, nil
+		for _, sess := range sessions {
+			// currently the assetID is the same as the sessionID so we could just query on that but just in case that
+			// ever changes, we can use the ListAssets call to find the asset
+			assets, _, err := rt.lapi.ListAssets(api.ListOptions{
+				Limit: 1,
+				Filters: map[string]interface{}{
+					"sourceSessionId": sess.ID,
+				},
+			})
+			if err != nil {
+				errCode, errs = 248, append(errs, err)
+				continue
+			}
+
+			if len(assets) != 1 {
+				err := fmt.Errorf("unexpected number of assets. expected: 1 actual: %d", len(assets))
+				errCode, errs = 247, append(errs, err)
+				continue
+			}
+			asset := assets[0]
+
+			if code, err := checkPlaybackInfo(asset.PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
+				errCode, errs = code, append(errs, err)
+			} else {
+				// if we get playback before the processing is done it means source playback was provided
+				if asset.Status.Phase != "ready" {
+					sourcePlayback = true
+				}
+			}
+
+			if asset.Status.Phase != "ready" {
+				err := fmt.Errorf("asset status is %s but should be ready", asset.Status.Phase)
+				errCode, errs = 246, append(errs, err)
+			}
+		}
+	}
+	if !sourcePlayback {
+		return 246, errors.New("source playback was not provided")
+	}
+
+	// check actual recordings playback
+	sessions, err = rt.lapi.GetSessionsNew(stream.ID, false)
 	if err != nil {
-		err := fmt.Errorf("error getting sessions for stream id=%s err=%v", stream.ID, err)
+		glog.Errorf("Error getting sessions err=%v streamId=%s playbackId=%s", err, stream.ID, stream.PlaybackID)
 		return 252, err
 	}
 	glog.V(model.DEBUG).Infof("Sessions: %+v streamId=%s playbackId=%s", sessions, stream.ID, stream.PlaybackID)
-	if err = rt.isCancelled(); err != nil {
-		return 0, err
+
+	if len(sessions) != expectedSessions {
+		err := fmt.Errorf("invalid session count, expected %d but got %d",
+			expectedSessions, len(sessions))
+		glog.Error(err)
+		return 251, err
 	}
 
-	lapiNoAPIKey := api.NewAPIClient(api.ClientOptions{
-		Server:      rt.lapi.GetServer(),
-		AccessToken: "", // test playback info call without API key
-		Timeout:     8 * time.Second,
-	})
-	if code, err := checkPlaybackInfo(stream.PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
-		return code, err
-	}
 	for _, sess := range sessions {
 		statusShould := api.RecordingStatusReady
 		if rt.useForceURL {
@@ -344,34 +406,15 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			}
 		}
 
+		if err = rt.isCancelled(); err != nil {
+			return 0, err
+		}
 		es, err := rt.checkRecordingHls(stream, sess.RecordingURL, testDuration)
 		if err != nil {
 			return es, err
 		}
-
-		// currently the assetID is the same as the sessionID so we could just query on that but just in case that
-		// ever changes, we can use the ListAssets call to find the asset
-		assets, _, err := rt.lapi.ListAssets(api.ListOptions{
-			Limit: 1,
-			Filters: map[string]interface{}{
-				"sourceSessionId": sess.ID,
-			},
-		})
-		if err != nil {
-			return 248, err
-		}
-
-		if len(assets) != 1 {
-			return 247, fmt.Errorf("unexpected number of assets. expected: 1 actual: %d", len(assets))
-		}
-		if !assets[0].SourcePlaybackReady {
-			return 246, fmt.Errorf("source playback was not ready")
-		}
-
-		if code, err := checkPlaybackInfo(assets[0].PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
-			return code, err
-		}
 	}
+
 	glog.Infof("Done Record Test. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 
 	rt.lapi.DeleteStream(stream.ID)
