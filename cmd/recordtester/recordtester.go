@@ -176,6 +176,7 @@ func main() {
 	testTranscode := fs.Bool("transcode", false, "Check Transcode API workflow")
 	catalystPipelineStrategy := fs.String("catalyst-pipeline-strategy", "", "Which catalyst pipeline strategy to use regarding. The appropriate values are defined by catalyst-api itself.")
 	recordObjectStoreId := fs.String("record-object-store-id", "", "ID for the Object Store to use for recording storage. Forwarded to the streams created in the API")
+	recordingSpecStr := fs.String("recording-spec", "", "JSON object with the `recordingSpec` field to use in the test streams. Forwarded to the streams created in the API")
 
 	// Discord related flags
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
@@ -275,6 +276,13 @@ func main() {
 		}
 	}
 
+	var recordingSpec *api.RecordingSpec
+	if *recordingSpecStr != "" {
+		if err := json.Unmarshal([]byte(*recordingSpecStr), &recordingSpec); err != nil {
+			glog.Fatalf("Error parsing --recording-spec argument: %v", err)
+		}
+	}
+
 	serfMembers, err := getSerfMembers(*useSerf, *serfRPCAddr)
 	if err != nil {
 		glog.Fatalf("failed to process serf members: %v", err)
@@ -338,6 +346,7 @@ func main() {
 		Analyzers:           lanalyzers,
 		Ingest:              ingest,
 		RecordObjectStoreId: *recordObjectStoreId,
+		RecordingSpec:       recordingSpec,
 		UseForceURL:         *forceRecordingUrl,
 		RecordingWaitTime:   *recordingWaitTime,
 		UseHTTP:             *useHttp,

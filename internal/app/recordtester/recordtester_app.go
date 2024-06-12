@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -51,6 +52,7 @@ type (
 		Analyzers           testers.AnalyzerByRegion
 		Ingest              *api.Ingest
 		RecordObjectStoreId string
+		RecordingSpec       *api.RecordingSpec
 		UseForceURL         bool
 		RecordingWaitTime   time.Duration
 		UseHTTP             bool
@@ -65,6 +67,7 @@ type (
 		lanalyzers          testers.AnalyzerByRegion
 		ingest              *api.Ingest
 		recordObjectStoreId string
+		recordingSpec       *api.RecordingSpec
 		useForceURL         bool
 		recordingWaitTime   time.Duration
 		useHTTP             bool
@@ -89,6 +92,7 @@ func NewRecordTester(gctx context.Context, opts RecordTesterOptions, serfOpts Se
 		ctx:                 ctx,
 		cancel:              cancel,
 		recordObjectStoreId: opts.RecordObjectStoreId,
+		recordingSpec:       opts.RecordingSpec,
 		useForceURL:         opts.UseForceURL,
 		recordingWaitTime:   opts.RecordingWaitTime,
 		useHTTP:             opts.UseHTTP,
@@ -132,7 +136,12 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	streamName := fmt.Sprintf("%s_%s", hostName, time.Now().Format("2006-01-02T15:04:05Z07:00"))
 	var stream *api.Stream
 	for {
-		stream, err = rt.lapi.CreateStream(api.CreateStreamReq{Name: streamName, Record: true, RecordObjectStoreId: rt.recordObjectStoreId})
+		stream, err = rt.lapi.CreateStream(api.CreateStreamReq{
+			Name:                streamName,
+			Record:              true,
+			RecordingSpec:       rt.recordingSpec,
+			RecordObjectStoreId: rt.recordObjectStoreId,
+		})
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -247,6 +256,16 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	if err := rt.isCancelled(); err != nil {
 		return 0, err
 	}
+
+	lapiNoAPIKey := api.NewAPIClient(api.ClientOptions{
+		Server:      rt.lapi.GetServer(),
+		AccessToken: "", // test playback info call without API key
+		Timeout:     8 * time.Second,
+	})
+	if code, err := checkPlaybackInfo(stream.PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
+		return code, err
+	}
+
 	glog.Infof("Waiting 10 seconds. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 	time.Sleep(10 * time.Second)
 	// now get sessions
@@ -284,33 +303,84 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 	}
 
 	glog.Infof("Streaming done, waiting for recording URL to appear. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
+
+	deadline := time.Now().Add(rt.recordingWaitTime)
 	if rt.useForceURL {
-		time.Sleep(5 * time.Second)
-	} else {
-		time.Sleep(rt.recordingWaitTime)
-	}
-	if err = rt.isCancelled(); err != nil {
-		return 0, err
+		deadline = time.Now().Add(5 * time.Second)
 	}
 
-	sessions, err = rt.lapi.GetSessionsNew(stream.ID, rt.useForceURL)
+	// For checking if sourcePlayback was available we see if at least 1 session
+	// recording (asset) got a playbackUrl before the processing was done.
+	var sourcePlayback bool
+	for errCode, errs := -1, []error{}; errCode != 0; {
+		if time.Now().After(deadline) {
+			errsStrs := make([]string, len(errs))
+			for i, err := range errs {
+				errsStrs[i] = err.Error()
+			}
+			err := fmt.Errorf("timeout waiting for recording URL to appear: %s", strings.Join(errsStrs, "; "))
+			return errCode, err
+		} else if err = rt.isCancelled(); err != nil {
+			return 0, err
+		}
+		time.Sleep(5 * time.Second)
+
+		errCode, errs = 0, nil
+		for _, sess := range sessions {
+			// currently the assetID is the same as the sessionID so we could just query on that but just in case that
+			// ever changes, we can use the ListAssets call to find the asset
+			assets, _, err := rt.lapi.ListAssets(api.ListOptions{
+				Limit: 1,
+				Filters: map[string]interface{}{
+					"sourceSessionId": sess.ID,
+				},
+			})
+			if err != nil {
+				errCode, errs = 248, append(errs, err)
+				continue
+			}
+
+			if len(assets) != 1 {
+				err := fmt.Errorf("unexpected number of assets. expected: 1 actual: %d", len(assets))
+				errCode, errs = 247, append(errs, err)
+				continue
+			}
+			asset := assets[0]
+
+			if code, err := checkPlaybackInfo(asset.PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
+				errCode, errs = code, append(errs, err)
+			} else {
+				// if we get playback before the processing is done it means source playback was provided
+				if asset.Status.Phase != "ready" {
+					sourcePlayback = true
+				}
+			}
+
+			if asset.Status.Phase != "ready" {
+				err := fmt.Errorf("asset status is %s but should be ready", asset.Status.Phase)
+				errCode, errs = 246, append(errs, err)
+			}
+		}
+	}
+	if !sourcePlayback {
+		return 246, errors.New("source playback was not provided")
+	}
+
+	// check actual recordings playback
+	sessions, err = rt.lapi.GetSessionsNew(stream.ID, false)
 	if err != nil {
-		err := fmt.Errorf("error getting sessions for stream id=%s err=%v", stream.ID, err)
+		glog.Errorf("Error getting sessions err=%v streamId=%s playbackId=%s", err, stream.ID, stream.PlaybackID)
 		return 252, err
 	}
 	glog.V(model.DEBUG).Infof("Sessions: %+v streamId=%s playbackId=%s", sessions, stream.ID, stream.PlaybackID)
-	if err = rt.isCancelled(); err != nil {
-		return 0, err
+
+	if len(sessions) != expectedSessions {
+		err := fmt.Errorf("invalid session count, expected %d but got %d",
+			expectedSessions, len(sessions))
+		glog.Error(err)
+		return 251, err
 	}
 
-	lapiNoAPIKey := api.NewAPIClient(api.ClientOptions{
-		Server:      rt.lapi.GetServer(),
-		AccessToken: "", // test playback info call without API key
-		Timeout:     8 * time.Second,
-	})
-	if code, err := checkPlaybackInfo(stream.PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
-		return code, err
-	}
 	for _, sess := range sessions {
 		statusShould := api.RecordingStatusReady
 		if rt.useForceURL {
@@ -330,40 +400,21 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			return 0, err
 		}
 		if rt.mp4 {
-			es, err := rt.checkDownMp4(stream, sess.Mp4Url, testDuration)
+			es, err := rt.checkRecordingMp4(stream, sess.Mp4Url, testDuration)
 			if err != nil {
 				return es, err
 			}
 		}
 
-		es, err := rt.checkDown(stream, sess.RecordingURL, testDuration)
+		if err = rt.isCancelled(); err != nil {
+			return 0, err
+		}
+		es, err := rt.checkRecordingHls(stream, sess.RecordingURL, testDuration)
 		if err != nil {
 			return es, err
 		}
-
-		// currently the assetID is the same as the sessionID so we could just query on that but just in case that
-		// ever changes, we can use the ListAssets call to find the asset
-		assets, _, err := rt.lapi.ListAssets(api.ListOptions{
-			Limit: 1,
-			Filters: map[string]interface{}{
-				"sourceSessionId": sess.ID,
-			},
-		})
-		if err != nil {
-			return 248, err
-		}
-
-		if len(assets) != 1 {
-			return 247, fmt.Errorf("unexpected number of assets. expected: 1 actual: %d", len(assets))
-		}
-		if !assets[0].SourcePlaybackReady {
-			return 246, fmt.Errorf("source playback was not ready")
-		}
-
-		if code, err := checkPlaybackInfo(assets[0].PlaybackID, rt.lapi, lapiNoAPIKey); err != nil {
-			return code, err
-		}
 	}
+
 	glog.Infof("Done Record Test. streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 
 	rt.lapi.DeleteStream(stream.ID)
@@ -418,7 +469,13 @@ func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL str
 	var err error
 	apiTry := 0
 	for {
-		session, err = rt.lapi.CreateStream(api.CreateStreamReq{Name: streamName, Record: true, RecordObjectStoreId: rt.recordObjectStoreId, ParentID: stream.ID})
+		session, err = rt.lapi.CreateStream(api.CreateStreamReq{
+			Name:                streamName,
+			Record:              true,
+			RecordingSpec:       rt.recordingSpec,
+			RecordObjectStoreId: rt.recordObjectStoreId,
+			ParentID:            stream.ID,
+		})
 		if err != nil {
 			if testers.Timedout(err) && apiTry < 3 {
 				apiTry++
@@ -449,7 +506,7 @@ func (rt *recordTester) isCancelled() error {
 	return nil
 }
 
-func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
+func (rt *recordTester) checkRecordingMp4(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
 	es := 0
 	started := time.Now()
 	glog.V(model.VERBOSE).Infof("Downloading mp4 url=%s streamId=%s playbackId=%s", url, stream.ID, stream.PlaybackID)
@@ -500,7 +557,7 @@ func (rt *recordTester) checkDownMp4(stream *api.Stream, url string, streamDurat
 	return es, nil
 }
 
-func (rt *recordTester) checkDown(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
+func (rt *recordTester) checkRecordingHls(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
 	es := 0
 	started := time.Now()
 	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil, false)
@@ -511,7 +568,11 @@ func (rt *recordTester) checkDown(stream *api.Stream, url string, streamDuration
 	}
 	vs := downloader.VODStats()
 	rt.vodStats = vs
-	if len(vs.SegmentsNum) != len(api.StandardProfiles)+1 {
+	expectedProfiles := len(api.StandardProfiles) + 1
+	if rt.recordingSpec != nil && rt.recordingSpec.Profiles != nil {
+		expectedProfiles = len(*rt.recordingSpec.Profiles) + 1
+	}
+	if len(vs.SegmentsNum) != expectedProfiles {
 		glog.Warningf("Number of renditions doesn't match! Has %d should %d. streamId=%s playbackId=%s", len(vs.SegmentsNum), len(api.StandardProfiles)+1, stream.ID, stream.PlaybackID)
 		es = 35
 	}
