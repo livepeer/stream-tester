@@ -453,14 +453,10 @@ func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL str
 	var err error
 	apiTry := 0
 	for {
-		recordingSpec := rt.RecordingSpec
-		if recordingSpec == nil {
-			recordingSpec = &api.RecordingSpec{Profiles: &api.StandardProfiles}
-		}
 		session, err = rt.API.CreateStream(api.CreateStreamReq{
 			Name:                streamName,
 			Record:              true,
-			RecordingSpec:       recordingSpec,
+			RecordingSpec:       rt.RecordingSpec,
 			RecordObjectStoreId: rt.RecordObjectStoreId,
 			ParentID:            stream.ID,
 		})
@@ -546,7 +542,6 @@ func (rt *recordTester) checkRecordingMp4(stream *api.Stream, url string, stream
 }
 
 func (rt *recordTester) checkRecordingHls(stream *api.Stream, url string, streamDuration time.Duration) (int, error) {
-	es := 0
 	started := time.Now()
 	downloader := testers.NewM3utester2(rt.ctx, url, false, false, false, false, 5*time.Second, nil, false)
 	<-downloader.Done()
@@ -556,25 +551,32 @@ func (rt *recordTester) checkRecordingHls(stream *api.Stream, url string, stream
 	}
 	vs := downloader.VODStats()
 	rt.vodStats = vs
-	expectedProfiles := len(api.StandardProfiles) + 1
+
+	numProfiles := len(vs.SegmentsNum)
 	if rt.RecordingSpec != nil && rt.RecordingSpec.Profiles != nil {
-		expectedProfiles = len(*rt.RecordingSpec.Profiles) + 1
+		expectedProfiles := len(*rt.RecordingSpec.Profiles) + 1
+		if numProfiles != expectedProfiles {
+			glog.Warningf("Number of renditions doesn't match! Has %d should %d. streamId=%s playbackId=%s", numProfiles, expectedProfiles, stream.ID, stream.PlaybackID)
+			return 35, fmt.Errorf("number of renditions doesn't match (expected: %d actual: %d)", expectedProfiles, numProfiles)
+		}
+	} else {
+		// if there's no explicit recording spec we can only expect there's at least 2 profiles (source and transcoded)
+		expectedProfiles := 2
+		if numProfiles < expectedProfiles {
+			glog.Warningf("Number of renditions too low! Has %d should have at least %d. streamId=%s playbackId=%s", numProfiles, expectedProfiles, stream.ID, stream.PlaybackID)
+			return 35, fmt.Errorf("number of renditions too low (expected at least: %d actual: %d)", expectedProfiles, numProfiles)
+		}
 	}
-	if len(vs.SegmentsNum) != expectedProfiles {
-		glog.Warningf("Number of renditions doesn't match! Has %d should %d. streamId=%s playbackId=%s", len(vs.SegmentsNum), len(api.StandardProfiles)+1, stream.ID, stream.PlaybackID)
-		es = 35
-		return es, fmt.Errorf("number of renditions doesn't match (expected: %d actual: %d)", expectedProfiles, len(vs.SegmentsNum))
-	}
+
 	glog.V(model.DEBUG).Infof("Stats: %s streamId=%s playbackId=%s", vs.String(), stream.ID, stream.PlaybackID)
 	glog.V(model.DEBUG).Infof("Stats raw: %+v streamId=%s playbackId=%s", vs, stream.ID, stream.PlaybackID)
 	if ok, ers := vs.IsOk(streamDuration, false); !ok {
 		glog.Warningf("NOT OK! (%s) streamId=%s playbackId=%s", ers, stream.ID, stream.PlaybackID)
-		es = 36
-		return es, errors.New(ers)
+		return 36, errors.New(ers)
 	} else {
 		glog.Infof("All ok! streamId=%s playbackId=%s", stream.ID, stream.PlaybackID)
 	}
-	return es, nil
+	return 0, nil
 }
 
 func (rt *recordTester) Cancel() {
