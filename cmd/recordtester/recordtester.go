@@ -177,6 +177,7 @@ func main() {
 	catalystPipelineStrategy := fs.String("catalyst-pipeline-strategy", "", "Which catalyst pipeline strategy to use regarding. The appropriate values are defined by catalyst-api itself.")
 	recordObjectStoreId := fs.String("record-object-store-id", "", "ID for the Object Store to use for recording storage. Forwarded to the streams created in the API")
 	recordingSpecStr := fs.String("recording-spec", "", "JSON object with the `recordingSpec` field to use in the test streams. Forwarded to the streams created in the API")
+	skipSourcePlayback := fs.Bool("skip-source-playback", false, "Whether to skip the source playback check on recordings processing validation")
 
 	// Discord related flags
 	discordURL := fs.String("discord-url", "", "URL of Discord's webhook to send messages to Discord channel")
@@ -347,6 +348,7 @@ func main() {
 		Ingest:              ingest,
 		RecordObjectStoreId: *recordObjectStoreId,
 		RecordingSpec:       recordingSpec,
+		SkipSourcePlayback:  *skipSourcePlayback,
 		UseForceURL:         *forceRecordingUrl,
 		RecordingWaitTime:   *recordingWaitTime,
 		UseHTTP:             *useHttp,
