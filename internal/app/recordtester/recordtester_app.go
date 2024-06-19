@@ -453,10 +453,14 @@ func (rt *recordTester) doOneHTTPStream(fileName, streamName, broadcasterURL str
 	var err error
 	apiTry := 0
 	for {
+		recordingSpec := rt.RecordingSpec
+		if recordingSpec == nil {
+			recordingSpec = &api.RecordingSpec{Profiles: &api.StandardProfiles}
+		}
 		session, err = rt.API.CreateStream(api.CreateStreamReq{
 			Name:                streamName,
 			Record:              true,
-			RecordingSpec:       rt.RecordingSpec,
+			RecordingSpec:       recordingSpec,
 			RecordObjectStoreId: rt.RecordObjectStoreId,
 			ParentID:            stream.ID,
 		})
@@ -559,6 +563,7 @@ func (rt *recordTester) checkRecordingHls(stream *api.Stream, url string, stream
 	if len(vs.SegmentsNum) != expectedProfiles {
 		glog.Warningf("Number of renditions doesn't match! Has %d should %d. streamId=%s playbackId=%s", len(vs.SegmentsNum), len(api.StandardProfiles)+1, stream.ID, stream.PlaybackID)
 		es = 35
+		return es, fmt.Errorf("number of renditions doesn't match (expected: %d actual: %d)", expectedProfiles, len(vs.SegmentsNum))
 	}
 	glog.V(model.DEBUG).Infof("Stats: %s streamId=%s playbackId=%s", vs.String(), stream.ID, stream.PlaybackID)
 	glog.V(model.DEBUG).Infof("Stats raw: %+v streamId=%s playbackId=%s", vs, stream.ID, stream.PlaybackID)
