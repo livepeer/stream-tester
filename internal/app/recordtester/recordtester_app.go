@@ -53,6 +53,7 @@ type (
 		Ingest              *api.Ingest
 		RecordObjectStoreId string
 		RecordingSpec       *api.RecordingSpec
+		SkipSourcePlayback  bool
 		UseForceURL         bool
 		RecordingWaitTime   time.Duration
 		UseHTTP             bool
@@ -68,6 +69,7 @@ type (
 		ingest              *api.Ingest
 		recordObjectStoreId string
 		recordingSpec       *api.RecordingSpec
+		skipSourcePlayback  bool
 		useForceURL         bool
 		recordingWaitTime   time.Duration
 		useHTTP             bool
@@ -93,6 +95,7 @@ func NewRecordTester(gctx context.Context, opts RecordTesterOptions, serfOpts Se
 		cancel:              cancel,
 		recordObjectStoreId: opts.RecordObjectStoreId,
 		recordingSpec:       opts.RecordingSpec,
+		skipSourcePlayback:  opts.SkipSourcePlayback,
 		useForceURL:         opts.UseForceURL,
 		recordingWaitTime:   opts.RecordingWaitTime,
 		useHTTP:             opts.UseHTTP,
@@ -362,7 +365,7 @@ func (rt *recordTester) Start(fileName string, testDuration, pauseDuration time.
 			}
 		}
 	}
-	if !sourcePlayback {
+	if !sourcePlayback && !rt.skipSourcePlayback {
 		return 246, errors.New("source playback was not provided")
 	}
 
