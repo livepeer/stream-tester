@@ -23,7 +23,7 @@ RUN	go build -ldflags="-X 'github.com/livepeer/stream-tester/model.Version=$vers
 	-tags mainnet \
 	cmd/orch-tester/orch_tester.go cmd/orch-tester/broadcaster_metrics.go
 
-FROM --platform=$BUILDPLATFORM nvidia/cuda:11.7.1-cudnn8-runtime-ubuntu20.04
+FROM --platform=$BUILDPLATFORM nvidia/cuda:12.0.0-cudnn8-runtime-ubuntu20.04
 
 RUN	apt update && \
 	apt install -y ca-certificates && \
